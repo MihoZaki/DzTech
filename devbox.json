@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "packages": [
+    "go@latest",
+    "postgresql@latest",
+    "goose@latest",
+    "sqlc@latest"
+  ],
+  "env": {
+    "DATABASE_URL": "postgres://tech_user:password@localhost:5433/tech_store_dev?sslmode=disable",
+    "PORT": "8080",
+    "PGPORT": "5433"
+  },
+  "shell": {
+    "init_hook": [
+      "echo 'Starting development environment....'"
+    ],
+    "scripts": {
+      "run": [
+        "go run cmd/server/main.go"
+      ]
+    }
+  }
+}
