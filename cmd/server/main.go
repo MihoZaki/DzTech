@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/MihoZaki/DzTech/db"
+	"github.com/MihoZaki/DzTech/internal/handlers"
 	_ "github.com/jackc/pgx/v5/stdlib" // Import for goose migrations
 )
 
@@ -46,6 +47,16 @@ func main() {
 	if err := db.RunMigrations(); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
+
+	// Auth routes
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+	authHandler := handlers.NewAuthHandler(jwtSecret)
+	r.Route("/auth", func(r chi.Router) {
+		authHandler.RegisterRoutes(r)
+	})
 
 	// Start server
 	port := os.Getenv("PORT")
