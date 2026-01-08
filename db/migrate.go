@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/pressly/goose/v3"
@@ -38,6 +38,6 @@ func RunMigrations() error {
 		return err
 	}
 
-	log.Println("Migrations completed successfully")
+	slog.Info("Migrations completed successfully")
 	return nil
 }

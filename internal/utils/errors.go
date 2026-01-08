@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 )
 
@@ -22,6 +23,12 @@ func SendErrorResponse(w http.ResponseWriter, status int, title, detail string) 
 		Detail: detail,
 	}
 
+	slog.Warn("Sending error response",
+		"status", status,
+		"title", title,
+		"detail", detail,
+	)
+
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(resp)
@@ -39,6 +46,10 @@ func SendValidationError(w http.ResponseWriter, fieldErrors map[string]string) {
 	for field, message := range fieldErrors {
 		resp.Errors[field] = map[string]string{"reason": message}
 	}
+
+	slog.Warn("Sending validation error response",
+		"field_errors", fieldErrors,
+	)
 
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(http.StatusBadRequest)

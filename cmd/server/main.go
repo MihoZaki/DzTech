@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,12 +22,19 @@ import (
 func main() {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+		slog.Info("No .env file found, using environment variables")
 	}
+
+	// Configure structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
 	r := chi.NewRouter()
 
-	// Middleware
+	// Important middleware for production
+	r.Use(middleware.RequestID) // Important for rate limiting
+	r.Use(middleware.RealIP)    // Important for rate limiting, analytics and tracing
+	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
@@ -39,19 +46,22 @@ func main() {
 
 	// Initialize database
 	if err := db.Init(); err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		slog.Error("Failed to initialize database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	// Run migrations
 	if err := db.RunMigrations(); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		slog.Error("Failed to run migrations", "error", err)
+		os.Exit(1)
 	}
 
 	// Auth routes
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET environment variable is required")
+		slog.Error("JWT_SECRET environment variable is required")
+		os.Exit(1)
 	}
 	authHandler := handlers.NewAuthHandler(jwtSecret)
 	r.Route("/auth", func(r chi.Router) {
@@ -72,24 +82,26 @@ func main() {
 	// Graceful shutdown
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			slog.Error("Server failed to start", "error", err)
+			os.Exit(1)
 		}
 	}()
 
-	fmt.Printf("Server starting on port %s\n", port)
+	slog.Info("Server starting", "port", port)
 
 	// Wait for interrupt signal to gracefully shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	fmt.Println("\nShutting down server...")
+	slog.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	fmt.Println("Server exited")
+	slog.Info("Server exited")
 }

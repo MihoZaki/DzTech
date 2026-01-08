@@ -3,7 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -57,18 +57,22 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := user.HashPassword(req.Password); err != nil {
+		slog.Error("Failed to hash password", "error", err, "email", req.Email)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to hash password")
 		return
 	}
 
 	if err := user.Create(r.Context(), db.Conn); err != nil {
-		log.Printf("Failed to create user: %v", err)
+		slog.Error("Failed to create user", "error", err, "email", req.Email)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to create user")
 		return
 	}
 
+	slog.Info("User registered successfully", "user_id", user.ID, "email", user.Email)
+
 	token, err := h.generateToken(user)
 	if err != nil {
+		slog.Error("Failed to generate token", "error", err, "user_id", user.ID)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
 		return
 	}
@@ -102,17 +106,22 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := models.GetUserByEmail(r.Context(), db.Conn, req.Email)
 	if err != nil {
+		slog.Info("Login attempt with non-existent user", "email", req.Email)
 		utils.SendErrorResponse(w, http.StatusUnauthorized, "Invalid Credentials", "Invalid email or password")
 		return
 	}
 
 	if err := user.CheckPassword(req.Password); err != nil {
+		slog.Info("Login failed: invalid password", "email", req.Email)
 		utils.SendErrorResponse(w, http.StatusUnauthorized, "Invalid Credentials", "Invalid email or password")
 		return
 	}
 
+	slog.Info("User logged in successfully", "user_id", user.ID, "email", user.Email)
+
 	token, err := h.generateToken(user)
 	if err != nil {
+		slog.Error("Failed to generate token", "error", err, "user_id", user.ID)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
 		return
 	}
@@ -158,7 +167,7 @@ func (h *AuthHandler) generateToken(user *models.User) (string, error) {
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	// Implementation for refresh token (cookie-based or header-based)
+	slog.Warn("Refresh endpoint not implemented")
 	utils.SendErrorResponse(w, http.StatusNotImplemented, "Not Implemented", "Refresh endpoint not implemented")
 }
 

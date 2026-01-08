@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/jackc/pgx/v5"
@@ -19,7 +19,7 @@ var (
 func Init() error {
 	// Load .env file
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+		slog.Info("No .env file found, using environment variables")
 	}
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -58,7 +58,7 @@ func Init() error {
 
 	Pool = pool
 
-	log.Println("Connected to database successfully with native pgx driver")
+	slog.Info("Connected to database successfully with native pgx driver")
 	return nil
 }
 
@@ -76,4 +76,5 @@ func Close() {
 	if Pool != nil {
 		Pool.Close()
 	}
+	slog.Info("Database connections closed")
 }
