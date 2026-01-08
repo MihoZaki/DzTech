@@ -1,16 +1,20 @@
 package db
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"log"
 	"os"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 )
 
-var DB *sql.DB
+var (
+	Conn *pgx.Conn
+	Pool *pgxpool.Pool
+)
 
 func Init() error {
 	// Load .env file
@@ -31,18 +35,30 @@ func Init() error {
 			user, password, host, port, dbname)
 	}
 
-	var err error
-	DB, err = sql.Open("postgres", dbURL)
+	// Connect using pgx native connection
+	conn, err := pgx.Connect(context.Background(), dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Test connection
-	if err = DB.Ping(); err != nil {
+	if err = conn.Ping(context.Background()); err != nil {
+		conn.Close(context.Background())
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Println("Connected to database successfully")
+	Conn = conn
+
+	// Also create a connection pool for concurrent operations
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		conn.Close(context.Background())
+		return fmt.Errorf("failed to create connection pool: %w", err)
+	}
+
+	Pool = pool
+
+	log.Println("Connected to database successfully with native pgx driver")
 	return nil
 }
 
@@ -54,7 +70,10 @@ func getEnvOrDefault(key, defaultValue string) string {
 }
 
 func Close() {
-	if DB != nil {
-		DB.Close()
+	if Conn != nil {
+		Conn.Close(context.Background())
+	}
+	if Pool != nil {
+		Pool.Close()
 	}
 }

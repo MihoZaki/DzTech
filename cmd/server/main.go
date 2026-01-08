@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/MihoZaki/DzTech/db"
+	_ "github.com/jackc/pgx/v5/stdlib" // Import for goose migrations
 )
 
 func main() {
