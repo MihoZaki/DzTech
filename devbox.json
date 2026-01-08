@@ -13,11 +13,12 @@
   },
   "shell": {
     "init_hook": [
-      "echo 'Starting development environment....'"
+      "echo 'Starting development environment....'",
+      "devbox services ls"
     ],
     "scripts": {
       "run": [
-        "go run cmd/server/main.go"
+        "just dev"
       ]
     }
   }
