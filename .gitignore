@@ -1,0 +1,32 @@
+# Dependencies
+go.mod
+go.sum
+
+# Environment specific
+.env
+.env.local
+.env.production
+
+# Devbox
+.devbox/
+.direnv/
+
+
+# Database
+*.db
+*.db-journal
+
+# Logs
+*.log
+logs/
+*.out
+
+# Build
+bin/
+dist/
+*.exe
+*.dll
+*.so
+
+# Test
+coverage.out
