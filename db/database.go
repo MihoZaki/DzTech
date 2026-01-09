@@ -24,15 +24,7 @@ func Init() error {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		// Build from individual components if DATABASE_URL not set
-		host := getEnvOrDefault("DB_HOST", "localhost")
-		port := getEnvOrDefault("DB_PORT", "5432")
-		user := getEnvOrDefault("DB_USER", "tech_user")
-		password := getEnvOrDefault("DB_PASSWORD", "password")
-		dbname := getEnvOrDefault("DB_NAME", "tech_store_dev")
-
-		dbURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-			user, password, host, port, dbname)
+		return fmt.Errorf("DATABASE_URL environment variable is required")
 	}
 
 	// Connect using pgx native connection
@@ -60,13 +52,6 @@ func Init() error {
 
 	slog.Info("Connected to database successfully with native pgx driver")
 	return nil
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
 
 func Close() {
