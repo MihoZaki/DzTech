@@ -6,14 +6,12 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
 var (
-	Conn *pgx.Conn
-	Pool *pgxpool.Pool
+	Conn *pgxpool.Pool // Use only the pool, not single connection
 )
 
 func Init() error {
@@ -27,39 +25,32 @@ func Init() error {
 		return fmt.Errorf("DATABASE_URL environment variable is required")
 	}
 
-	// Connect using pgx native connection
-	conn, err := pgx.Connect(context.Background(), dbURL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-
-	// Test connection
-	if err = conn.Ping(context.Background()); err != nil {
-		conn.Close(context.Background())
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	Conn = conn
-
-	// Also create a connection pool for concurrent operations
+	// Create a connection pool for concurrent operations
 	pool, err := pgxpool.New(context.Background(), dbURL)
 	if err != nil {
-		conn.Close(context.Background())
 		return fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	Pool = pool
+	// Test the pool connection
+	if err = pool.Ping(context.Background()); err != nil {
+		pool.Close()
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
 
-	slog.Info("Connected to database successfully with native pgx driver")
+	Conn = pool
+
+	slog.Info("Connected to database successfully with native pgx pool")
 	return nil
 }
 
 func Close() {
 	if Conn != nil {
-		Conn.Close(context.Background())
+		Conn.Close()
 	}
-	if Pool != nil {
-		Pool.Close()
-	}
-	slog.Info("Database connections closed")
+	slog.Info("Database connection pool closed")
+}
+
+// GetPool returns the database connection pool
+func GetPool() *pgxpool.Pool {
+	return Conn
 }

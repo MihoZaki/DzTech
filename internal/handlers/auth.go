@@ -2,13 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/MihoZaki/DzTech/db"
 	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/MihoZaki/DzTech/internal/services"
 	"github.com/MihoZaki/DzTech/internal/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -16,12 +15,14 @@ import (
 )
 
 type AuthHandler struct {
-	JWTSecret []byte
+	userService *services.UserService
+	jwtSecret   []byte
 }
 
-func NewAuthHandler(jwtSecret string) *AuthHandler {
+func NewAuthHandler(userService *services.UserService, jwtSecret string) *AuthHandler {
 	return &AuthHandler{
-		JWTSecret: []byte(jwtSecret),
+		userService: userService,
+		jwtSecret:   []byte(jwtSecret),
 	}
 }
 
@@ -43,43 +44,37 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user already exists
-	existingUser, _ := models.GetUserByEmail(r.Context(), db.Conn, req.Email)
-	if existingUser != nil {
-		utils.SendErrorResponse(w, http.StatusConflict, "User Already Exists", "A user with this email already exists")
-		return
-	}
-
-	user := &models.User{
-		Email:    req.Email,
-		FullName: req.FullName,
-		IsAdmin:  false,
-	}
-
-	if err := user.HashPassword(req.Password); err != nil {
-		slog.Error("Failed to hash password", "error", err, "email", req.Email)
-		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to hash password")
-		return
-	}
-
-	if err := user.Create(r.Context(), db.Conn); err != nil {
-		slog.Error("Failed to create user", "error", err, "email", req.Email)
-		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to create user")
-		return
-	}
-
-	slog.Info("User registered successfully", "user_id", user.ID, "email", user.Email)
-
-	token, err := h.generateToken(user)
+	// Call service layer for registration
+	userID, err := h.userService.Register(r.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
-		slog.Error("Failed to generate token", "error", err, "user_id", user.ID)
+		if err.Error() == "user already exists" {
+			utils.SendErrorResponse(w, http.StatusConflict, "User Already Exists", "A user with this email already exists")
+			return
+		}
+		slog.Error("Failed to register user", "error", err, "email", req.Email)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to register user")
+		return
+	}
+
+	slog.Info("User registered successfully", "user_id", userID, "email", req.Email)
+
+	// Generate JWT token
+	token, err := h.generateToken(userID, req.Email, false) // assuming not admin
+	if err != nil {
+		slog.Error("Failed to generate token", "error", err, "user_id", userID)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
 		return
 	}
 
+	// Create response
 	response := models.LoginResponse{
 		Token: token,
-		User:  *user,
+		User: models.User{
+			ID:       userID,
+			Email:    req.Email,
+			FullName: req.FullName,
+			IsAdmin:  false,
+		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -104,31 +99,40 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := models.GetUserByEmail(r.Context(), db.Conn, req.Email)
+	// Use service layer to authenticate user
+	user, err := h.userService.Authenticate(r.Context(), req.Email, req.Password)
 	if err != nil {
-		slog.Info("Login attempt with non-existent user", "email", req.Email)
-		utils.SendErrorResponse(w, http.StatusUnauthorized, "Invalid Credentials", "Invalid email or password")
-		return
-	}
-
-	if err := user.CheckPassword(req.Password); err != nil {
-		slog.Info("Login failed: invalid password", "email", req.Email)
-		utils.SendErrorResponse(w, http.StatusUnauthorized, "Invalid Credentials", "Invalid email or password")
+		if err.Error() == "invalid credentials" {
+			slog.Info("Login failed: invalid credentials", "email", req.Email)
+			utils.SendErrorResponse(w, http.StatusUnauthorized, "Invalid Credentials", "Invalid email or password")
+			return
+		}
+		slog.Error("Failed to authenticate user", "error", err, "email", req.Email)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to authenticate user")
 		return
 	}
 
 	slog.Info("User logged in successfully", "user_id", user.ID, "email", user.Email)
 
-	token, err := h.generateToken(user)
+	// Generate JWT token
+	token, err := h.generateToken(user.ID, user.Email, user.IsAdmin)
 	if err != nil {
 		slog.Error("Failed to generate token", "error", err, "user_id", user.ID)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
 		return
 	}
 
+	// Create response
 	response := models.LoginResponse{
 		Token: token,
-		User:  *user,
+		User: models.User{
+			ID:        user.ID,
+			Email:     user.Email,
+			FullName:  user.FullName,
+			IsAdmin:   user.IsAdmin,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -142,28 +146,28 @@ func formatValidationError(err validator.FieldError) string {
 	case "email":
 		return "Must be a valid email address"
 	case "min":
-		return fmt.Sprintf("Must be at least %s characters", err.Param())
+		return "Must be at least " + err.Param() + " characters"
 	case "max":
-		return fmt.Sprintf("Must be no more than %s characters", err.Param())
+		return "Must be no more than " + err.Param() + " characters"
 	default:
 		return "Invalid value"
 	}
 }
 
-func (h *AuthHandler) generateToken(user *models.User) (string, error) {
+func (h *AuthHandler) generateToken(userID, email string, isAdmin bool) (string, error) {
 	expiry := time.Now().Add(15 * time.Minute)
 	refreshExpiry := time.Now().Add(7 * 24 * time.Hour) // 7 days
 
 	claims := jwt.MapClaims{
-		"user_id":     user.ID,
-		"email":       user.Email,
-		"is_admin":    user.IsAdmin,
+		"user_id":     userID,
+		"email":       email,
+		"is_admin":    isAdmin,
 		"exp":         expiry.Unix(),
 		"refresh_exp": refreshExpiry.Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(h.JWTSecret)
+	return token.SignedString(h.jwtSecret)
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {

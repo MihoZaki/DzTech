@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"os"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // Import for goose migrations
+	_ "github.com/jackc/pgx/v5/stdlib" // Import for side effects - registers the pgx driver
 	"github.com/pressly/goose/v3"
 )
 
@@ -15,6 +15,7 @@ func RunMigrations() error {
 	if dbURL == "" {
 		return fmt.Errorf("DATABASE_URL environment variable is required")
 	}
+
 	// Create a *sql.DB for migrations using pgx driver
 	sqlDB, err := sql.Open("pgx", dbURL)
 	if err != nil {

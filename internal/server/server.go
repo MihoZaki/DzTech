@@ -21,6 +21,25 @@ type Server struct {
 }
 
 func New(cfg *config.Config) *Server {
+	// Initialize database first
+	if err := db.Init(); err != nil {
+		slog.Error("Failed to initialize database", "error", err)
+		panic(fmt.Sprintf("failed to initialize database: %v", err))
+	}
+
+	// Run migrations
+	if err := db.RunMigrations(); err != nil {
+		slog.Error("Failed to run migrations", "error", err)
+		panic(fmt.Sprintf("failed to run migrations: %v", err))
+	}
+
+	// Double-check that the pool is initialized
+	pool := db.GetPool()
+	if pool == nil {
+		panic("database pool is nil after initialization")
+	}
+
+	// Initialize router after database is ready
 	routerCfg := &router.Config{
 		JWTSecret: cfg.JWTSecret,
 	}
@@ -28,29 +47,14 @@ func New(cfg *config.Config) *Server {
 
 	return &Server{
 		httpServer: &http.Server{
-			Addr:         ":" + cfg.ServerPort,
-			Handler:      httpRouter,
-			WriteTimeout: time.Second * 30,
-			ReadTimeout:  time.Second * 10,
-			IdleTimeout:  time.Minute,
+			Addr:    ":" + cfg.ServerPort,
+			Handler: httpRouter,
 		},
 		cfg: cfg,
 	}
 }
 
 func (s *Server) Start() error {
-	// Initialize database
-	if err := db.Init(); err != nil {
-		slog.Error("Failed to initialize database", "error", err)
-		return fmt.Errorf("failed to initialize database: %w", err)
-	}
-
-	// Run migrations
-	if err := db.RunMigrations(); err != nil {
-		slog.Error("Failed to run migrations", "error", err)
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
 	// Start server in a goroutine
 	go func() {
 		slog.Info("Server starting", "port", s.cfg.ServerPort)
