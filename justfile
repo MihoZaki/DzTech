@@ -24,7 +24,7 @@ migrate-status:
 [doc('Create a new migration based on the argument provided')]
 migrate-create name:
   echo "Creating migration: {{name}}"
-  goose -dir migrations create {{name}} sql
+  goose -s -dir migrations create {{name}} sql
 
 [group('database')]
 [doc('Create tech_store_dev Datebase')]
