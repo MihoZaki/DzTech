@@ -5,6 +5,10 @@
       "last_modified": "2026-01-02T14:39:32Z",
       "resolved": "github:NixOS/nixpkgs/16c7794d0a28b5a37904d55bcca36003b9109aaa?lastModified=1767364772"
     },
+    "github:seatedro/glimpse": {
+      "last_modified": "2026-01-02T08:22:55Z",
+      "resolved": "github:seatedro/glimpse/bd7ef51643b47ae651dcdeab1cc5730eee8c1541?lastModified=1767342175"
+    },
     "glibcLocales@latest": {
       "last_modified": "2025-11-23T21:50:36Z",
       "resolved": "github:NixOS/nixpkgs/ee09932cedcef15aaf476f9343d1dea2cb77e261#glibcLocales",
@@ -30,6 +34,54 @@
             }
           ],
           "store_path": "/nix/store/hjlkypp9lpxwzsjycpy7nqg2mnl7qhzv-glibc-locales-2.40-66"
+        }
+      }
+    },
+    "glow@latest": {
+      "last_modified": "2025-12-31T03:27:36Z",
+      "resolved": "github:NixOS/nixpkgs/f665af0cdb70ed27e1bd8f9fdfecaf451260fc55#glow",
+      "source": "devbox-search",
+      "version": "2.1.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/29sm1ig5r8fbzl38gpbb1c4npiw9wvjy-glow-2.1.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/29sm1ig5r8fbzl38gpbb1c4npiw9wvjy-glow-2.1.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/i4zjimn2vvlhzv1xdb48h7b6qji5wm3x-glow-2.1.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/i4zjimn2vvlhzv1xdb48h7b6qji5wm3x-glow-2.1.1"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/g6g4a69q83y202n642jw9lc6q2jgxc0l-glow-2.1.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/g6g4a69q83y202n642jw9lc6q2jgxc0l-glow-2.1.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/f4a42x47x1izqz2x9xw9x18y7lqhhj2n-glow-2.1.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/f4a42x47x1izqz2x9xw9x18y7lqhhj2n-glow-2.1.1"
         }
       }
     },

@@ -36,13 +36,18 @@ func New(cfg *Config) http.Handler {
 
 	// Initialize services
 	userService := services.NewUserService(querier)
+	productService := services.NewProductService(querier)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, cfg.JWTSecret)
 	r.Route("/auth", func(r chi.Router) {
 		authHandler.RegisterRoutes(r)
 	})
-
+	// Product routes
+	productHandler := handlers.NewProductHandler(productService)
+	r.Route("/products", func(r chi.Router) {
+		productHandler.RegisterRoutes(r)
+	})
 	slog.Info("Router initialized")
 	return r
 }

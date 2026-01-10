@@ -6,6 +6,7 @@ go.sum
 .env
 .env.local
 .env.production
+.glimpse
 
 # Devbox
 .devbox/

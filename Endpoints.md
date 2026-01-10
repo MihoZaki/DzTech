@@ -4,7 +4,7 @@
 _Version: 1.0 (MVP)_
 
 > ✅ **Status**: Ready for frontend integration\
-> 🚀 **Stack**: Go (Gin), PostgreSQL, JWT, Stripe\
+> 🚀 **Stack**: Go (Chi), PostgreSQL, JWT\
 > 📅 **Last Updated**: Jan 7, 2026
 
 ---

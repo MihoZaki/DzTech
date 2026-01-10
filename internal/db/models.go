@@ -9,6 +9,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Category struct {
+	ID        uuid.UUID          `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	Type      string             `json:"type"`
+	ParentID  pgtype.UUID        `json:"parent_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Product struct {
+	ID               uuid.UUID          `json:"id"`
+	CategoryID       uuid.UUID          `json:"category_id"`
+	Name             string             `json:"name"`
+	Slug             string             `json:"slug"`
+	Description      pgtype.Text        `json:"description"`
+	ShortDescription pgtype.Text        `json:"short_description"`
+	PriceCents       int64              `json:"price_cents"`
+	StockQuantity    int32              `json:"stock_quantity"`
+	Status           string             `json:"status"`
+	Brand            string             `json:"brand"`
+	ImageUrls        []byte             `json:"image_urls"`
+	SpecHighlights   []byte             `json:"spec_highlights"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type SchemaMigration struct {
 	Version   int64              `json:"version"`
 	IsApplied bool               `json:"is_applied"`
