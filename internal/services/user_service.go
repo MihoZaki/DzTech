@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MihoZaki/DzTech/internal/db"
+	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,23 +15,6 @@ import (
 
 type UserService struct {
 	querier db.Querier
-}
-
-type User struct {
-	ID        string
-	Email     string
-	Password  string // This will come from DB as []byte
-	FullName  string
-	IsAdmin   bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
-}
-
-type RegisterInput struct {
-	Email    string
-	Password string
-	FullName string
 }
 
 func NewUserService(querier db.Querier) *UserService {
@@ -73,7 +57,7 @@ func (s *UserService) Register(ctx context.Context, email, password, fullName st
 	return user.ID.String(), nil // Convert uuid.UUID to string
 }
 
-func (s *UserService) Authenticate(ctx context.Context, email, password string) (*User, error) {
+func (s *UserService) Authenticate(ctx context.Context, email, password string) (*models.User, error) {
 	dbUser, err := s.querier.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -88,7 +72,7 @@ func (s *UserService) Authenticate(ctx context.Context, email, password string) 
 	}
 
 	// Convert database user to service user
-	user := &User{
+	user := &models.User{
 		ID:        dbUser.ID.String(),
 		Email:     dbUser.Email,
 		Password:  string(dbUser.PasswordHash), // Not exposed in API response anyway
@@ -107,7 +91,7 @@ func (s *UserService) Authenticate(ctx context.Context, email, password string) 
 	return user, nil
 }
 
-func (s *UserService) GetByID(ctx context.Context, id string) (*User, error) {
+func (s *UserService) GetByID(ctx context.Context, id string) (*models.User, error) {
 	// Parse the UUID string
 	userID, err := uuid.Parse(id)
 	if err != nil {
@@ -122,7 +106,7 @@ func (s *UserService) GetByID(ctx context.Context, id string) (*User, error) {
 		return nil, err
 	}
 
-	user := &User{
+	user := &models.User{
 		ID:        dbUser.ID.String(),
 		Email:     dbUser.Email,
 		Password:  string(dbUser.PasswordHash),
