@@ -1,0 +1,2507 @@
+Directory Structure:
+├── cmd/
+  ├── server/
+    └── main.go
+├── db/
+  └── database.go
+  └── migrate.go
+└── devbox.json
+├── internal/
+  ├── config/
+    └── config.go
+  ├── db/
+    └── db.go
+    └── models.go
+    └── products.sql.go
+    └── querier.go
+    ├── queries/
+      └── products.sql
+      └── user.sql
+    └── user.sql.go
+  ├── handlers/
+    └── auth.go
+    └── product.go
+  ├── middleware/
+    └── middleware.go
+  ├── models/
+    └── product.go
+    └── user.go
+  ├── router/
+    └── router.go
+  ├── server/
+    └── server.go
+  ├── services/
+    └── product_service.go
+    └── user_service.go
+  ├── utils/
+    └── errors.go
+└── justfile
+├── migrations/
+  └── 00001_init_db.sql
+  └── 00002_create_users_table.sql
+  └── 00003_create_products_and_categories_tables.sql
+├── shared/
+  └── types.go
+  └── types.ts
+└── sqlc.yaml
+
+File Contents:
+
+File: sqlc.yaml
+================================================
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "./internal/db/queries/"
+    schema: "./migrations/"
+    gen:
+      go:
+        package: "db"
+        out: "./internal/db"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_exact_table_names: false
+        overrides:
+        - db_type: "uuid"
+          go_type:
+            import: "github.com/google/uuid"
+            type: "UUID"
+
+
+File: shared/types.ts
+================================================
+export interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  is_admin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface ErrorResponse {
+  type: string;
+  title: string;
+  status: number;
+  detail: string;
+  instance?: string;
+  errors?: Record<string, any>;
+}
+
+export interface Pagination {
+  page: number;
+  per_page: number;
+  total: number;
+  total_page: number;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  short_description?: string;
+  price_cents: number;
+  stock_quantity: number;
+  status: string;
+  brand: string;
+  image_urls: string[];
+  spec_highlights: Record<string, any>;
+  category_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  type: string;
+  parent_id?: string;
+}
+
+
+File: internal/router/router.go
+================================================
+package router
+
+import (
+	"log/slog"
+	"net/http"
+
+	"github.com/MihoZaki/DzTech/db"
+	db_queries "github.com/MihoZaki/DzTech/internal/db" // SQLC generated code
+	"github.com/MihoZaki/DzTech/internal/handlers"
+	"github.com/MihoZaki/DzTech/internal/middleware"
+	"github.com/MihoZaki/DzTech/internal/services"
+	"github.com/go-chi/chi/v5"
+)
+
+func New(cfg *Config) http.Handler {
+	r := chi.NewRouter()
+
+	// Apply middleware
+	middleware.ApplyMiddleware(r)
+
+	// Health check endpoint
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	// Get the database pool from the db package
+	pool := db.GetPool()
+	if pool == nil {
+		slog.Error("Database pool is not initialized")
+		panic("database pool is not initialized")
+	}
+
+	// Initialize database querier (using SQLC generated code)
+	querier := db_queries.New(pool)
+
+	// Initialize services
+	userService := services.NewUserService(querier)
+	productService := services.NewProductService(querier)
+
+	// Initialize handlers
+	authHandler := handlers.NewAuthHandler(userService, cfg.JWTSecret)
+	r.Route("/auth", func(r chi.Router) {
+		authHandler.RegisterRoutes(r)
+	})
+	// Product routes
+	productHandler := handlers.NewProductHandler(productService)
+	r.Route("/products", func(r chi.Router) {
+		productHandler.RegisterRoutes(r)
+	})
+	slog.Info("Router initialized")
+	return r
+}
+
+type Config struct {
+	JWTSecret string
+}
+
+
+File: internal/models/product.go
+================================================
+package models
+
+import (
+	"time"
+
+	"github.com/go-playground/validator/v10"
+)
+
+type Product struct {
+	ID               string                 `json:"id"`
+	CategoryID       string                 `json:"category_id"`
+	Name             string                 `json:"name"`
+	Slug             string                 `json:"slug"`
+	Description      *string                `json:"description,omitempty"`
+	ShortDescription *string                `json:"short_description,omitempty"`
+	PriceCents       int64                  `json:"price_cents"`
+	StockQuantity    int                    `json:"stock_quantity"`
+	Status           string                 `json:"status"`
+	Brand            string                 `json:"brand"`
+	ImageUrls        []string               `json:"image_urls"`
+	SpecHighlights   map[string]interface{} `json:"spec_highlights"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
+	DeletedAt        *time.Time             `json:"deleted_at,omitempty"`
+}
+
+type Category struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	Type      string    `json:"type"`
+	ParentID  *string   `json:"parent_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type CreateProductRequest struct {
+	CategoryID       string                 `json:"category_id" validate:"required,uuid"`
+	Name             string                 `json:"name" validate:"required,max=255"`
+	Slug             string                 `json:"slug" validate:"required,max=255"`
+	Description      *string                `json:"description,omitempty"`
+	ShortDescription *string                `json:"short_description,omitempty"`
+	PriceCents       int64                  `json:"price_cents" validate:"required,min=0"`
+	StockQuantity    int                    `json:"stock_quantity" validate:"min=0"`
+	Status           string                 `json:"status" validate:"required,oneof=draft active discontinued"`
+	Brand            string                 `json:"brand" validate:"required,max=100"`
+	ImageUrls        []string               `json:"image_urls" validate:"max=10"`
+	SpecHighlights   map[string]interface{} `json:"spec_highlights"`
+}
+
+type ProductFilter struct {
+	Query       string `json:"query,omitempty"`
+	CategoryID  string `json:"category_id,omitempty"`
+	Brand       string `json:"brand,omitempty"`
+	MinPrice    *int64 `json:"min_price,omitempty"`
+	MaxPrice    *int64 `json:"max_price,omitempty"`
+	InStockOnly *bool  `json:"in_stock_only,omitempty"`
+	Page        int    `json:"page"`
+	Limit       int    `json:"limit"`
+}
+
+type PaginatedResponse struct {
+	Data       interface{} `json:"data"`
+	Page       int         `json:"page"`
+	Limit      int         `json:"limit"`
+	Total      int64       `json:"total"`
+	TotalPages int         `json:"total_pages"`
+}
+
+func init() {
+	validate = validator.New()
+}
+
+func (r *CreateProductRequest) Validate() error {
+	return validate.Struct(r)
+}
+
+
+File: internal/services/user_service.go
+================================================
+package services
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/MihoZaki/DzTech/internal/db"
+	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/crypto/bcrypt"
+)
+
+type UserService struct {
+	querier db.Querier
+}
+
+func NewUserService(querier db.Querier) *UserService {
+	return &UserService{
+		querier: querier,
+	}
+}
+
+func (s *UserService) Register(ctx context.Context, email, password, fullName string) (string, error) {
+	// Check if user already exists
+	_, err := s.querier.GetUserByEmail(ctx, email)
+	if err == nil {
+		return "", errors.New("user already exists")
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+
+	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	params := db.CreateUserParams{
+		Email:        email,
+		PasswordHash: hashedPassword,
+		FullName:     pgtype.Text{String: fullName, Valid: true},
+		IsAdmin:      false,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	user, err := s.querier.CreateUser(ctx, params)
+	if err != nil {
+		return "", err
+	}
+
+	return user.ID.String(), nil // Convert uuid.UUID to string
+}
+
+func (s *UserService) Authenticate(ctx context.Context, email, password string) (*models.User, error) {
+	dbUser, err := s.querier.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("invalid credentials")
+		}
+		return nil, err
+	}
+
+	// Compare the provided password with the hashed password from DB
+	if err := bcrypt.CompareHashAndPassword(dbUser.PasswordHash, []byte(password)); err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+
+	// Convert database user to service user
+	user := &models.User{
+		ID:        dbUser.ID.String(),
+		Email:     dbUser.Email,
+		Password:  string(dbUser.PasswordHash), // Not exposed in API response anyway
+		FullName:  dbUser.FullName.String,
+		IsAdmin:   dbUser.IsAdmin,
+		CreatedAt: dbUser.CreatedAt.Time,
+		UpdatedAt: dbUser.UpdatedAt.Time,
+		DeletedAt: nil, // Handle this if needed
+	}
+
+	// Handle DeletedAt if it exists
+	if dbUser.DeletedAt.Valid {
+		user.DeletedAt = &dbUser.DeletedAt.Time
+	}
+
+	return user, nil
+}
+
+func (s *UserService) GetByID(ctx context.Context, id string) (*models.User, error) {
+	// Parse the UUID string
+	userID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, errors.New("invalid user ID format")
+	}
+
+	dbUser, err := s.querier.GetUser(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+
+	user := &models.User{
+		ID:        dbUser.ID.String(),
+		Email:     dbUser.Email,
+		Password:  string(dbUser.PasswordHash),
+		FullName:  dbUser.FullName.String,
+		IsAdmin:   dbUser.IsAdmin,
+		CreatedAt: dbUser.CreatedAt.Time,
+		UpdatedAt: dbUser.UpdatedAt.Time,
+	}
+
+	if dbUser.DeletedAt.Valid {
+		user.DeletedAt = &dbUser.DeletedAt.Time
+	}
+
+	return user, nil
+}
+
+
+File: devbox.json
+================================================
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "packages": [
+    "go@latest",
+    "postgresql@latest",
+    "goose@latest",
+    "sqlc@latest",
+    "github:seatedro/glimpse",
+    "glow@latest"
+  ],
+  "env": {
+    "DATABASE_URL": "postgres://tech_user:password@localhost:5433/tech_store_dev?sslmode=disable",
+    "PORT":         "8080",
+    "PGPORT":       "5433"
+  },
+  "shell": {
+    "init_hook": [
+      "echo 'Starting development environment....'",
+      "devbox services ls"
+    ],
+    "scripts": {
+      "run": [
+        "just dev"
+      ]
+    }
+  }
+}
+
+
+File: internal/db/models.go
+================================================
+// Code generated by sqlc. DO NOT EDIT.
+// versions:
+//   sqlc v1.30.0
+
+package db
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Category struct {
+	ID        uuid.UUID          `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	Type      string             `json:"type"`
+	ParentID  pgtype.UUID        `json:"parent_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Product struct {
+	ID               uuid.UUID          `json:"id"`
+	CategoryID       uuid.UUID          `json:"category_id"`
+	Name             string             `json:"name"`
+	Slug             string             `json:"slug"`
+	Description      pgtype.Text        `json:"description"`
+	ShortDescription pgtype.Text        `json:"short_description"`
+	PriceCents       int64              `json:"price_cents"`
+	StockQuantity    int32              `json:"stock_quantity"`
+	Status           string             `json:"status"`
+	Brand            string             `json:"brand"`
+	ImageUrls        []byte             `json:"image_urls"`
+	SpecHighlights   []byte             `json:"spec_highlights"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type SchemaMigration struct {
+	Version   int64              `json:"version"`
+	IsApplied bool               `json:"is_applied"`
+	AppliedAt pgtype.Timestamptz `json:"applied_at"`
+}
+
+type User struct {
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash []byte             `json:"password_hash"`
+	FullName     pgtype.Text        `json:"full_name"`
+	IsAdmin      bool               `json:"is_admin"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+}
+
+
+File: internal/utils/errors.go
+================================================
+package utils
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+)
+
+type ErrorResponse struct {
+	Type     string                 `json:"type"`
+	Title    string                 `json:"title"`
+	Status   int                    `json:"status"`
+	Detail   string                 `json:"detail"`
+	Instance string                 `json:"instance,omitempty"`
+	Errors   map[string]interface{} `json:"errors,omitempty"`
+}
+
+func SendErrorResponse(w http.ResponseWriter, status int, title, detail string) {
+	resp := ErrorResponse{
+		Type:   "https://techstore.dev/errors/" + getStatusType(status),
+		Title:  title,
+		Status: status,
+		Detail: detail,
+	}
+
+	slog.Warn("Sending error response",
+		"status", status,
+		"title", title,
+		"detail", detail,
+	)
+
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func SendValidationError(w http.ResponseWriter, fieldErrors map[string]string) {
+	resp := ErrorResponse{
+		Type:   "https://techstore.dev/errors/validation-error",
+		Title:  "Validation Error",
+		Status: http.StatusBadRequest,
+		Detail: "One or more fields failed validation",
+		Errors: make(map[string]interface{}),
+	}
+
+	for field, message := range fieldErrors {
+		resp.Errors[field] = map[string]string{"reason": message}
+	}
+
+	slog.Warn("Sending validation error response",
+		"field_errors", fieldErrors,
+	)
+
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(http.StatusBadRequest)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func getStatusType(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad-request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not-found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusUnprocessableEntity:
+		return "unprocessable-entity"
+	default:
+		return "server-error"
+	}
+}
+
+
+File: migrations/00001_init_db.sql
+================================================
+-- +goose Up
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version BIGINT PRIMARY KEY,
+    is_applied BOOLEAN NOT NULL DEFAULT TRUE,
+    applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- +goose Down
+DROP TABLE IF EXISTS schema_migrations;
+
+
+File: internal/db/queries/user.sql
+================================================
+-- name: GetUserByEmail :one
+SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+FROM users
+WHERE email = $1 AND deleted_at IS NULL;
+
+-- name: CreateUser :one
+INSERT INTO users (
+    email, password_hash, full_name, is_admin, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at;
+
+-- name: GetUser :one
+SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+FROM users
+WHERE id = $1 AND deleted_at IS NULL;
+
+
+File: internal/server/server.go
+================================================
+package server
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/MihoZaki/DzTech/db"
+	"github.com/MihoZaki/DzTech/internal/config"
+	"github.com/MihoZaki/DzTech/internal/router"
+)
+
+type Server struct {
+	httpServer *http.Server
+	cfg        *config.Config
+}
+
+func New(cfg *config.Config) *Server {
+	// Initialize database first
+	if err := db.Init(); err != nil {
+		slog.Error("Failed to initialize database", "error", err)
+		panic(fmt.Sprintf("failed to initialize database: %v", err))
+	}
+
+	// Run migrations
+	if err := db.RunMigrations(); err != nil {
+		slog.Error("Failed to run migrations", "error", err)
+		panic(fmt.Sprintf("failed to run migrations: %v", err))
+	}
+
+	// Double-check that the pool is initialized
+	pool := db.GetPool()
+	if pool == nil {
+		panic("database pool is nil after initialization")
+	}
+
+	// Initialize router after database is ready
+	routerCfg := &router.Config{
+		JWTSecret: cfg.JWTSecret,
+	}
+	httpRouter := router.New(routerCfg)
+
+	return &Server{
+		httpServer: &http.Server{
+			Addr:    ":" + cfg.ServerPort,
+			Handler: httpRouter,
+		},
+		cfg: cfg,
+	}
+}
+
+func (s *Server) Start() error {
+	// Start server in a goroutine
+	go func() {
+		slog.Info("Server starting", "port", s.cfg.ServerPort)
+		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server failed to start", "error", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	slog.Info("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.httpServer.Shutdown(ctx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+		return err
+	}
+
+	slog.Info("Server exited")
+	return nil
+}
+
+func (s *Server) Stop() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return s.httpServer.Shutdown(ctx)
+}
+
+
+File: migrations/00003_create_products_and_categories_tables.sql
+================================================
+-- +goose Up
+-- Create categories table
+CREATE TABLE categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    type VARCHAR(50) NOT NULL, -- 'component', 'laptop', 'accessory'
+    parent_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Create products table
+CREATE TABLE products (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    category_id UUID NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT,
+    short_description VARCHAR(255),
+    price_cents BIGINT NOT NULL CHECK (price_cents >= 0), -- e.g., $199.99 → 19999
+    stock_quantity INT NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'discontinued')),
+    brand VARCHAR(100) NOT NULL,
+    image_urls JSONB NOT NULL DEFAULT '[]'::JSONB,
+    spec_highlights JSONB NOT NULL DEFAULT '{}'::JSONB, -- { "cores": 16, "base_clock_ghz": 4.5 }
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+-- Create indexes
+CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_slug ON products(slug);
+CREATE INDEX idx_products_active ON products(id) WHERE status = 'active' AND deleted_at IS NULL;
+CREATE INDEX idx_products_search ON products USING GIN (
+    to_tsvector('english', name || ' ' || COALESCE(short_description, ''))
+);
+
+CREATE INDEX idx_categories_slug ON categories(slug);
+CREATE INDEX idx_categories_parent ON categories(parent_id);
+
+-- Insert default categories
+INSERT INTO categories (name, slug, type) VALUES
+('CPU', 'cpu', 'component'),
+('GPU', 'gpu', 'component'),
+('Motherboard', 'motherboard', 'component'),
+('RAM', 'ram', 'component'),
+('Storage', 'storage', 'component'),
+('Power Supply', 'psu', 'component'),
+('Case', 'case', 'component'),
+('Laptop', 'laptop', 'laptop'),
+('Accessories', 'accessories', 'accessory');
+
+-- +goose Down
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS categories;
+
+
+File: cmd/server/main.go
+================================================
+package main
+
+import (
+	"log/slog"
+	"os"
+
+	"github.com/MihoZaki/DzTech/internal/config"
+	"github.com/MihoZaki/DzTech/internal/server"
+)
+
+func main() {
+	// Configure structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	// Load configuration
+	cfg := config.LoadConfig()
+
+	// Create and start server
+	srv := server.New(cfg)
+
+	if err := srv.Start(); err != nil {
+		slog.Error("Server failed to start", "error", err)
+		os.Exit(1)
+	}
+}
+
+
+File: internal/db/queries/products.sql
+================================================
+-- name: GetProduct :one
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: GetProductBySlug :one
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE slug = $1 AND deleted_at IS NULL;
+
+-- name: ListProducts :many
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: ListProductsByCategory :many
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE category_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: SearchProducts :many
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE deleted_at IS NULL
+  AND ($1::TEXT = '' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID IS NULL OR category_id = $2)
+  AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
+  AND ($4::BIGINT IS NULL OR price_cents >= $4)
+  AND ($5::BIGINT IS NULL OR price_cents <= $5)
+  AND ($6::BOOLEAN IS NULL OR ($6 = true AND stock_quantity > 0) OR ($6 = false))
+ORDER BY created_at DESC
+LIMIT $7 OFFSET $8;
+
+-- name: CreateProduct :one
+INSERT INTO products (
+    category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at;
+
+-- name: UpdateProduct :one
+UPDATE products
+SET
+    category_id = COALESCE($2, category_id),
+    name = COALESCE($3, name),
+    slug = COALESCE($4, slug),
+    description = COALESCE($5, description),
+    short_description = COALESCE($6, short_description),
+    price_cents = COALESCE($7, price_cents),
+    stock_quantity = COALESCE($8, stock_quantity),
+    status = COALESCE($9, status),
+    brand = COALESCE($10, brand),
+    image_urls = COALESCE($11, image_urls),
+    spec_highlights = COALESCE($12, spec_highlights),
+    updated_at = NOW()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at;
+
+-- name: DeleteProduct :exec
+UPDATE products
+SET deleted_at = NOW()
+WHERE id = $1;
+
+-- name: GetCategory :one
+SELECT id, name, slug, type, parent_id, created_at
+FROM categories
+WHERE id = $1;
+
+-- name: GetCategoryBySlug :one
+SELECT id, name, slug, type, parent_id, created_at
+FROM categories
+WHERE slug = $1;
+
+-- name: ListCategories :many
+SELECT id, name, slug, type, parent_id, created_at
+FROM categories
+ORDER BY name;
+
+-- name: CountProducts :one
+SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
+  AND ($1::TEXT = '' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID IS NULL OR category_id = $2)
+  AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
+  AND ($4::BIGINT IS NULL OR price_cents >= $4)
+  AND ($5::BIGINT IS NULL OR price_cents <= $5)
+  AND ($6::BOOLEAN IS NULL OR ($6 = true AND stock_quantity > 0) OR ($6 = false));
+
+-- name: CountAllProducts :one
+SELECT COUNT(*) FROM products WHERE deleted_at IS NULL;
+
+
+File: internal/services/product_service.go
+================================================
+package services
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"math"
+	"time"
+
+	"github.com/MihoZaki/DzTech/internal/db"
+	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type ProductService struct {
+	querier db.Querier
+}
+
+func NewProductService(querier db.Querier) *ProductService {
+	return &ProductService{
+		querier: querier,
+	}
+}
+
+func (s *ProductService) CreateProduct(ctx context.Context, req models.CreateProductRequest) (*models.Product, error) {
+	// Validate category exists
+	categoryID, err := uuid.Parse(req.CategoryID)
+	if err != nil {
+		return nil, errors.New("invalid category ID")
+	}
+
+	_, err = s.querier.GetCategory(ctx, categoryID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("category not found")
+		}
+		return nil, err
+	}
+
+	// Marshal spec highlights to JSON
+	specHighlightsJSON, err := json.Marshal(req.SpecHighlights)
+	if err != nil {
+		return nil, errors.New("invalid spec highlights format")
+	}
+
+	// Marshal image urls to JSON
+	imageUrlsJSON, err := json.Marshal(req.ImageUrls)
+	if err != nil {
+		return nil, errors.New("invalid image urls format")
+	}
+
+	// Create product
+	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	params := db.CreateProductParams{
+		CategoryID:       categoryID,
+		Name:             req.Name,
+		Slug:             req.Slug,
+		Description:      pgtype.Text{String: "", Valid: false}, // Will set below
+		ShortDescription: pgtype.Text{String: "", Valid: false}, // Will set below
+		PriceCents:       req.PriceCents,
+		StockQuantity:    int32(req.StockQuantity),
+		Status:           req.Status,
+		Brand:            req.Brand,
+		ImageUrls:        imageUrlsJSON,
+		SpecHighlights:   specHighlightsJSON,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+
+	if req.Description != nil {
+		params.Description = pgtype.Text{String: *req.Description, Valid: true}
+	}
+	if req.ShortDescription != nil {
+		params.ShortDescription = pgtype.Text{String: *req.ShortDescription, Valid: true}
+	}
+
+	dbProduct, err := s.querier.CreateProduct(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.toProductModel(dbProduct), nil
+}
+
+func (s *ProductService) GetProduct(ctx context.Context, id string) (*models.Product, error) {
+	productID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, errors.New("invalid product ID")
+	}
+
+	dbProduct, err := s.querier.GetProduct(ctx, productID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("product not found")
+		}
+		return nil, err
+	}
+
+	return s.toProductModel(dbProduct), nil
+}
+func (s *ProductService) GetProductBySlug(ctx context.Context, slug string) (*models.Product, error) {
+	dbProduct, err := s.querier.GetProductBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("product not found")
+		}
+		return nil, err
+	}
+
+	return s.toProductModel(dbProduct), nil
+}
+
+// Add a method that uses the basic ListProducts function (without search)
+func (s *ProductService) ListAllProducts(ctx context.Context, page, limit int) (*models.PaginatedResponse, error) {
+	if limit == 0 {
+		limit = 20
+	}
+	if page == 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	dbProducts, err := s.querier.ListProducts(ctx, db.ListProductsParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Get total count using a separate count query
+	total, err := s.countAllProducts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("the total number of products is", "total", total)
+	result := make([]*models.Product, len(dbProducts))
+	for i, p := range dbProducts {
+		result[i] = s.toProductModel(p)
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+
+	return &models.PaginatedResponse{
+		Data:       result,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// Add a helper method to count all products
+
+func (s *ProductService) countAllProducts(ctx context.Context) (int64, error) {
+	// Use the dedicated count query for all products
+	count, err := s.querier.CountAllProducts(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category, error) {
+	dbCategories, err := s.querier.ListCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.Category, len(dbCategories))
+	for i, c := range dbCategories {
+		result[i] = s.toCategoryModel(c)
+	}
+
+	return result, nil
+}
+
+// Add the Category model conversion function
+func (s *ProductService) toCategoryModel(dbCategory db.Category) *models.Category {
+	category := &models.Category{
+		ID:        dbCategory.ID.String(),
+		Name:      dbCategory.Name,
+		Slug:      dbCategory.Slug,
+		Type:      dbCategory.Type,
+		CreatedAt: dbCategory.CreatedAt.Time,
+	}
+
+	// Handle nullable ParentID
+	if dbCategory.ParentID.Valid {
+		parentID := dbCategory.ParentID.String()
+		category.ParentID = &parentID
+	}
+
+	return category
+}
+
+func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
+	product := &models.Product{
+		ID:            dbProduct.ID.String(),
+		CategoryID:    dbProduct.CategoryID.String(),
+		Name:          dbProduct.Name,
+		Slug:          dbProduct.Slug,
+		PriceCents:    dbProduct.PriceCents,
+		StockQuantity: int(dbProduct.StockQuantity),
+		Status:        dbProduct.Status,
+		Brand:         dbProduct.Brand,
+		CreatedAt:     dbProduct.CreatedAt.Time,
+		UpdatedAt:     dbProduct.UpdatedAt.Time,
+	}
+
+	// Handle optional fields
+	if dbProduct.Description.Valid {
+		description := dbProduct.Description.String
+		product.Description = &description
+	}
+	if dbProduct.ShortDescription.Valid {
+		shortDesc := dbProduct.ShortDescription.String
+		product.ShortDescription = &shortDesc
+	}
+	if dbProduct.DeletedAt.Valid {
+		deletedAt := dbProduct.DeletedAt.Time
+		product.DeletedAt = &deletedAt
+	}
+
+	// Unmarshal JSON fields
+	var imageUrls []string
+	if err := json.Unmarshal(dbProduct.ImageUrls, &imageUrls); err == nil {
+		product.ImageUrls = imageUrls
+	}
+
+	var specHighlights map[string]interface{}
+	if err := json.Unmarshal(dbProduct.SpecHighlights, &specHighlights); err == nil {
+		product.SpecHighlights = specHighlights
+	}
+
+	return product
+}
+
+
+File: migrations/00002_create_users_table.sql
+================================================
+-- +goose Up
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash BYTEA,
+    full_name VARCHAR(255),
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
+
+-- +goose Down
+DROP TABLE IF EXISTS users;
+
+
+File: internal/db/querier.go
+================================================
+// Code generated by sqlc. DO NOT EDIT.
+// versions:
+//   sqlc v1.30.0
+
+package db
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
+
+type Querier interface {
+	CountAllProducts(ctx context.Context) (int64, error)
+	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
+	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteProduct(ctx context.Context, id uuid.UUID) error
+	GetCategory(ctx context.Context, id uuid.UUID) (Category, error)
+	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
+	GetProduct(ctx context.Context, id uuid.UUID) (Product, error)
+	GetProductBySlug(ctx context.Context, slug string) (Product, error)
+	GetUser(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
+	ListCategories(ctx context.Context) ([]Category, error)
+	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
+	ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error)
+	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
+	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
+}
+
+var _ Querier = (*Queries)(nil)
+
+
+File: internal/models/user.go
+================================================
+package models
+
+import (
+	"time"
+
+	"github.com/go-playground/validator/v10"
+)
+
+type User struct {
+	ID        string     `json:"id"`
+	Email     string     `json:"email"`
+	Password  string     `json:"-" validate:"required"`
+	FullName  string     `json:"full_name"`
+	IsAdmin   bool       `json:"is_admin"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+}
+
+type UserLogin struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6"`
+}
+
+type UserRegister struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6"`
+	FullName string `json:"full_name" validate:"max=100"`
+}
+
+type LoginResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
+var validate *validator.Validate
+
+func init() {
+	validate = validator.New()
+}
+
+func (ur *UserRegister) Validate() error {
+	return validate.Struct(ur)
+}
+
+func (ul *UserLogin) Validate() error {
+	return validate.Struct(ul)
+}
+
+
+File: internal/middleware/middleware.go
+================================================
+package middleware
+
+import (
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+)
+
+func ApplyMiddleware(r *chi.Mux) {
+	// Essential middleware for production
+	r.Use(middleware.RequestID) // Important for rate limiting
+	r.Use(middleware.RealIP)    // Important for rate limiting, analytics and tracing
+	r.Use(middleware.Timeout(60 * time.Second))
+
+	// Logging middleware with structured logging
+	r.Use(middleware.Logger)
+
+	r.Use(middleware.Recoverer)
+}
+
+
+File: shared/types.go
+================================================
+package shared
+
+type User struct {
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	FullName  string `json:"full_name"`
+	IsAdmin   bool   `json:"is_admin"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	FullName string `json:"full_name"`
+}
+
+type AuthResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
+type ErrorResponse struct {
+	Type     string                 `json:"type"`
+	Title    string                 `json:"title"`
+	Status   int                    `json:"status"`
+	Detail   string                 `json:"detail"`
+	Instance string                 `json:"instance,omitempty"`
+	Errors   map[string]interface{} `json:"errors,omitempty"`
+}
+
+type Pagination struct {
+	Page      int `json:"page"`
+	PerPage   int `json:"per_page"`
+	Total     int `json:"total"`
+	TotalPage int `json:"total_page"`
+}
+
+type Product struct {
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name"`
+	Slug             string                 `json:"slug"`
+	Description      string                 `json:"description"`
+	ShortDescription string                 `json:"short_description"`
+	PriceCents       int64                  `json:"price_cents"`
+	StockQuantity    int                    `json:"stock_quantity"`
+	Status           string                 `json:"status"`
+	Brand            string                 `json:"brand"`
+	ImageUrls        []string               `json:"image_urls"`
+	SpecHighlights   map[string]interface{} `json:"spec_highlights"`
+	CategoryID       string                 `json:"category_id"`
+	CreatedAt        string                 `json:"created_at"`
+	UpdatedAt        string                 `json:"updated_at"`
+}
+
+type Category struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Slug     string `json:"slug"`
+	Type     string `json:"type"`
+	ParentID string `json:"parent_id,omitempty"`
+}
+
+
+File: internal/db/db.go
+================================================
+// Code generated by sqlc. DO NOT EDIT.
+// versions:
+//   sqlc v1.30.0
+
+package db
+
+import (
+	"context"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+type DBTX interface {
+	Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...interface{}) pgx.Row
+}
+
+func New(db DBTX) *Queries {
+	return &Queries{db: db}
+}
+
+type Queries struct {
+	db DBTX
+}
+
+func (q *Queries) WithTx(tx pgx.Tx) *Queries {
+	return &Queries{
+		db: tx,
+	}
+}
+
+
+File: internal/config/config.go
+================================================
+package config
+
+import (
+	"log/slog"
+	"os"
+)
+
+type Config struct {
+	ServerPort string
+	DBURL      string
+	JWTSecret  string
+}
+
+func LoadConfig() *Config {
+	cfg := &Config{
+		ServerPort: getEnvOrDefault("PORT", "8080"),
+		DBURL:      getEnvOrDefault("DATABASE_URL", ""),
+		JWTSecret:  getEnvOrDefault("JWT_SECRET", ""),
+	}
+
+	if cfg.JWTSecret == "" {
+		slog.Error("JWT_SECRET environment variable is required")
+		panic("JWT_SECRET environment variable is required")
+	}
+
+	return cfg
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+
+File: db/migrate.go
+================================================
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"os"
+
+	_ "github.com/jackc/pgx/v5/stdlib" // Import for side effects - registers the pgx driver
+	"github.com/pressly/goose/v3"
+)
+
+func RunMigrations() error {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return fmt.Errorf("DATABASE_URL environment variable is required")
+	}
+
+	// Create a *sql.DB for migrations using pgx driver
+	sqlDB, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to create sql.DB for migrations: %w", err)
+	}
+	defer sqlDB.Close()
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+
+	if err := goose.Up(sqlDB, "migrations"); err != nil {
+		return err
+	}
+
+	slog.Info("Migrations completed successfully")
+	return nil
+}
+
+
+File: internal/db/products.sql.go
+================================================
+// Code generated by sqlc. DO NOT EDIT.
+// versions:
+//   sqlc v1.30.0
+// source: products.sql
+
+package db
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+const countAllProducts = `-- name: CountAllProducts :one
+SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
+`
+
+func (q *Queries) CountAllProducts(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllProducts)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProducts = `-- name: CountProducts :one
+SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
+  AND ($1::TEXT = '' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID IS NULL OR category_id = $2)
+  AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
+  AND ($4::BIGINT IS NULL OR price_cents >= $4)
+  AND ($5::BIGINT IS NULL OR price_cents <= $5)
+  AND ($6::BOOLEAN IS NULL OR ($6 = true AND stock_quantity > 0) OR ($6 = false))
+`
+
+type CountProductsParams struct {
+	Column1 string    `json:"column_1"`
+	Column2 uuid.UUID `json:"column_2"`
+	Column3 string    `json:"column_3"`
+	Column4 int64     `json:"column_4"`
+	Column5 int64     `json:"column_5"`
+	Column6 bool      `json:"column_6"`
+}
+
+func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProducts,
+		arg.Column1,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Column5,
+		arg.Column6,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createProduct = `-- name: CreateProduct :one
+INSERT INTO products (
+    category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+`
+
+type CreateProductParams struct {
+	CategoryID       uuid.UUID          `json:"category_id"`
+	Name             string             `json:"name"`
+	Slug             string             `json:"slug"`
+	Description      pgtype.Text        `json:"description"`
+	ShortDescription pgtype.Text        `json:"short_description"`
+	PriceCents       int64              `json:"price_cents"`
+	StockQuantity    int32              `json:"stock_quantity"`
+	Status           string             `json:"status"`
+	Brand            string             `json:"brand"`
+	ImageUrls        []byte             `json:"image_urls"`
+	SpecHighlights   []byte             `json:"spec_highlights"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
+	row := q.db.QueryRow(ctx, createProduct,
+		arg.CategoryID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+		arg.ShortDescription,
+		arg.PriceCents,
+		arg.StockQuantity,
+		arg.Status,
+		arg.Brand,
+		arg.ImageUrls,
+		arg.SpecHighlights,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.CategoryID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.ShortDescription,
+		&i.PriceCents,
+		&i.StockQuantity,
+		&i.Status,
+		&i.Brand,
+		&i.ImageUrls,
+		&i.SpecHighlights,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const deleteProduct = `-- name: DeleteProduct :exec
+UPDATE products
+SET deleted_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) DeleteProduct(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteProduct, id)
+	return err
+}
+
+const getCategory = `-- name: GetCategory :one
+SELECT id, name, slug, type, parent_id, created_at
+FROM categories
+WHERE id = $1
+`
+
+func (q *Queries) GetCategory(ctx context.Context, id uuid.UUID) (Category, error) {
+	row := q.db.QueryRow(ctx, getCategory, id)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Type,
+		&i.ParentID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCategoryBySlug = `-- name: GetCategoryBySlug :one
+SELECT id, name, slug, type, parent_id, created_at
+FROM categories
+WHERE slug = $1
+`
+
+func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category, error) {
+	row := q.db.QueryRow(ctx, getCategoryBySlug, slug)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Type,
+		&i.ParentID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getProduct = `-- name: GetProduct :one
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetProduct(ctx context.Context, id uuid.UUID) (Product, error) {
+	row := q.db.QueryRow(ctx, getProduct, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.CategoryID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.ShortDescription,
+		&i.PriceCents,
+		&i.StockQuantity,
+		&i.Status,
+		&i.Brand,
+		&i.ImageUrls,
+		&i.SpecHighlights,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getProductBySlug = `-- name: GetProductBySlug :one
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE slug = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetProductBySlug(ctx context.Context, slug string) (Product, error) {
+	row := q.db.QueryRow(ctx, getProductBySlug, slug)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.CategoryID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.ShortDescription,
+		&i.PriceCents,
+		&i.StockQuantity,
+		&i.Status,
+		&i.Brand,
+		&i.ImageUrls,
+		&i.SpecHighlights,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const listCategories = `-- name: ListCategories :many
+SELECT id, name, slug, type, parent_id, created_at
+FROM categories
+ORDER BY name
+`
+
+func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
+	rows, err := q.db.Query(ctx, listCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Category
+	for rows.Next() {
+		var i Category
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Type,
+			&i.ParentID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProducts = `-- name: ListProducts :many
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListProductsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
+	rows, err := q.db.Query(ctx, listProducts, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Product
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.CategoryID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.ShortDescription,
+			&i.PriceCents,
+			&i.StockQuantity,
+			&i.Status,
+			&i.Brand,
+			&i.ImageUrls,
+			&i.SpecHighlights,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductsByCategory = `-- name: ListProductsByCategory :many
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE category_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListProductsByCategoryParams struct {
+	CategoryID uuid.UUID `json:"category_id"`
+	Limit      int32     `json:"limit"`
+	Offset     int32     `json:"offset"`
+}
+
+func (q *Queries) ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error) {
+	rows, err := q.db.Query(ctx, listProductsByCategory, arg.CategoryID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Product
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.CategoryID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.ShortDescription,
+			&i.PriceCents,
+			&i.StockQuantity,
+			&i.Status,
+			&i.Brand,
+			&i.ImageUrls,
+			&i.SpecHighlights,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchProducts = `-- name: SearchProducts :many
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+FROM products
+WHERE deleted_at IS NULL
+  AND ($1::TEXT = '' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID IS NULL OR category_id = $2)
+  AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
+  AND ($4::BIGINT IS NULL OR price_cents >= $4)
+  AND ($5::BIGINT IS NULL OR price_cents <= $5)
+  AND ($6::BOOLEAN IS NULL OR ($6 = true AND stock_quantity > 0) OR ($6 = false))
+ORDER BY created_at DESC
+LIMIT $7 OFFSET $8
+`
+
+type SearchProductsParams struct {
+	Column1 string    `json:"column_1"`
+	Column2 uuid.UUID `json:"column_2"`
+	Column3 string    `json:"column_3"`
+	Column4 int64     `json:"column_4"`
+	Column5 int64     `json:"column_5"`
+	Column6 bool      `json:"column_6"`
+	Limit   int32     `json:"limit"`
+	Offset  int32     `json:"offset"`
+}
+
+func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error) {
+	rows, err := q.db.Query(ctx, searchProducts,
+		arg.Column1,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Column5,
+		arg.Column6,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Product
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.CategoryID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.ShortDescription,
+			&i.PriceCents,
+			&i.StockQuantity,
+			&i.Status,
+			&i.Brand,
+			&i.ImageUrls,
+			&i.SpecHighlights,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateProduct = `-- name: UpdateProduct :one
+UPDATE products
+SET
+    category_id = COALESCE($2, category_id),
+    name = COALESCE($3, name),
+    slug = COALESCE($4, slug),
+    description = COALESCE($5, description),
+    short_description = COALESCE($6, short_description),
+    price_cents = COALESCE($7, price_cents),
+    stock_quantity = COALESCE($8, stock_quantity),
+    status = COALESCE($9, status),
+    brand = COALESCE($10, brand),
+    image_urls = COALESCE($11, image_urls),
+    spec_highlights = COALESCE($12, spec_highlights),
+    updated_at = NOW()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+`
+
+type UpdateProductParams struct {
+	ID               uuid.UUID   `json:"id"`
+	CategoryID       uuid.UUID   `json:"category_id"`
+	Name             string      `json:"name"`
+	Slug             string      `json:"slug"`
+	Description      pgtype.Text `json:"description"`
+	ShortDescription pgtype.Text `json:"short_description"`
+	PriceCents       int64       `json:"price_cents"`
+	StockQuantity    int32       `json:"stock_quantity"`
+	Status           string      `json:"status"`
+	Brand            string      `json:"brand"`
+	ImageUrls        []byte      `json:"image_urls"`
+	SpecHighlights   []byte      `json:"spec_highlights"`
+}
+
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRow(ctx, updateProduct,
+		arg.ID,
+		arg.CategoryID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+		arg.ShortDescription,
+		arg.PriceCents,
+		arg.StockQuantity,
+		arg.Status,
+		arg.Brand,
+		arg.ImageUrls,
+		arg.SpecHighlights,
+	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.CategoryID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.ShortDescription,
+		&i.PriceCents,
+		&i.StockQuantity,
+		&i.Status,
+		&i.Brand,
+		&i.ImageUrls,
+		&i.SpecHighlights,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+
+File: internal/handlers/product.go
+================================================
+package handlers
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"strconv"
+
+	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/MihoZaki/DzTech/internal/services"
+	"github.com/MihoZaki/DzTech/internal/utils"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+)
+
+type ProductHandler struct {
+	productService *services.ProductService
+}
+
+func NewProductHandler(productService *services.ProductService) *ProductHandler {
+	return &ProductHandler{
+		productService: productService,
+	}
+}
+
+func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
+	var req models.CreateProductRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid JSON")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Validation Error", "Validation failed")
+		return
+	}
+
+	product, err := h.productService.CreateProduct(r.Context(), req)
+	if err != nil {
+		slog.Error("Failed to create product", "error", err)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to create product")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(product)
+}
+
+func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
+	identifier := chi.URLParam(r, "id")
+
+	var product *models.Product
+	var err error
+
+	// Try to parse as UUID first (more specific format)
+	if _, uuidErr := uuid.Parse(identifier); uuidErr == nil {
+		// It's a UUID
+		product, err = h.productService.GetProduct(r.Context(), identifier)
+	} else {
+		// Assume it's a slug
+		product, err = h.productService.GetProductBySlug(r.Context(), identifier)
+	}
+
+	if err != nil {
+		utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Product not found")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(product)
+}
+
+// Add new ListAllProducts endpoint (uses basic ListProducts function)
+func (h *ProductHandler) ListAllProducts(w http.ResponseWriter, r *http.Request) {
+	page := 1
+	limit := 20
+
+	pageStr := r.URL.Query().Get("page")
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	products, err := h.productService.ListAllProducts(r.Context(), page, limit)
+	if err != nil {
+		slog.Error("Failed to list all products", "error", err)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to list products")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(products)
+}
+
+// Add new ListCategories endpoint
+func (h *ProductHandler) ListCategories(w http.ResponseWriter, r *http.Request) {
+	categories, err := h.productService.ListCategories(r.Context())
+	if err != nil {
+		slog.Error("Failed to list categories", "error", err)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to list categories")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(categories)
+}
+
+func (h *ProductHandler) RegisterRoutes(r chi.Router) {
+	r.Post("/", h.CreateProduct)
+	r.Get("/{id}", h.GetProduct)
+	// Add new routes using the specific querier functions
+	r.Get("/", h.ListAllProducts)          // Uses basic ListProducts function (no search)
+	r.Get("/categories", h.ListCategories) // Uses ListCategories function
+}
+
+
+File: db/database.go
+================================================
+package db
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
+)
+
+var (
+	Conn *pgxpool.Pool // Use only the pool, not single connection
+)
+
+func Init() error {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		slog.Info("No .env file found, using environment variables")
+	}
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return fmt.Errorf("DATABASE_URL environment variable is required")
+	}
+
+	// Create a connection pool for concurrent operations
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to create connection pool: %w", err)
+	}
+
+	// Test the pool connection
+	if err = pool.Ping(context.Background()); err != nil {
+		pool.Close()
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	Conn = pool
+
+	slog.Info("Connected to database successfully with native pgx pool")
+	return nil
+}
+
+func Close() {
+	if Conn != nil {
+		Conn.Close()
+	}
+	slog.Info("Database connection pool closed")
+}
+
+// GetPool returns the database connection pool
+func GetPool() *pgxpool.Pool {
+	return Conn
+}
+
+
+File: justfile
+================================================
+# Load .env file
+set dotenv-load := true
+
+# Justfile - Backend Helper Commands
+default:
+  @just --list
+
+[group('migration')]
+[doc('Migrate the database up one time')]
+migrate-up:
+  goose -dir migrations up
+
+[group('migration')]
+[doc('Migrate the database down one time')]
+migrate-down:
+  goose -dir migrations down
+
+[group('migration')]
+[doc('Return the migration status')]
+migrate-status:
+  goose -dir migrations status
+
+[group('migration')]
+[doc('Create a new migration based on the argument provided')]
+migrate-create name:
+  echo "Creating migration: {{name}}"
+  goose -s -dir migrations create {{name}} sql
+
+[group('database')]
+[doc('Create tech_store_dev Datebase')]
+db-create:
+  createdb tech_store_dev
+
+[group('database')]
+[doc('Drop tech_store_dev Database')]
+db-drop:
+  dropdb tech_store_dev
+
+[group('development')]
+[doc('Start the server (Default Port: 8080)')]
+dev:
+  go run cmd/server/main.go
+
+[group('development')]
+[doc('Run the seed script')]
+seed:
+  go run scripts/seed.go
+
+[group('development')]
+[doc('Run all the tests')]
+test:
+  go test ./...
+
+[group('development')]
+[doc('Build the backend API')]
+build:
+  go build -o bin/server cmd/server/main.go
+
+[group('development')]
+[doc('Run the database migration & Start the server')]
+serve:
+  just migrate-up
+  just dev
+
+[group('development')]
+[doc('Reset the entire database')]
+reset:
+  just db-drop
+  just db-create
+  just migrate-up
+
+
+File: internal/db/user.sql.go
+================================================
+// Code generated by sqlc. DO NOT EDIT.
+// versions:
+//   sqlc v1.30.0
+// source: user.sql
+
+package db
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (
+    email, password_hash, full_name, is_admin, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+`
+
+type CreateUserParams struct {
+	Email        string             `json:"email"`
+	PasswordHash []byte             `json:"password_hash"`
+	FullName     pgtype.Text        `json:"full_name"`
+	IsAdmin      bool               `json:"is_admin"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.PasswordHash,
+		arg.FullName,
+		arg.IsAdmin,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FullName,
+		&i.IsAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getUser = `-- name: GetUser :one
+SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+FROM users
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FullName,
+		&i.IsAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+FROM users
+WHERE email = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FullName,
+		&i.IsAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+
+File: internal/handlers/auth.go
+================================================
+package handlers
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/MihoZaki/DzTech/internal/services"
+	"github.com/MihoZaki/DzTech/internal/utils"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type AuthHandler struct {
+	userService *services.UserService
+	jwtSecret   []byte
+}
+
+func NewAuthHandler(userService *services.UserService, jwtSecret string) *AuthHandler {
+	return &AuthHandler{
+		userService: userService,
+		jwtSecret:   []byte(jwtSecret),
+	}
+}
+
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req models.UserRegister
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Invalid JSON", "Request body contains invalid JSON")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		fieldErrors := make(map[string]string)
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			for _, err := range validationErrors {
+				fieldErrors[err.Field()] = formatValidationError(err)
+			}
+		}
+		utils.SendValidationError(w, fieldErrors)
+		return
+	}
+
+	// Call service layer for registration
+	userID, err := h.userService.Register(r.Context(), req.Email, req.Password, req.FullName)
+	if err != nil {
+		if err.Error() == "user already exists" {
+			utils.SendErrorResponse(w, http.StatusConflict, "User Already Exists", "A user with this email already exists")
+			return
+		}
+		slog.Error("Failed to register user", "error", err, "email", req.Email)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to register user")
+		return
+	}
+
+	slog.Info("User registered successfully", "user_id", userID, "email", req.Email)
+
+	// Generate JWT token
+	token, err := h.generateToken(userID, req.Email, false) // assuming not admin
+	if err != nil {
+		slog.Error("Failed to generate token", "error", err, "user_id", userID)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
+		return
+	}
+
+	// Create response
+	response := models.LoginResponse{
+		Token: token,
+		User: models.User{
+			ID:       userID,
+			Email:    req.Email,
+			FullName: req.FullName,
+			IsAdmin:  false,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req models.UserLogin
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Invalid JSON", "Request body contains invalid JSON")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		fieldErrors := make(map[string]string)
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			for _, err := range validationErrors {
+				fieldErrors[err.Field()] = formatValidationError(err)
+			}
+		}
+		utils.SendValidationError(w, fieldErrors)
+		return
+	}
+
+	// Use service layer to authenticate user
+	user, err := h.userService.Authenticate(r.Context(), req.Email, req.Password)
+	if err != nil {
+		if err.Error() == "invalid credentials" {
+			slog.Info("Login failed: invalid credentials", "email", req.Email)
+			utils.SendErrorResponse(w, http.StatusUnauthorized, "Invalid Credentials", "Invalid email or password")
+			return
+		}
+		slog.Error("Failed to authenticate user", "error", err, "email", req.Email)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to authenticate user")
+		return
+	}
+
+	slog.Info("User logged in successfully", "user_id", user.ID, "email", user.Email)
+
+	// Generate JWT token
+	token, err := h.generateToken(user.ID, user.Email, user.IsAdmin)
+	if err != nil {
+		slog.Error("Failed to generate token", "error", err, "user_id", user.ID)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
+		return
+	}
+
+	// Create response
+	response := models.LoginResponse{
+		Token: token,
+		User: models.User{
+			ID:        user.ID,
+			Email:     user.Email,
+			FullName:  user.FullName,
+			IsAdmin:   user.IsAdmin,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func formatValidationError(err validator.FieldError) string {
+	switch err.Tag() {
+	case "required":
+		return "This field is required"
+	case "email":
+		return "Must be a valid email address"
+	case "min":
+		return "Must be at least " + err.Param() + " characters"
+	case "max":
+		return "Must be no more than " + err.Param() + " characters"
+	default:
+		return "Invalid value"
+	}
+}
+
+func (h *AuthHandler) generateToken(userID, email string, isAdmin bool) (string, error) {
+	expiry := time.Now().Add(15 * time.Minute)
+	refreshExpiry := time.Now().Add(7 * 24 * time.Hour) // 7 days
+
+	claims := jwt.MapClaims{
+		"user_id":     userID,
+		"email":       email,
+		"is_admin":    isAdmin,
+		"exp":         expiry.Unix(),
+		"refresh_exp": refreshExpiry.Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(h.jwtSecret)
+}
+
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	slog.Warn("Refresh endpoint not implemented")
+	utils.SendErrorResponse(w, http.StatusNotImplemented, "Not Implemented", "Refresh endpoint not implemented")
+}
+
+func (h *AuthHandler) RegisterRoutes(r chi.Router) {
+	r.Post("/register", h.Register)
+	r.Post("/login", h.Login)
+	r.Post("/refresh", h.Refresh)
+}
+
+
+Summary:
+Total files: 29
+Total size: 63602 bytes

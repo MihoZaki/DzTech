@@ -5,6 +5,7 @@ exclude = [
     "**/target/**",
     "**/node_modules/**",
     "**/dist/**",
+    "*.md",
     "**/build/**",
 ]
 max_size = 10485760
