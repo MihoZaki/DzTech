@@ -177,6 +177,34 @@ func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category
 
 	return result, nil
 }
+func (s *ProductService) GetCategoryByID(ctx context.Context, id string) (*models.Category, error) {
+	categoryID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, errors.New("invalid category ID")
+	}
+
+	dbCategory, err := s.querier.GetCategory(ctx, categoryID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("category not found")
+		}
+		return nil, err
+	}
+
+	return s.toCategoryModel(dbCategory), nil
+}
+
+func (s *ProductService) GetCategoryBySlug(ctx context.Context, slug string) (*models.Category, error) {
+	dbCategory, err := s.querier.GetCategoryBySlug(ctx, slug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("category not found")
+		}
+		return nil, err
+	}
+
+	return s.toCategoryModel(dbCategory), nil
+}
 
 // Add the Category model conversion function
 func (s *ProductService) toCategoryModel(dbCategory db.Category) *models.Category {

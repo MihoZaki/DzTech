@@ -114,10 +114,50 @@ func (h *ProductHandler) ListCategories(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(categories)
 }
 
+// Add new GetCategory endpoint that handles both ID and slug
+func (h *ProductHandler) GetCategory(w http.ResponseWriter, r *http.Request) {
+	identifier := chi.URLParam(r, "id")
+
+	// Try to parse as UUID first (more specific format)
+	if _, uuidErr := uuid.Parse(identifier); uuidErr == nil {
+		// It's a UUID - get by ID
+		category, err := h.productService.GetCategoryByID(r.Context(), identifier)
+		if err != nil {
+			if err.Error() == "category not found" {
+				utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Category not found")
+				return
+			}
+			utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to get category")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(category)
+		return
+	} else {
+		// Assume it's a slug - get by slug
+		category, err := h.productService.GetCategoryBySlug(r.Context(), identifier)
+		if err != nil {
+			if err.Error() == "category not found" {
+				utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Category not found")
+				return
+			}
+			utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to get category")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(category)
+		return
+	}
+}
+
 func (h *ProductHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/", h.CreateProduct)
 	r.Get("/{id}", h.GetProduct)
 	// Add new routes using the specific querier functions
 	r.Get("/", h.ListAllProducts)          // Uses basic ListProducts function (no search)
 	r.Get("/categories", h.ListCategories) // Uses ListCategories function
+	// Add new category endpoint that handles both ID and slug
+	r.Get("/categories/{id}", h.GetCategory) // Smart resolution: UUID or slug
 }
