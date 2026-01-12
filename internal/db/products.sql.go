@@ -25,12 +25,12 @@ func (q *Queries) CountAllProducts(ctx context.Context) (int64, error) {
 
 const countProducts = `-- name: CountProducts :one
 SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
-  AND ($1::TEXT = '' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
-  AND ($2::UUID IS NULL OR category_id = $2)
+  AND ($1::TEXT = '' OR name ILIKE '%' || $1 || '%' OR COALESCE(short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR category_id = $2)
   AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
-  AND ($4::BIGINT IS NULL OR price_cents >= $4)
-  AND ($5::BIGINT IS NULL OR price_cents <= $5)
-  AND ($6::BOOLEAN IS NULL OR ($6 = true AND stock_quantity > 0) OR ($6 = false))
+  AND ($4::BIGINT = 0 OR price_cents >= $4)
+  AND ($5::BIGINT = 0 OR price_cents <= $5)
+  AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND stock_quantity > 0) OR ($6 = false AND stock_quantity <= 0))
 `
 
 type CountProductsParams struct {
@@ -362,12 +362,12 @@ const searchProducts = `-- name: SearchProducts :many
 SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE deleted_at IS NULL
-  AND ($1::TEXT = '' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
-  AND ($2::UUID IS NULL OR category_id = $2)
+  AND ($1::TEXT = '' OR name ILIKE '%' || $1 || '%' OR COALESCE(short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR category_id = $2)
   AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
-  AND ($4::BIGINT IS NULL OR price_cents >= $4)
-  AND ($5::BIGINT IS NULL OR price_cents <= $5)
-  AND ($6::BOOLEAN IS NULL OR ($6 = true AND stock_quantity > 0) OR ($6 = false))
+  AND ($4::BIGINT = 0 OR price_cents >= $4)
+  AND ($5::BIGINT = 0 OR price_cents <= $5)
+  AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND stock_quantity > 0) OR ($6 = false AND stock_quantity <= 0))
 ORDER BY created_at DESC
 LIMIT $7 OFFSET $8
 `

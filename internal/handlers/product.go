@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/MihoZaki/DzTech/internal/services"
@@ -101,6 +102,127 @@ func (h *ProductHandler) ListAllProducts(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(products)
 }
 
+func (h *ProductHandler) SearchProducts(w http.ResponseWriter, r *http.Request) {
+	filter := models.ProductFilter{
+		Page:  1,
+		Limit: 20,
+	}
+
+	// Parse query parameters
+	query := r.URL.Query()
+	if q := query.Get("q"); q != "" {
+		filter.Query = q
+	}
+	if categoryID := query.Get("category_id"); categoryID != "" {
+		filter.CategoryID = categoryID
+	}
+	if brand := query.Get("brand"); brand != "" {
+		filter.Brand = brand
+	}
+	if pageStr := query.Get("page"); pageStr != "" {
+		page, err := strconv.Atoi(pageStr)
+		if err == nil && page > 0 {
+			filter.Page = page
+		}
+	}
+	if limitStr := query.Get("limit"); limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err == nil && limit > 0 && limit <= 100 {
+			filter.Limit = limit
+		}
+	}
+	if minPriceStr := query.Get("min_price"); minPriceStr != "" {
+		minPrice, err := strconv.ParseInt(minPriceStr, 10, 64)
+		if err == nil && minPrice >= 0 {
+			filter.MinPrice = &minPrice
+		}
+	}
+	if maxPriceStr := query.Get("max_price"); maxPriceStr != "" {
+		maxPrice, err := strconv.ParseInt(maxPriceStr, 10, 64)
+		if err == nil && maxPrice >= 0 {
+			filter.MaxPrice = &maxPrice
+		}
+	}
+	if inStockOnlyStr := query.Get("in_stock_only"); inStockOnlyStr != "" {
+		inStockOnly := strings.ToLower(inStockOnlyStr) == "true"
+		filter.InStockOnly = &inStockOnly
+	}
+
+	products, err := h.productService.SearchProducts(r.Context(), filter)
+	if err != nil {
+		slog.Error("Failed to search products", "error", err)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to search products")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(products)
+}
+
+func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
+	productID := chi.URLParam(r, "id")
+
+	// Validate the product ID format
+	_, err := uuid.Parse(productID)
+	if err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid product ID format")
+		return
+	}
+
+	var req models.CreateProductRequest // Reuse the same request model for updates
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid JSON")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Validation Error", "Validation failed")
+		return
+	}
+
+	updatedProduct, err := h.productService.UpdateProduct(r.Context(), productID, req)
+	if err != nil {
+		if err.Error() == "product not found" {
+			utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Product not found")
+			return
+		}
+		if err.Error() == "category not found" {
+			utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Category not found")
+			return
+		}
+		slog.Error("Failed to update product", "error", err, "product_id", productID)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to update product")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedProduct)
+}
+
+func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
+	productID := chi.URLParam(r, "id")
+
+	// Validate the product ID format
+	_, err := uuid.Parse(productID)
+	if err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid product ID format")
+		return
+	}
+
+	err = h.productService.DeleteProduct(r.Context(), productID)
+	if err != nil {
+		if err.Error() == "product not found" {
+			utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Product not found")
+			return
+		}
+		slog.Error("Failed to delete product", "error", err, "product_id", productID)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to delete product")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // Add new ListCategories endpoint
 func (h *ProductHandler) ListCategories(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.productService.ListCategories(r.Context())
@@ -160,4 +282,9 @@ func (h *ProductHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/categories", h.ListCategories) // Uses ListCategories function
 	// Add new category endpoint that handles both ID and slug
 	r.Get("/categories/{id}", h.GetCategory) // Smart resolution: UUID or slug
+	// Add update and delete routes
+	r.Put("/{id}", h.UpdateProduct)    // Update product
+	r.Delete("/{id}", h.DeleteProduct) // Delete product
+	// Add search route
+	r.Get("/search", h.SearchProducts) // Advanced product search
 }

@@ -177,6 +177,202 @@ func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category
 
 	return result, nil
 }
+
+func (s *ProductService) UpdateProduct(ctx context.Context, id string, req models.CreateProductRequest) (*models.Product, error) {
+	productID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, errors.New("invalid product ID")
+	}
+
+	// Validate category exists
+	categoryID, err := uuid.Parse(req.CategoryID)
+	if err != nil {
+		return nil, errors.New("invalid category ID")
+	}
+
+	_, err = s.querier.GetCategory(ctx, categoryID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("category not found")
+		}
+		return nil, err
+	}
+
+	// Marshal spec highlights to JSON
+	specHighlightsJSON, err := json.Marshal(req.SpecHighlights)
+	if err != nil {
+		return nil, errors.New("invalid spec highlights format")
+	}
+
+	// Marshal image urls to JSON
+	imageUrlsJSON, err := json.Marshal(req.ImageUrls)
+	if err != nil {
+		return nil, errors.New("invalid image urls format")
+	}
+
+	// Prepare update parameters
+	params := db.UpdateProductParams{
+		ID:               productID,
+		CategoryID:       categoryID,
+		Name:             req.Name,
+		Slug:             req.Slug,
+		Description:      pgtype.Text{String: "", Valid: false}, // Will set below
+		ShortDescription: pgtype.Text{String: "", Valid: false}, // Will set below
+		PriceCents:       req.PriceCents,
+		StockQuantity:    int32(req.StockQuantity),
+		Status:           req.Status,
+		Brand:            req.Brand,
+		ImageUrls:        imageUrlsJSON,
+		SpecHighlights:   specHighlightsJSON,
+	}
+
+	if req.Description != nil {
+		params.Description = pgtype.Text{String: *req.Description, Valid: true}
+	}
+	if req.ShortDescription != nil {
+		params.ShortDescription = pgtype.Text{String: *req.ShortDescription, Valid: true}
+	}
+
+	dbProduct, err := s.querier.UpdateProduct(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("product not found")
+		}
+		return nil, err
+	}
+
+	return s.toProductModel(dbProduct), nil
+}
+
+func (s *ProductService) DeleteProduct(ctx context.Context, id string) error {
+	productID, err := uuid.Parse(id)
+	if err != nil {
+		return errors.New("invalid product ID")
+	}
+
+	err = s.querier.DeleteProduct(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *ProductService) SearchProducts(ctx context.Context, filter models.ProductFilter) (*models.PaginatedResponse, error) {
+	limit := filter.Limit
+	if limit == 0 {
+		limit = 20
+	}
+	page := filter.Page
+	if page == 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	// Handle nullable parameters - use zero values when not provided
+	categoryID := uuid.Nil
+	if filter.CategoryID != "" {
+		id, err := uuid.Parse(filter.CategoryID)
+		if err != nil {
+			return nil, errors.New("invalid category ID")
+		}
+		categoryID = id
+	}
+
+	minPrice := int64(0)
+	if filter.MinPrice != nil {
+		minPrice = *filter.MinPrice
+	}
+
+	maxPrice := int64(0)
+	if filter.MaxPrice != nil {
+		maxPrice = *filter.MaxPrice
+	}
+
+	inStockOnly := false
+	if filter.InStockOnly != nil {
+		inStockOnly = *filter.InStockOnly
+	}
+
+	// Use the existing SearchProducts query
+	dbProducts, err := s.querier.SearchProducts(ctx, db.SearchProductsParams{
+		Column1: filter.Query,
+		Column2: categoryID,
+		Column3: filter.Brand,
+		Column4: minPrice,
+		Column5: maxPrice,
+		Column6: inStockOnly,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Get total count for pagination using CountProducts with same filters
+	total, err := s.countSearchProducts(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.Product, len(dbProducts))
+	for i, p := range dbProducts {
+		result[i] = s.toProductModel(p)
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+
+	return &models.PaginatedResponse{
+		Data:       result,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// Helper method to count search results
+func (s *ProductService) countSearchProducts(ctx context.Context, filter models.ProductFilter) (int64, error) {
+	// Handle nullable parameters - use zero values when not provided
+	categoryID := uuid.Nil
+	if filter.CategoryID != "" {
+		id, err := uuid.Parse(filter.CategoryID)
+		if err != nil {
+			return 0, errors.New("invalid category ID")
+		}
+		categoryID = id
+	}
+
+	minPrice := int64(0)
+	if filter.MinPrice != nil {
+		minPrice = *filter.MinPrice
+	}
+
+	maxPrice := int64(0)
+	if filter.MaxPrice != nil {
+		maxPrice = *filter.MaxPrice
+	}
+
+	inStockOnly := false
+	if filter.InStockOnly != nil {
+		inStockOnly = *filter.InStockOnly
+	}
+
+	count, err := s.querier.CountProducts(ctx, db.CountProductsParams{
+		Column1: filter.Query,
+		Column2: categoryID,
+		Column3: filter.Brand,
+		Column4: minPrice,
+		Column5: maxPrice,
+		Column6: inStockOnly,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 func (s *ProductService) GetCategoryByID(ctx context.Context, id string) (*models.Category, error) {
 	categoryID, err := uuid.Parse(id)
 	if err != nil {
