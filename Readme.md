@@ -6,15 +6,15 @@
 
 ### **Customer:**
 
-- [ ] As a customer, I want to **browse products** (PC parts, laptops) so I can
+- [x] As a customer, I want to **browse products** (PC parts, laptops) so I can
       see what’s available.
-- [ ] As a customer, I want to **search for specific products** (e.g., "RTX
+- [x] As a customer, I want to **search for specific products** (e.g., "RTX
       4090," "Ryzen 9 7950X") so I can find what I need quickly.
-- [ ] As a customer, I want to **view detailed product specs** (e.g., clock
+- [x] As a customer, I want to **view detailed product specs** (e.g., clock
       speed, compatibility, benchmarks) so I can make an informed decision.
 - [ ] As a customer, I want to **add products to my cart** so I can purchase
       them later.
-- [ ] As a customer, I want to **add items to my cart while offline** and have
+- [x] As a customer, I want to **add items to my cart while offline** and have
       them sync once I log in.
 - [ ] As a customer, I want to **save products to a wishlist** so I can consider
       them for future purchases.
@@ -24,22 +24,22 @@
       compatible components (CPU, GPU, motherboard, etc.).
 - [ ] As a customer, I want to **select a delivery service** so I can choose how
       my products are delivered.
-- [ ] As a customer, I want to **create an account (optional)** to finalize my
+- [x] As a customer, I want to **create an account (optional)** to finalize my
       order and access additional features.
 - [ ] As a customer, I want to **view my order history** so I can track
       purchases and reorder if needed.
-- [ ] As a customer, I want to **confirm my order** so I can complete my
+- [x] As a customer, I want to **confirm my order** so I can complete my
       purchase.
 
 ---
 
 ### **Admin:**
 
-- [ ] As an admin, I want to **add new PC parts and laptops** so customers can
+- [x] As an admin, I want to **add new PC parts and laptops** so customers can
       buy them.
-- [ ] As an admin, I want to **edit product details** (e.g., specs, pricing,
+- [x] As an admin, I want to **edit product details** (e.g., specs, pricing,
       stock) so I can keep the information up to date.
-- [ ] As an admin, I want to **remove products** so I can manage inventory.
+- [x] As an admin, I want to **remove products** so I can manage inventory.
 - [ ] As an admin, I want to **add and update delivery services** and their
       details.
 - [ ] As an admin, I want to **moderate product reviews** to maintain quality
@@ -53,13 +53,13 @@
 
 ### **Product Discovery**
 
-- [ ] **Product Listing Page**: Browse and search for PC parts and laptops.
-- [ ] **Advanced Search Filters**: Filter by category, brand, price range, specs
+- [x] **Product Listing Page**: Browse and search for PC parts and laptops.
+- [x] **Advanced Search Filters**: Filter by category, brand, price range, specs
       (e.g., "16GB RAM," "1TB SSD").
 
 ### **Product Details**
 
-- [ ] **Detailed Specs**: Full specifications, high-quality images,
+- [x] **Detailed Specs**: Full specifications, high-quality images,
       compatibility notes, and customer reviews.
 
 ### **Shopping Cart**
@@ -90,8 +90,8 @@
 
 ### **User Accounts**
 
-- [ ] Optional account creation.
-- [ ] Required for order finalization, wishlist, and order history.
+- [x] Optional account creation.
+- [x] Required for order finalization, wishlist, and order history.
 
 ### **Delivery Service Selection**
 
@@ -104,7 +104,7 @@
 
 ### **Admin Panel**
 
-- [ ] Add/edit/remove products.
+- [x] Add/edit/remove products.
 - [ ] Manage delivery services.
 - [ ] Moderate reviews.
 - [ ] Set compatibility rules for custom builds.
