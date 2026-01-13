@@ -44,7 +44,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call service layer for registration
+	// Call service layer for registration - now returns uuid.UUID
 	userID, err := h.userService.Register(r.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
 		if err.Error() == "user already exists" {
@@ -58,19 +58,19 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("User registered successfully", "user_id", userID, "email", req.Email)
 
-	// Generate JWT token
-	token, err := h.generateToken(userID, req.Email, false) // assuming not admin
+	// Generate JWT token - convert uuid.UUID to string for the token
+	token, err := h.generateToken(userID.String(), req.Email, false) // assuming not admin
 	if err != nil {
 		slog.Error("Failed to generate token", "error", err, "user_id", userID)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
 		return
 	}
 
-	// Create response
+	// Create response - use the uuid.UUID directly
 	response := models.LoginResponse{
 		Token: token,
 		User: models.User{
-			ID:       userID,
+			ID:       userID, // Now uuid.UUID
 			Email:    req.Email,
 			FullName: req.FullName,
 			IsAdmin:  false,
@@ -114,25 +114,18 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("User logged in successfully", "user_id", user.ID, "email", user.Email)
 
-	// Generate JWT token
-	token, err := h.generateToken(user.ID, user.Email, user.IsAdmin)
+	// Generate JWT token - convert uuid.UUID to string for the token
+	token, err := h.generateToken(user.ID.String(), user.Email, user.IsAdmin)
 	if err != nil {
 		slog.Error("Failed to generate token", "error", err, "user_id", user.ID)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
 		return
 	}
 
-	// Create response
+	// Create response - user is already of type *models.User with uuid.UUID ID
 	response := models.LoginResponse{
 		Token: token,
-		User: models.User{
-			ID:        user.ID,
-			Email:     user.Email,
-			FullName:  user.FullName,
-			IsAdmin:   user.IsAdmin,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-		},
+		User:  *user, // user is already of type *models.User with uuid.UUID ID
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -159,7 +152,7 @@ func (h *AuthHandler) generateToken(userID, email string, isAdmin bool) (string,
 	refreshExpiry := time.Now().Add(7 * 24 * time.Hour) // 7 days
 
 	claims := jwt.MapClaims{
-		"user_id":     userID,
+		"user_id":     userID, // This should be string for the token
 		"email":       email,
 		"is_admin":    isAdmin,
 		"exp":         expiry.Unix(),

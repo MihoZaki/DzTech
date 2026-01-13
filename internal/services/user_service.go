@@ -23,38 +23,39 @@ func NewUserService(querier db.Querier) *UserService {
 	}
 }
 
-func (s *UserService) Register(ctx context.Context, email, password, fullName string) (string, error) {
+func (s *UserService) Register(ctx context.Context, email, password, fullName string) (uuid.UUID, error) {
 	// Check if user already exists
 	_, err := s.querier.GetUserByEmail(ctx, email)
 	if err == nil {
-		return "", errors.New("user already exists")
+		return uuid.Nil, errors.New("user already exists")
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
+		return uuid.Nil, err
 	}
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", err
+		return uuid.Nil, err
 	}
 
+	// Create user
 	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	params := db.CreateUserParams{
 		Email:        email,
 		PasswordHash: hashedPassword,
-		FullName:     pgtype.Text{String: fullName, Valid: true},
+		FullName:     &fullName,
 		IsAdmin:      false,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-
 	user, err := s.querier.CreateUser(ctx, params)
 	if err != nil {
-		return "", err
+		return uuid.Nil, err
 	}
 
-	return user.ID.String(), nil // Convert uuid.UUID to string
+	// Return uuid.UUID directly
+	return user.ID, nil
 }
 
 func (s *UserService) Authenticate(ctx context.Context, email, password string) (*models.User, error) {
@@ -73,17 +74,15 @@ func (s *UserService) Authenticate(ctx context.Context, email, password string) 
 
 	// Convert database user to service user
 	user := &models.User{
-		ID:        dbUser.ID.String(),
+		ID:        dbUser.ID, // Now uuid.UUID
 		Email:     dbUser.Email,
-		Password:  string(dbUser.PasswordHash), // Not exposed in API response anyway
-		FullName:  dbUser.FullName.String,
+		Password:  string(dbUser.PasswordHash),
+		FullName:  *dbUser.FullName,
 		IsAdmin:   dbUser.IsAdmin,
 		CreatedAt: dbUser.CreatedAt.Time,
 		UpdatedAt: dbUser.UpdatedAt.Time,
-		DeletedAt: nil, // Handle this if needed
 	}
 
-	// Handle DeletedAt if it exists
 	if dbUser.DeletedAt.Valid {
 		user.DeletedAt = &dbUser.DeletedAt.Time
 	}
@@ -93,12 +92,12 @@ func (s *UserService) Authenticate(ctx context.Context, email, password string) 
 
 func (s *UserService) GetByID(ctx context.Context, id string) (*models.User, error) {
 	// Parse the UUID string
-	userID, err := uuid.Parse(id)
+	userUUID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, errors.New("invalid user ID format")
 	}
 
-	dbUser, err := s.querier.GetUser(ctx, userID)
+	dbUser, err := s.querier.GetUser(ctx, userUUID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("user not found")
@@ -107,10 +106,10 @@ func (s *UserService) GetByID(ctx context.Context, id string) (*models.User, err
 	}
 
 	user := &models.User{
-		ID:        dbUser.ID.String(),
+		ID:        dbUser.ID, // Now uuid.UUID
 		Email:     dbUser.Email,
 		Password:  string(dbUser.PasswordHash),
-		FullName:  dbUser.FullName.String,
+		FullName:  *dbUser.FullName,
 		IsAdmin:   dbUser.IsAdmin,
 		CreatedAt: dbUser.CreatedAt.Time,
 		UpdatedAt: dbUser.UpdatedAt.Time,

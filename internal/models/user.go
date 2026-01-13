@@ -4,10 +4,11 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 )
 
 type User struct {
-	ID        string     `json:"id"`
+	ID        uuid.UUID  `json:"id"`
 	Email     string     `json:"email"`
 	Password  string     `json:"-" validate:"required"`
 	FullName  string     `json:"full_name"`

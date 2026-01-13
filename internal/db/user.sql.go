@@ -23,7 +23,7 @@ INSERT INTO users (
 type CreateUserParams struct {
 	Email        string             `json:"email"`
 	PasswordHash []byte             `json:"password_hash"`
-	FullName     pgtype.Text        `json:"full_name"`
+	FullName     *string            `json:"full_name"`
 	IsAdmin      bool               `json:"is_admin"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
