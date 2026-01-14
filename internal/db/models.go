@@ -14,7 +14,7 @@ type Category struct {
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
 	Type      string             `json:"type"`
-	ParentID  pgtype.UUID        `json:"parent_id"`
+	ParentID  uuid.UUID          `json:"parent_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -23,8 +23,8 @@ type Product struct {
 	CategoryID       uuid.UUID          `json:"category_id"`
 	Name             string             `json:"name"`
 	Slug             string             `json:"slug"`
-	Description      pgtype.Text        `json:"description"`
-	ShortDescription pgtype.Text        `json:"short_description"`
+	Description      *string            `json:"description"`
+	ShortDescription *string            `json:"short_description"`
 	PriceCents       int64              `json:"price_cents"`
 	StockQuantity    int32              `json:"stock_quantity"`
 	Status           string             `json:"status"`
@@ -46,7 +46,7 @@ type User struct {
 	ID           uuid.UUID          `json:"id"`
 	Email        string             `json:"email"`
 	PasswordHash []byte             `json:"password_hash"`
-	FullName     pgtype.Text        `json:"full_name"`
+	FullName     *string            `json:"full_name"`
 	IsAdmin      bool               `json:"is_admin"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`

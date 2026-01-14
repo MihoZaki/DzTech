@@ -6,13 +6,11 @@ import (
 	"errors"
 	"log/slog"
 	"math"
-	"time"
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ProductService struct {
@@ -27,12 +25,7 @@ func NewProductService(querier db.Querier) *ProductService {
 
 func (s *ProductService) CreateProduct(ctx context.Context, req models.CreateProductRequest) (*models.Product, error) {
 	// Validate category exists
-	categoryID, err := uuid.Parse(req.CategoryID)
-	if err != nil {
-		return nil, errors.New("invalid category ID")
-	}
-
-	_, err = s.querier.GetCategory(ctx, categoryID)
+	_, err := s.querier.GetCategory(ctx, req.CategoryID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("category not found")
@@ -53,28 +46,25 @@ func (s *ProductService) CreateProduct(ctx context.Context, req models.CreatePro
 	}
 
 	// Create product
-	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	params := db.CreateProductParams{
-		CategoryID:       categoryID,
+		CategoryID:       req.CategoryID,
 		Name:             req.Name,
 		Slug:             req.Slug,
-		Description:      pgtype.Text{String: "", Valid: false}, // Will set below
-		ShortDescription: pgtype.Text{String: "", Valid: false}, // Will set below
+		Description:      nil,
+		ShortDescription: nil,
 		PriceCents:       req.PriceCents,
 		StockQuantity:    int32(req.StockQuantity),
 		Status:           req.Status,
 		Brand:            req.Brand,
 		ImageUrls:        imageUrlsJSON,
 		SpecHighlights:   specHighlightsJSON,
-		CreatedAt:        now,
-		UpdatedAt:        now,
 	}
 
 	if req.Description != nil {
-		params.Description = pgtype.Text{String: *req.Description, Valid: true}
+		params.Description = req.Description
 	}
 	if req.ShortDescription != nil {
-		params.ShortDescription = pgtype.Text{String: *req.ShortDescription, Valid: true}
+		params.ShortDescription = req.ShortDescription
 	}
 
 	dbProduct, err := s.querier.CreateProduct(ctx, params)
@@ -85,13 +75,8 @@ func (s *ProductService) CreateProduct(ctx context.Context, req models.CreatePro
 	return s.toProductModel(dbProduct), nil
 }
 
-func (s *ProductService) GetProduct(ctx context.Context, id string) (*models.Product, error) {
-	productID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, errors.New("invalid product ID")
-	}
-
-	dbProduct, err := s.querier.GetProduct(ctx, productID)
+func (s *ProductService) GetProduct(ctx context.Context, id uuid.UUID) (*models.Product, error) {
+	dbProduct, err := s.querier.GetProduct(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
@@ -101,6 +86,7 @@ func (s *ProductService) GetProduct(ctx context.Context, id string) (*models.Pro
 
 	return s.toProductModel(dbProduct), nil
 }
+
 func (s *ProductService) GetProductBySlug(ctx context.Context, slug string) (*models.Product, error) {
 	dbProduct, err := s.querier.GetProductBySlug(ctx, slug)
 	if err != nil {
@@ -124,8 +110,8 @@ func (s *ProductService) ListAllProducts(ctx context.Context, page, limit int) (
 	offset := (page - 1) * limit
 
 	dbProducts, err := s.querier.ListProducts(ctx, db.ListProductsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		PageLimit:  int32(limit),
+		PageOffset: int32(offset),
 	})
 	if err != nil {
 		return nil, err
@@ -154,7 +140,6 @@ func (s *ProductService) ListAllProducts(ctx context.Context, page, limit int) (
 }
 
 // Add a helper method to count all products
-
 func (s *ProductService) countAllProducts(ctx context.Context) (int64, error) {
 	// Use the dedicated count query for all products
 	count, err := s.querier.CountAllProducts(ctx)
@@ -164,6 +149,51 @@ func (s *ProductService) countAllProducts(ctx context.Context) (int64, error) {
 
 	return count, nil
 }
+
+func (s *ProductService) ListProductsByCategory(ctx context.Context, categoryID uuid.UUID, page, limit int) (*models.PaginatedResponse, error) {
+	if limit == 0 {
+		limit = 20
+	}
+	if page == 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	dbProducts, err := s.querier.ListProductsByCategory(ctx, db.ListProductsByCategoryParams{
+		CategoryID: categoryID,
+		PageLimit:  int32(limit),
+		PageOffset: int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Count total products in category
+	countQuery, err := s.querier.ListProductsByCategory(ctx, db.ListProductsByCategoryParams{
+		CategoryID: categoryID,
+		PageLimit:  int32(1000000), // Large number to get all
+		PageOffset: 0,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.Product, len(dbProducts))
+	for i, p := range dbProducts {
+		result[i] = s.toProductModel(p)
+	}
+
+	totalPages := int(math.Ceil(float64(len(countQuery)) / float64(limit)))
+
+	return &models.PaginatedResponse{
+		Data:       result,
+		Page:       page,
+		Limit:      limit,
+		Total:      int64(len(countQuery)),
+		TotalPages: totalPages,
+	}, nil
+}
+
 func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category, error) {
 	dbCategories, err := s.querier.ListCategories(ctx)
 	if err != nil {
@@ -178,19 +208,9 @@ func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category
 	return result, nil
 }
 
-func (s *ProductService) UpdateProduct(ctx context.Context, id string, req models.CreateProductRequest) (*models.Product, error) {
-	productID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, errors.New("invalid product ID")
-	}
-
+func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req models.CreateProductRequest) (*models.Product, error) {
 	// Validate category exists
-	categoryID, err := uuid.Parse(req.CategoryID)
-	if err != nil {
-		return nil, errors.New("invalid category ID")
-	}
-
-	_, err = s.querier.GetCategory(ctx, categoryID)
+	_, err := s.querier.GetCategory(ctx, req.CategoryID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("category not found")
@@ -212,12 +232,12 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id string, req model
 
 	// Prepare update parameters
 	params := db.UpdateProductParams{
-		ID:               productID,
-		CategoryID:       categoryID,
+		ProductID:        id,
+		CategoryID:       req.CategoryID,
 		Name:             req.Name,
 		Slug:             req.Slug,
-		Description:      pgtype.Text{String: "", Valid: false}, // Will set below
-		ShortDescription: pgtype.Text{String: "", Valid: false}, // Will set below
+		Description:      nil,
+		ShortDescription: nil,
 		PriceCents:       req.PriceCents,
 		StockQuantity:    int32(req.StockQuantity),
 		Status:           req.Status,
@@ -227,10 +247,10 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id string, req model
 	}
 
 	if req.Description != nil {
-		params.Description = pgtype.Text{String: *req.Description, Valid: true}
+		params.Description = req.Description
 	}
 	if req.ShortDescription != nil {
-		params.ShortDescription = pgtype.Text{String: *req.ShortDescription, Valid: true}
+		params.ShortDescription = req.ShortDescription
 	}
 
 	dbProduct, err := s.querier.UpdateProduct(ctx, params)
@@ -244,13 +264,8 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id string, req model
 	return s.toProductModel(dbProduct), nil
 }
 
-func (s *ProductService) DeleteProduct(ctx context.Context, id string) error {
-	productID, err := uuid.Parse(id)
-	if err != nil {
-		return errors.New("invalid product ID")
-	}
-
-	err = s.querier.DeleteProduct(ctx, productID)
+func (s *ProductService) DeleteProduct(ctx context.Context, id uuid.UUID) error {
+	err := s.querier.DeleteProduct(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -271,12 +286,8 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 
 	// Handle nullable parameters - use zero values when not provided
 	categoryID := uuid.Nil
-	if filter.CategoryID != "" {
-		id, err := uuid.Parse(filter.CategoryID)
-		if err != nil {
-			return nil, errors.New("invalid category ID")
-		}
-		categoryID = id
+	if filter.CategoryID != uuid.Nil {
+		categoryID = filter.CategoryID
 	}
 
 	minPrice := int64(0)
@@ -296,14 +307,14 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 
 	// Use the existing SearchProducts query
 	dbProducts, err := s.querier.SearchProducts(ctx, db.SearchProductsParams{
-		Column1: filter.Query,
-		Column2: categoryID,
-		Column3: filter.Brand,
-		Column4: minPrice,
-		Column5: maxPrice,
-		Column6: inStockOnly,
-		Limit:   int32(limit),
-		Offset:  int32(offset),
+		Query:       filter.Query,
+		CategoryID:  categoryID,
+		Brand:       filter.Brand,
+		MinPrice:    minPrice,
+		MaxPrice:    maxPrice,
+		InStockOnly: inStockOnly,
+		PageLimit:   int32(limit),
+		PageOffset:  int32(offset),
 	})
 	if err != nil {
 		return nil, err
@@ -335,12 +346,8 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 func (s *ProductService) countSearchProducts(ctx context.Context, filter models.ProductFilter) (int64, error) {
 	// Handle nullable parameters - use zero values when not provided
 	categoryID := uuid.Nil
-	if filter.CategoryID != "" {
-		id, err := uuid.Parse(filter.CategoryID)
-		if err != nil {
-			return 0, errors.New("invalid category ID")
-		}
-		categoryID = id
+	if filter.CategoryID != uuid.Nil {
+		categoryID = filter.CategoryID
 	}
 
 	minPrice := int64(0)
@@ -359,12 +366,12 @@ func (s *ProductService) countSearchProducts(ctx context.Context, filter models.
 	}
 
 	count, err := s.querier.CountProducts(ctx, db.CountProductsParams{
-		Column1: filter.Query,
-		Column2: categoryID,
-		Column3: filter.Brand,
-		Column4: minPrice,
-		Column5: maxPrice,
-		Column6: inStockOnly,
+		Query:       filter.Query,
+		CategoryID:  categoryID,
+		Brand:       filter.Brand,
+		MinPrice:    minPrice,
+		MaxPrice:    maxPrice,
+		InStockOnly: inStockOnly,
 	})
 	if err != nil {
 		return 0, err
@@ -373,13 +380,8 @@ func (s *ProductService) countSearchProducts(ctx context.Context, filter models.
 	return count, nil
 }
 
-func (s *ProductService) GetCategoryByID(ctx context.Context, id string) (*models.Category, error) {
-	categoryID, err := uuid.Parse(id)
-	if err != nil {
-		return nil, errors.New("invalid category ID")
-	}
-
-	dbCategory, err := s.querier.GetCategory(ctx, categoryID)
+func (s *ProductService) GetCategoryByID(ctx context.Context, id uuid.UUID) (*models.Category, error) {
+	dbCategory, err := s.querier.GetCategory(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("category not found")
@@ -405,17 +407,16 @@ func (s *ProductService) GetCategoryBySlug(ctx context.Context, slug string) (*m
 // Add the Category model conversion function
 func (s *ProductService) toCategoryModel(dbCategory db.Category) *models.Category {
 	category := &models.Category{
-		ID:        dbCategory.ID.String(),
+		ID:        dbCategory.ID, // uuid.UUID
 		Name:      dbCategory.Name,
 		Slug:      dbCategory.Slug,
 		Type:      dbCategory.Type,
 		CreatedAt: dbCategory.CreatedAt.Time,
 	}
 
-	// Handle nullable ParentID
-	if dbCategory.ParentID.Valid {
-		parentID := dbCategory.ParentID.String()
-		category.ParentID = &parentID
+	// Handle nullable ParentID - now correctly as *uuid.UUID
+	if dbCategory.ParentID != uuid.Nil {
+		category.ParentID = &dbCategory.ParentID
 	}
 
 	return category
@@ -423,8 +424,8 @@ func (s *ProductService) toCategoryModel(dbCategory db.Category) *models.Categor
 
 func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 	product := &models.Product{
-		ID:            dbProduct.ID.String(),
-		CategoryID:    dbProduct.CategoryID.String(),
+		ID:            dbProduct.ID,
+		CategoryID:    dbProduct.CategoryID,
 		Name:          dbProduct.Name,
 		Slug:          dbProduct.Slug,
 		PriceCents:    dbProduct.PriceCents,
@@ -436,13 +437,11 @@ func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 	}
 
 	// Handle optional fields
-	if dbProduct.Description.Valid {
-		description := dbProduct.Description.String
-		product.Description = &description
+	if dbProduct.Description != nil {
+		product.Description = dbProduct.Description
 	}
-	if dbProduct.ShortDescription.Valid {
-		shortDesc := dbProduct.ShortDescription.String
-		product.ShortDescription = &shortDesc
+	if dbProduct.ShortDescription != nil {
+		product.ShortDescription = dbProduct.ShortDescription
 	}
 	if dbProduct.DeletedAt.Valid {
 		deletedAt := dbProduct.DeletedAt.Time
@@ -455,7 +454,7 @@ func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 		product.ImageUrls = imageUrls
 	}
 
-	var specHighlights map[string]interface{}
+	var specHighlights map[string]any
 	if err := json.Unmarshal(dbProduct.SpecHighlights, &specHighlights); err == nil {
 		product.SpecHighlights = specHighlights
 	}

@@ -30,6 +30,7 @@ CREATE TABLE products (
 
 -- Create indexes
 CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_category_created ON products(category_id, created_at);
 CREATE INDEX idx_products_slug ON products(slug);
 CREATE INDEX idx_products_active ON products(id) WHERE status = 'active' AND deleted_at IS NULL;
 CREATE INDEX idx_products_search ON products USING GIN (
@@ -38,6 +39,9 @@ CREATE INDEX idx_products_search ON products USING GIN (
 
 CREATE INDEX idx_categories_slug ON categories(slug);
 CREATE INDEX idx_categories_parent ON categories(parent_id);
+CREATE INDEX idx_products_brand ON products(brand);
+CREATE INDEX idx_products_price ON products(price_cents);
+CREATE INDEX idx_products_stock ON products(stock_quantity);
 
 -- Insert default categories
 INSERT INTO categories (name, slug, type) VALUES

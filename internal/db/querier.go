@@ -15,17 +15,20 @@ type Querier interface {
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	DeleteProduct(ctx context.Context, id uuid.UUID) error
-	GetCategory(ctx context.Context, id uuid.UUID) (Category, error)
+	DeleteProduct(ctx context.Context, productID uuid.UUID) error
+	GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
-	GetProduct(ctx context.Context, id uuid.UUID) (Product, error)
+	GetProduct(ctx context.Context, productID uuid.UUID) (Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (Product, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	ListCategories(ctx context.Context) ([]Category, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error)
+	ListProductsWithCategory(ctx context.Context, arg ListProductsWithCategoryParams) ([]ListProductsWithCategoryRow, error)
+	ListProductsWithCategoryDetail(ctx context.Context, arg ListProductsWithCategoryDetailParams) ([]ListProductsWithCategoryDetailRow, error)
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
+	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 }
 

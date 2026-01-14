@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countAllProducts = `-- name: CountAllProducts :one
@@ -34,22 +33,22 @@ SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
 `
 
 type CountProductsParams struct {
-	Column1 string    `json:"column_1"`
-	Column2 uuid.UUID `json:"column_2"`
-	Column3 string    `json:"column_3"`
-	Column4 int64     `json:"column_4"`
-	Column5 int64     `json:"column_5"`
-	Column6 bool      `json:"column_6"`
+	Query       string    `json:"query"`
+	CategoryID  uuid.UUID `json:"category_id"`
+	Brand       string    `json:"brand"`
+	MinPrice    int64     `json:"min_price"`
+	MaxPrice    int64     `json:"max_price"`
+	InStockOnly bool      `json:"in_stock_only"`
 }
 
 func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countProducts,
-		arg.Column1,
-		arg.Column2,
-		arg.Column3,
-		arg.Column4,
-		arg.Column5,
-		arg.Column6,
+		arg.Query,
+		arg.CategoryID,
+		arg.Brand,
+		arg.MinPrice,
+		arg.MaxPrice,
+		arg.InStockOnly,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -60,24 +59,35 @@ const createProduct = `-- name: CreateProduct :one
 INSERT INTO products (
     category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-) RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+    $1, 
+    $2, 
+    $3, 
+    $4, 
+    $5, 
+    $6, 
+    $7, 
+    $8, 
+    $9, 
+    $10, 
+    $11, 
+    NOW(),
+    NOW()
+) 
+RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
 `
 
 type CreateProductParams struct {
-	CategoryID       uuid.UUID          `json:"category_id"`
-	Name             string             `json:"name"`
-	Slug             string             `json:"slug"`
-	Description      pgtype.Text        `json:"description"`
-	ShortDescription pgtype.Text        `json:"short_description"`
-	PriceCents       int64              `json:"price_cents"`
-	StockQuantity    int32              `json:"stock_quantity"`
-	Status           string             `json:"status"`
-	Brand            string             `json:"brand"`
-	ImageUrls        []byte             `json:"image_urls"`
-	SpecHighlights   []byte             `json:"spec_highlights"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	CategoryID       uuid.UUID `json:"category_id"`
+	Name             string    `json:"name"`
+	Slug             string    `json:"slug"`
+	Description      *string   `json:"description"`
+	ShortDescription *string   `json:"short_description"`
+	PriceCents       int64     `json:"price_cents"`
+	StockQuantity    int32     `json:"stock_quantity"`
+	Status           string    `json:"status"`
+	Brand            string    `json:"brand"`
+	ImageUrls        []byte    `json:"image_urls"`
+	SpecHighlights   []byte    `json:"spec_highlights"`
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -93,8 +103,6 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.Brand,
 		arg.ImageUrls,
 		arg.SpecHighlights,
-		arg.CreatedAt,
-		arg.UpdatedAt,
 	)
 	var i Product
 	err := row.Scan(
@@ -123,8 +131,8 @@ SET deleted_at = NOW()
 WHERE id = $1
 `
 
-func (q *Queries) DeleteProduct(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteProduct, id)
+func (q *Queries) DeleteProduct(ctx context.Context, productID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteProduct, productID)
 	return err
 }
 
@@ -134,8 +142,8 @@ FROM categories
 WHERE id = $1
 `
 
-func (q *Queries) GetCategory(ctx context.Context, id uuid.UUID) (Category, error) {
-	row := q.db.QueryRow(ctx, getCategory, id)
+func (q *Queries) GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error) {
+	row := q.db.QueryRow(ctx, getCategory, categoryID)
 	var i Category
 	err := row.Scan(
 		&i.ID,
@@ -174,8 +182,8 @@ FROM products
 WHERE id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetProduct(ctx context.Context, id uuid.UUID) (Product, error) {
-	row := q.db.QueryRow(ctx, getProduct, id)
+func (q *Queries) GetProduct(ctx context.Context, productID uuid.UUID) (Product, error) {
+	row := q.db.QueryRow(ctx, getProduct, productID)
 	var i Product
 	err := row.Scan(
 		&i.ID,
@@ -264,16 +272,16 @@ SELECT id, category_id, name, slug, description, short_description, price_cents,
 FROM products
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
+LIMIT $2 OFFSET $1
 `
 
 type ListProductsParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	PageOffset int32 `json:"page_offset"`
+	PageLimit  int32 `json:"page_limit"`
 }
 
 func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
-	rows, err := q.db.Query(ctx, listProducts, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listProducts, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -313,17 +321,17 @@ SELECT id, category_id, name, slug, description, short_description, price_cents,
 FROM products
 WHERE category_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $3 OFFSET $2
 `
 
 type ListProductsByCategoryParams struct {
 	CategoryID uuid.UUID `json:"category_id"`
-	Limit      int32     `json:"limit"`
-	Offset     int32     `json:"offset"`
+	PageOffset int32     `json:"page_offset"`
+	PageLimit  int32     `json:"page_limit"`
 }
 
 func (q *Queries) ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error) {
-	rows, err := q.db.Query(ctx, listProductsByCategory, arg.CategoryID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listProductsByCategory, arg.CategoryID, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -358,6 +366,134 @@ func (q *Queries) ListProductsByCategory(ctx context.Context, arg ListProductsBy
 	return items, nil
 }
 
+const listProductsWithCategory = `-- name: ListProductsWithCategory :many
+SELECT 
+    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
+    c.name as category_name,
+    c.slug as category_slug,
+    c.type as category_type
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+WHERE p.deleted_at IS NULL
+ORDER BY p.created_at DESC
+LIMIT $2 OFFSET $1
+`
+
+type ListProductsWithCategoryParams struct {
+	PageOffset int32 `json:"page_offset"`
+	PageLimit  int32 `json:"page_limit"`
+}
+
+type ListProductsWithCategoryRow struct {
+	Product      Product `json:"product"`
+	CategoryName *string `json:"category_name"`
+	CategorySlug *string `json:"category_slug"`
+	CategoryType *string `json:"category_type"`
+}
+
+func (q *Queries) ListProductsWithCategory(ctx context.Context, arg ListProductsWithCategoryParams) ([]ListProductsWithCategoryRow, error) {
+	rows, err := q.db.Query(ctx, listProductsWithCategory, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProductsWithCategoryRow
+	for rows.Next() {
+		var i ListProductsWithCategoryRow
+		if err := rows.Scan(
+			&i.Product.ID,
+			&i.Product.CategoryID,
+			&i.Product.Name,
+			&i.Product.Slug,
+			&i.Product.Description,
+			&i.Product.ShortDescription,
+			&i.Product.PriceCents,
+			&i.Product.StockQuantity,
+			&i.Product.Status,
+			&i.Product.Brand,
+			&i.Product.ImageUrls,
+			&i.Product.SpecHighlights,
+			&i.Product.CreatedAt,
+			&i.Product.UpdatedAt,
+			&i.Product.DeletedAt,
+			&i.CategoryName,
+			&i.CategorySlug,
+			&i.CategoryType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductsWithCategoryDetail = `-- name: ListProductsWithCategoryDetail :many
+SELECT 
+    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
+    c.id, c.name, c.slug, c.type, c.parent_id, c.created_at
+FROM products p
+JOIN categories c ON p.category_id = c.id
+WHERE p.category_id = $1 AND p.deleted_at IS NULL
+ORDER BY p.created_at DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListProductsWithCategoryDetailParams struct {
+	CategoryID uuid.UUID `json:"category_id"`
+	PageOffset int32     `json:"page_offset"`
+	PageLimit  int32     `json:"page_limit"`
+}
+
+type ListProductsWithCategoryDetailRow struct {
+	Product  Product  `json:"product"`
+	Category Category `json:"category"`
+}
+
+func (q *Queries) ListProductsWithCategoryDetail(ctx context.Context, arg ListProductsWithCategoryDetailParams) ([]ListProductsWithCategoryDetailRow, error) {
+	rows, err := q.db.Query(ctx, listProductsWithCategoryDetail, arg.CategoryID, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProductsWithCategoryDetailRow
+	for rows.Next() {
+		var i ListProductsWithCategoryDetailRow
+		if err := rows.Scan(
+			&i.Product.ID,
+			&i.Product.CategoryID,
+			&i.Product.Name,
+			&i.Product.Slug,
+			&i.Product.Description,
+			&i.Product.ShortDescription,
+			&i.Product.PriceCents,
+			&i.Product.StockQuantity,
+			&i.Product.Status,
+			&i.Product.Brand,
+			&i.Product.ImageUrls,
+			&i.Product.SpecHighlights,
+			&i.Product.CreatedAt,
+			&i.Product.UpdatedAt,
+			&i.Product.DeletedAt,
+			&i.Category.ID,
+			&i.Category.Name,
+			&i.Category.Slug,
+			&i.Category.Type,
+			&i.Category.ParentID,
+			&i.Category.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchProducts = `-- name: SearchProducts :many
 SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
@@ -369,30 +505,30 @@ WHERE deleted_at IS NULL
   AND ($5::BIGINT = 0 OR price_cents <= $5)
   AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND stock_quantity > 0) OR ($6 = false AND stock_quantity <= 0))
 ORDER BY created_at DESC
-LIMIT $7 OFFSET $8
+LIMIT $8 OFFSET $7
 `
 
 type SearchProductsParams struct {
-	Column1 string    `json:"column_1"`
-	Column2 uuid.UUID `json:"column_2"`
-	Column3 string    `json:"column_3"`
-	Column4 int64     `json:"column_4"`
-	Column5 int64     `json:"column_5"`
-	Column6 bool      `json:"column_6"`
-	Limit   int32     `json:"limit"`
-	Offset  int32     `json:"offset"`
+	Query       string    `json:"query"`
+	CategoryID  uuid.UUID `json:"category_id"`
+	Brand       string    `json:"brand"`
+	MinPrice    int64     `json:"min_price"`
+	MaxPrice    int64     `json:"max_price"`
+	InStockOnly bool      `json:"in_stock_only"`
+	PageOffset  int32     `json:"page_offset"`
+	PageLimit   int32     `json:"page_limit"`
 }
 
 func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error) {
 	rows, err := q.db.Query(ctx, searchProducts,
-		arg.Column1,
-		arg.Column2,
-		arg.Column3,
-		arg.Column4,
-		arg.Column5,
-		arg.Column6,
-		arg.Limit,
-		arg.Offset,
+		arg.Query,
+		arg.CategoryID,
+		arg.Brand,
+		arg.MinPrice,
+		arg.MaxPrice,
+		arg.InStockOnly,
+		arg.PageOffset,
+		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err
@@ -428,43 +564,127 @@ func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) 
 	return items, nil
 }
 
+const searchProductsWithCategory = `-- name: SearchProductsWithCategory :many
+SELECT 
+    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
+    c.name as category_name,
+    c.slug as category_slug,
+    c.type as category_type
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+WHERE p.deleted_at IS NULL
+  AND ($1::TEXT = '' OR p.name ILIKE '%' || $1 || '%' OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $2)
+  AND ($3::TEXT = '' OR p.brand ILIKE '%' || $3 || '%')
+  AND ($4::BIGINT = 0 OR p.price_cents >= $4)
+  AND ($5::BIGINT = 0 OR p.price_cents <= $5)
+  AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND p.stock_quantity > 0) OR ($6 = false AND p.stock_quantity <= 0))
+ORDER BY p.created_at DESC
+LIMIT $8 OFFSET $7
+`
+
+type SearchProductsWithCategoryParams struct {
+	Query       string    `json:"query"`
+	CategoryID  uuid.UUID `json:"category_id"`
+	Brand       string    `json:"brand"`
+	MinPrice    int64     `json:"min_price"`
+	MaxPrice    int64     `json:"max_price"`
+	InStockOnly bool      `json:"in_stock_only"`
+	PageOffset  int32     `json:"page_offset"`
+	PageLimit   int32     `json:"page_limit"`
+}
+
+type SearchProductsWithCategoryRow struct {
+	Product      Product `json:"product"`
+	CategoryName *string `json:"category_name"`
+	CategorySlug *string `json:"category_slug"`
+	CategoryType *string `json:"category_type"`
+}
+
+func (q *Queries) SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error) {
+	rows, err := q.db.Query(ctx, searchProductsWithCategory,
+		arg.Query,
+		arg.CategoryID,
+		arg.Brand,
+		arg.MinPrice,
+		arg.MaxPrice,
+		arg.InStockOnly,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchProductsWithCategoryRow
+	for rows.Next() {
+		var i SearchProductsWithCategoryRow
+		if err := rows.Scan(
+			&i.Product.ID,
+			&i.Product.CategoryID,
+			&i.Product.Name,
+			&i.Product.Slug,
+			&i.Product.Description,
+			&i.Product.ShortDescription,
+			&i.Product.PriceCents,
+			&i.Product.StockQuantity,
+			&i.Product.Status,
+			&i.Product.Brand,
+			&i.Product.ImageUrls,
+			&i.Product.SpecHighlights,
+			&i.Product.CreatedAt,
+			&i.Product.UpdatedAt,
+			&i.Product.DeletedAt,
+			&i.CategoryName,
+			&i.CategorySlug,
+			&i.CategoryType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateProduct = `-- name: UpdateProduct :one
 UPDATE products
 SET
-    category_id = COALESCE($2, category_id),
-    name = COALESCE($3, name),
-    slug = COALESCE($4, slug),
-    description = COALESCE($5, description),
-    short_description = COALESCE($6, short_description),
-    price_cents = COALESCE($7, price_cents),
-    stock_quantity = COALESCE($8, stock_quantity),
-    status = COALESCE($9, status),
-    brand = COALESCE($10, brand),
-    image_urls = COALESCE($11, image_urls),
-    spec_highlights = COALESCE($12, spec_highlights),
+    category_id = COALESCE($1, category_id),
+    name = COALESCE($2, name),
+    slug = COALESCE($3, slug),
+    description = COALESCE($4, description),
+    short_description = COALESCE($5, short_description),
+    price_cents = COALESCE($6, price_cents),
+    stock_quantity = COALESCE($7, stock_quantity),
+    status = COALESCE($8, status),
+    brand = COALESCE($9, brand),
+    image_urls = COALESCE($10, image_urls),
+    spec_highlights = COALESCE($11, spec_highlights),
     updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL
+WHERE id = $12 AND deleted_at IS NULL
 RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
 `
 
 type UpdateProductParams struct {
-	ID               uuid.UUID   `json:"id"`
-	CategoryID       uuid.UUID   `json:"category_id"`
-	Name             string      `json:"name"`
-	Slug             string      `json:"slug"`
-	Description      pgtype.Text `json:"description"`
-	ShortDescription pgtype.Text `json:"short_description"`
-	PriceCents       int64       `json:"price_cents"`
-	StockQuantity    int32       `json:"stock_quantity"`
-	Status           string      `json:"status"`
-	Brand            string      `json:"brand"`
-	ImageUrls        []byte      `json:"image_urls"`
-	SpecHighlights   []byte      `json:"spec_highlights"`
+	CategoryID       uuid.UUID `json:"category_id"`
+	Name             string    `json:"name"`
+	Slug             string    `json:"slug"`
+	Description      *string   `json:"description"`
+	ShortDescription *string   `json:"short_description"`
+	PriceCents       int64     `json:"price_cents"`
+	StockQuantity    int32     `json:"stock_quantity"`
+	Status           string    `json:"status"`
+	Brand            string    `json:"brand"`
+	ImageUrls        []byte    `json:"image_urls"`
+	SpecHighlights   []byte    `json:"spec_highlights"`
+	ProductID        uuid.UUID `json:"product_id"`
 }
 
 func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
 	row := q.db.QueryRow(ctx, updateProduct,
-		arg.ID,
 		arg.CategoryID,
 		arg.Name,
 		arg.Slug,
@@ -476,6 +696,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.Brand,
 		arg.ImageUrls,
 		arg.SpecHighlights,
+		arg.ProductID,
 	)
 	var i Product
 	err := row.Scan(

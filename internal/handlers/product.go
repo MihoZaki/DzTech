@@ -55,9 +55,9 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	// Try to parse as UUID first (more specific format)
-	if _, uuidErr := uuid.Parse(identifier); uuidErr == nil {
+	if id, uuidErr := uuid.Parse(identifier); uuidErr == nil {
 		// It's a UUID
-		product, err = h.productService.GetProduct(r.Context(), identifier)
+		product, err = h.productService.GetProduct(r.Context(), id)
 	} else {
 		// Assume it's a slug
 		product, err = h.productService.GetProductBySlug(r.Context(), identifier)
@@ -113,8 +113,11 @@ func (h *ProductHandler) SearchProducts(w http.ResponseWriter, r *http.Request) 
 	if q := query.Get("q"); q != "" {
 		filter.Query = q
 	}
-	if categoryID := query.Get("category_id"); categoryID != "" {
-		filter.CategoryID = categoryID
+	if categoryIDStr := query.Get("category_id"); categoryIDStr != "" {
+		categoryID, err := uuid.Parse(categoryIDStr)
+		if err == nil && categoryID != uuid.Nil {
+			filter.CategoryID = categoryID
+		}
 	}
 	if brand := query.Get("brand"); brand != "" {
 		filter.Brand = brand
@@ -160,10 +163,10 @@ func (h *ProductHandler) SearchProducts(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
-	productID := chi.URLParam(r, "id")
+	param := chi.URLParam(r, "id")
 
 	// Validate the product ID format
-	_, err := uuid.Parse(productID)
+	productID, err := uuid.Parse(param)
 	if err != nil {
 		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid product ID format")
 		return
@@ -200,10 +203,10 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
-	productID := chi.URLParam(r, "id")
+	param := chi.URLParam(r, "id")
 
 	// Validate the product ID format
-	_, err := uuid.Parse(productID)
+	productID, err := uuid.Parse(param)
 	if err != nil {
 		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid product ID format")
 		return
@@ -241,9 +244,9 @@ func (h *ProductHandler) GetCategory(w http.ResponseWriter, r *http.Request) {
 	identifier := chi.URLParam(r, "id")
 
 	// Try to parse as UUID first (more specific format)
-	if _, uuidErr := uuid.Parse(identifier); uuidErr == nil {
+	if id, uuidErr := uuid.Parse(identifier); uuidErr == nil {
 		// It's a UUID - get by ID
-		category, err := h.productService.GetCategoryByID(r.Context(), identifier)
+		category, err := h.productService.GetCategoryByID(r.Context(), id)
 		if err != nil {
 			if err.Error() == "category not found" {
 				utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Category not found")
