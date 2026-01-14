@@ -3,7 +3,6 @@ package models
 import (
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -32,12 +31,6 @@ type UserRegister struct {
 type LoginResponse struct {
 	Token string `json:"token"`
 	User  User   `json:"user"`
-}
-
-var validate *validator.Validate
-
-func init() {
-	validate = validator.New()
 }
 
 func (ur *UserRegister) Validate() error {

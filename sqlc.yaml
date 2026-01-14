@@ -14,9 +14,17 @@ sql:
         emit_interface: true
         emit_exact_table_names: false
         overrides:
+        # Force ALL UUID types to use uuid.UUID
         - db_type: "uuid"
           go_type:
             import: "github.com/google/uuid"
             type: "UUID"
-        - column: "categories.parent_id"
-          go_type: "github.com/google/uuid.UUID"
+        - db_type: "uuid"
+          nullable: true
+          go_type:
+            import: "github.com/google/uuid"
+            type: "UUID"  # Still use UUID, handle nullability in the service layer
+        - db_type: "uuid[]"
+          go_type:
+            import: "github.com/google/uuid"
+            type: "[]UUID"

@@ -3,7 +3,6 @@ package models
 import (
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -65,10 +64,6 @@ type PaginatedResponse struct {
 	Limit      int   `json:"limit"`
 	Total      int64 `json:"total"`
 	TotalPages int   `json:"total_pages"`
-}
-
-func init() {
-	validate = validator.New()
 }
 
 func (r *CreateProductRequest) Validate() error {

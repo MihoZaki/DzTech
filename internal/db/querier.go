@@ -11,11 +11,29 @@ import (
 )
 
 type Querier interface {
+	ClearCart(ctx context.Context, cartID uuid.UUID) error
 	CountAllProducts(ctx context.Context) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
+	// Cart Item Management
+	CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CreateCartItemRow, error)
+	CreateGuestCart(ctx context.Context, sessionID *string) (Cart, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// Cart Management
+	CreateUserCart(ctx context.Context, userID uuid.UUID) (Cart, error)
+	DeleteCart(ctx context.Context, cartID uuid.UUID) error
+	// Cart Cleanup
+	DeleteCartItem(ctx context.Context, itemID uuid.UUID) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
+	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
+	GetCartBySessionID(ctx context.Context, sessionID *string) (GetCartBySessionIDRow, error)
+	GetCartByUserID(ctx context.Context, userID uuid.UUID) (GetCartByUserIDRow, error)
+	GetCartItemByCartAndProduct(ctx context.Context, arg GetCartItemByCartAndProductParams) (GetCartItemByCartAndProductRow, error)
+	GetCartItemByID(ctx context.Context, itemID uuid.UUID) (GetCartItemByIDRow, error)
+	// Enhanced Cart Data Retrieval
+	GetCartItemsWithProductDetails(ctx context.Context, cartID uuid.UUID) ([]GetCartItemsWithProductDetailsRow, error)
+	GetCartStats(ctx context.Context, cartID uuid.UUID) (GetCartStatsRow, error)
+	GetCartWithItemsAndProducts(ctx context.Context, cartID uuid.UUID) ([]GetCartWithItemsAndProductsRow, error)
 	GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
 	GetProduct(ctx context.Context, productID uuid.UUID) (Product, error)
@@ -29,6 +47,7 @@ type Querier interface {
 	ListProductsWithCategoryDetail(ctx context.Context, arg ListProductsWithCategoryDetailParams) ([]ListProductsWithCategoryDetailRow, error)
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
+	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 }
 

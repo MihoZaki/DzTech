@@ -9,6 +9,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Cart struct {
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	SessionID *string            `json:"session_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type CartItem struct {
+	ID        uuid.UUID          `json:"id"`
+	CartID    uuid.UUID          `json:"cart_id"`
+	ProductID uuid.UUID          `json:"product_id"`
+	Quantity  int32              `json:"quantity"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Category struct {
 	ID        uuid.UUID          `json:"id"`
 	Name      string             `json:"name"`

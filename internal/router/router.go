@@ -37,6 +37,7 @@ func New(cfg *Config) http.Handler {
 	// Initialize services
 	userService := services.NewUserService(querier)
 	productService := services.NewProductService(querier)
+	cartService := services.NewCartService(querier, productService, slog.Default()) // Inject dependencies
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, cfg.JWTSecret)
@@ -48,6 +49,19 @@ func New(cfg *Config) http.Handler {
 	r.Route("/products", func(r chi.Router) {
 		productHandler.RegisterRoutes(r)
 	})
+
+	cartHandler := handlers.NewCartHandler(cartService, productService, slog.Default())
+	r.Route("/cart", func(r chi.Router) {
+		cartHandler.RegisterRoutes(r) // No middleware applied in RegisterRoutes or here
+	})
+
+	// Other routes that might require auth can be grouped later if ApplyMiddleware didn't add global auth.
+	// Example:
+	// r.Group(func(r chi.Router) {
+	//    r.Use(middleware.JWTMiddleware(cfg)) // Apply JWT middleware to this group only
+	//    r.Route("/profile", func(r chi.Router) { /* ... */ })
+	//    r.Route("/orders", func(r chi.Router) { /* ... */ })
+	// })
 	slog.Info("Router initialized")
 	return r
 }
