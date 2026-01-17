@@ -67,5 +67,5 @@ type PaginatedResponse struct {
 }
 
 func (r *CreateProductRequest) Validate() error {
-	return validate.Struct(r)
+	return Validate.Struct(r)
 }

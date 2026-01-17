@@ -26,14 +26,10 @@ func NewProductHandler(productService *services.ProductService) *ProductHandler 
 
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateProductRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid JSON")
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Validation Error", "Validation failed")
-		return
+	// Use the helper for decoding and validating
+	if err := DecodeAndValidateJSON(w, r, &req); err != nil {
+		slog.Debug("Create product request failed validation/decoding", "error", err)
+		return // Error response already sent by helper
 	}
 
 	product, err := h.productService.CreateProduct(r.Context(), req)
@@ -64,6 +60,7 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		slog.Debug("Product not found", "identifier", identifier, "error", err)
 		utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Product not found")
 		return
 	}
@@ -163,33 +160,29 @@ func (h *ProductHandler) SearchProducts(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
-	param := chi.URLParam(r, "id")
-
-	// Validate the product ID format
-	productID, err := uuid.Parse(param)
+	// Use the helper for parsing UUID from path
+	productID, err := ParseUUIDPathParam(w, r, "id")
 	if err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid product ID format")
-		return
+		slog.Debug("Update product request failed to parse productID", "error", err)
+		return // Error response already sent by helper
 	}
 
 	var req models.CreateProductRequest // Reuse the same request model for updates
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid JSON")
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Validation Error", "Validation failed")
-		return
+	// Use the helper for decoding and validating
+	if err := DecodeAndValidateJSON(w, r, &req); err != nil {
+		slog.Debug("Update product request failed validation/decoding", "error", err)
+		return // Error response already sent by helper
 	}
 
 	updatedProduct, err := h.productService.UpdateProduct(r.Context(), productID, req)
 	if err != nil {
-		if err.Error() == "product not found" {
+		// Map service errors more specifically if possible, or use a generic helper
+		// For now, let's see if we can make a more generic error sender for product-specific messages
+		if strings.Contains(err.Error(), "product not found") {
 			utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Product not found")
 			return
 		}
-		if err.Error() == "category not found" {
+		if strings.Contains(err.Error(), "category not found") {
 			utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Category not found")
 			return
 		}
@@ -203,18 +196,16 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
-	param := chi.URLParam(r, "id")
-
-	// Validate the product ID format
-	productID, err := uuid.Parse(param)
+	// Use the helper for parsing UUID from path
+	productID, err := ParseUUIDPathParam(w, r, "id")
 	if err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid product ID format")
-		return
+		slog.Debug("Delete product request failed to parse productID", "error", err)
+		return // Error response already sent by helper
 	}
 
 	err = h.productService.DeleteProduct(r.Context(), productID)
 	if err != nil {
-		if err.Error() == "product not found" {
+		if strings.Contains(err.Error(), "product not found") {
 			utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Product not found")
 			return
 		}
@@ -248,7 +239,7 @@ func (h *ProductHandler) GetCategory(w http.ResponseWriter, r *http.Request) {
 		// It's a UUID - get by ID
 		category, err := h.productService.GetCategoryByID(r.Context(), id)
 		if err != nil {
-			if err.Error() == "category not found" {
+			if strings.Contains(err.Error(), "category not found") {
 				utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Category not found")
 				return
 			}
@@ -263,7 +254,7 @@ func (h *ProductHandler) GetCategory(w http.ResponseWriter, r *http.Request) {
 		// Assume it's a slug - get by slug
 		category, err := h.productService.GetCategoryBySlug(r.Context(), identifier)
 		if err != nil {
-			if err.Error() == "category not found" {
+			if strings.Contains(err.Error(), "category not found") {
 				utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Category not found")
 				return
 			}
