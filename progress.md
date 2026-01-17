@@ -31,13 +31,13 @@
 - [x] **Step 6: Build cart handler** (minimal functionality) 
 - [x] **Step 7: Test end-to-end** (xh test)
 
-### **Phase 5: Core Cart Features**
+### **Phase 5: Core Cart Features** ✅ **COMPLETED**
 - [x] **Step 1: Add to cart feature** 
 - [x] **Step 2: Get cart feature** 
 - [x] **Step 3: Update cart item** 
-- [ ] **Step 4: Remove from cart** ❌ *Not started*
-- [ ] **Step 5: Clear cart** ❌ *Not started*
-- [ ] **Step 6: Comprehensive testing** ❌ *Not started*
+- [x] **Step 4: Remove from cart** 
+- [x] **Step 5: Clear cart** 
+- [x] **Step 6: Comprehensive testing** 
 
 ### **Phase 6: Order Management System**
 - [ ] **Order creation from cart**
