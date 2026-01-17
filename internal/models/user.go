@@ -34,9 +34,9 @@ type LoginResponse struct {
 }
 
 func (ur *UserRegister) Validate() error {
-	return validate.Struct(ur)
+	return Validate.Struct(ur)
 }
 
 func (ul *UserLogin) Validate() error {
-	return validate.Struct(ul)
+	return Validate.Struct(ul)
 }
