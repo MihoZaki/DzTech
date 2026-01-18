@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/MihoZaki/DzTech/db"
+	"github.com/MihoZaki/DzTech/internal/config"
 	db_queries "github.com/MihoZaki/DzTech/internal/db" // SQLC generated code
 	"github.com/MihoZaki/DzTech/internal/handlers"
 	"github.com/MihoZaki/DzTech/internal/middleware"
@@ -12,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func New(cfg *Config) http.Handler {
+func New(cfg *config.Config) http.Handler {
 	r := chi.NewRouter()
 
 	// Apply middleware
@@ -51,21 +52,17 @@ func New(cfg *Config) http.Handler {
 	})
 
 	cartHandler := handlers.NewCartHandler(cartService, productService, slog.Default())
-	r.Route("/cart", func(r chi.Router) {
-		cartHandler.RegisterRoutes(r) // No middleware applied in RegisterRoutes or here
-	})
+	// Apply JWT middleware to the /cart route group
+	r.Group(func(r chi.Router) {
+		// Apply JWT middleware here. It will add user to context if token is valid.
+		// If token is missing or invalid, context will lack user info, allowing guest flow.
+		// Pass the cfg containing JWTSecret to the middleware.
+		r.Use(middleware.JWTMiddleware(cfg))
 
-	// Other routes that might require auth can be grouped later if ApplyMiddleware didn't add global auth.
-	// Example:
-	// r.Group(func(r chi.Router) {
-	//    r.Use(middleware.JWTMiddleware(cfg)) // Apply JWT middleware to this group only
-	//    r.Route("/profile", func(r chi.Router) { /* ... */ })
-	//    r.Route("/orders", func(r chi.Router) { /* ... */ })
-	// })
+		r.Route("/cart", func(r chi.Router) {
+			cartHandler.RegisterRoutes(r) // Register routes within the protected group
+		})
+	})
 	slog.Info("Router initialized")
 	return r
-}
-
-type Config struct {
-	JWTSecret string
 }

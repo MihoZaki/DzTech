@@ -39,11 +39,7 @@ func New(cfg *config.Config) *Server {
 		panic("database pool is nil after initialization")
 	}
 
-	// Initialize router after database is ready
-	routerCfg := &router.Config{
-		JWTSecret: cfg.JWTSecret,
-	}
-	httpRouter := router.New(routerCfg)
+	httpRouter := router.New(cfg)
 
 	return &Server{
 		httpServer: &http.Server{
