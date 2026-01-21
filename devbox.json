@@ -6,7 +6,8 @@
     "goose@latest",
     "sqlc@latest",
     "github:seatedro/glimpse",
-    "glow@latest"
+    "glow@latest",
+    "nodejs@latest"
   ],
   "env": {
     "PGPORT": "5433"
