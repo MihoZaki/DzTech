@@ -1,20 +1,49 @@
 import React from "react";
 import { createPopper } from "@popperjs/core";
 
+// Import the image directly
+import profileImage from "assets/img/team-1-800x800.jpg";
+
 const UserDropdown = () => {
   // dropdown props
   const [dropdownPopoverShow, setDropdownPopoverShow] = React.useState(false);
   const btnDropdownRef = React.createRef();
   const popoverDropdownRef = React.createRef();
+
+  // Initialize Popper using useEffect
+  React.useEffect(() => {
+    let popperInstance = null;
+
+    if (
+      dropdownPopoverShow && btnDropdownRef.current &&
+      popoverDropdownRef.current
+    ) {
+      popperInstance = createPopper(
+        btnDropdownRef.current,
+        popoverDropdownRef.current,
+        {
+          placement: "bottom-start",
+        },
+      );
+    }
+
+    // Cleanup function to destroy the popper instance when component unmounts or deps change
+    return () => {
+      if (popperInstance) {
+        popperInstance.destroy();
+      }
+    };
+  }, [dropdownPopoverShow]); // Only re-run when dropdownPopoverShow changes
+
   const openDropdownPopover = () => {
-    createPopper(btnDropdownRef.current, popoverDropdownRef.current, {
-      placement: "bottom-start",
-    });
     setDropdownPopoverShow(true);
+    // createPopper call is now handled by useEffect
   };
+
   const closeDropdownPopover = () => {
     setDropdownPopoverShow(false);
   };
+
   return (
     <>
       <a
@@ -27,18 +56,20 @@ const UserDropdown = () => {
         }}
       >
         <div className="items-center flex">
+          {/* Use the imported image variable */}
           <span className="w-12 h-12 text-sm text-white bg-blueGray-200 inline-flex items-center justify-center rounded-full">
             <img
               alt="..."
               className="w-full rounded-full align-middle border-none shadow-lg"
-              src={require("assets/img/team-1-800x800.jpg").default}
+              src={profileImage} // Use the imported variable
             />
           </span>
         </div>
       </a>
+      {/* Ensure the dropdown div has the correct visibility class */}
       <div
         ref={popoverDropdownRef}
-        className={(dropdownPopoverShow ? "block " : "hidden ") +
+        className={(dropdownPopoverShow ? "block " : "hidden ") + // Toggle visibility based on state
           "bg-white text-base z-50 float-left py-2 list-none text-left rounded shadow-lg min-w-48"}
       >
         <a

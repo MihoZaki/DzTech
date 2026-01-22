@@ -9,7 +9,7 @@ export default function HeaderStats() {
     <>
       {/* Header */}
       {/* Changed background color to indigo-800 for consistency */}
-      <div className="relative bg-emerald-600 md:pt-32 pb-32 pt-12">
+      <div className="relative bg-lightBlue-700 md:pt-32 pb-32 pt-12">
         <div className="px-4 md:px-10 mx-auto w-full">
           <div>
             {/* Card stats */}
