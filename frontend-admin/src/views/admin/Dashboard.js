@@ -17,25 +17,31 @@ export default function Dashboard() {
       title: "Total Revenue",
       value: "900.897,00 DZD",
       percentage: "+3.48%",
-      color: "blue", // Using blue as per your updated code
+      // Use a color that corresponds to a background class expected by CardStats
+      // Common ones are: blue, red, green, orange, indigo, purple, gray, lightBlue, cyan, teal, yellow, lime, amber, emerald, turquoise, sky, violet, fuchsia, pink, rose
+      color: "bg-indigo-300", // Using blue as per your updated code
+      icon: "fas fa-money-bill-wave", // Use a more specific icon name
     },
     {
       title: "Total Orders",
       value: "2,345",
       percentage: "+12.3%",
-      color: "orange", // Using orange as per your updated code
+      color: "bg-amber-400", // Using orange as per your updated code
+      icon: "fas fa-shopping-cart", // Use a more specific icon name
     },
     {
       title: "New Customers",
       value: "1,254",
       percentage: "+5.4%",
-      color: "green", // Using green as per your updated code
+      color: "bg-emerald-300", // Using green as per your updated code
+      icon: "fas fa-users", // Use a more specific icon name
     },
     {
       title: "Avg. Order Value",
       value: "35.500,00 DZD",
       percentage: "+0.3%",
-      color: "red", // Using red as per your updated code
+      color: "bg-red-400", // Using red as per your updated code
+      icon: "fas fa-tag", // Use a more specific icon name
     },
   ];
 
@@ -98,13 +104,8 @@ export default function Dashboard() {
                 statPercent={`${Math.abs(parseFloat(stat.percentage))}%`} // Show absolute percentage value
                 statPercentColor={`text-${stat.color}-500`} // Use color for percentage text
                 statDescription="Since last month" // Static description for now
-                statIconName={`fas fa-chart-${
-                  stat.color === "amber" || stat.color === "emerald" ||
-                    stat.color === "indigo"
-                    ? "line"
-                    : "bar"
-                }`} // Adjust icon if needed, kept generic
-                statIconColor={stat.color} // Use color for icon background
+                statIconName={stat.icon} // Use the specific icon name
+                statIconColor={stat.color} // Use color for icon background - ensure this matches CardStats expectations
               />
             ))}
           </div>
