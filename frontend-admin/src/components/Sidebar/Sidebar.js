@@ -79,6 +79,7 @@ export default function Sidebar() {
             <h6 className="md:min-w-full text-blueGray-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
               Admin Layout Pages
             </h6>
+
             {/* Navigation */}
 
             <ul className="md:flex-col md:min-w-full flex flex-col list-none">
@@ -101,22 +102,23 @@ export default function Sidebar() {
                 </Link>
               </li>
 
+              {/* NEW: Add Orders Link */}
               <li className="items-center">
                 <Link
                   className={"text-xs uppercase py-3 font-bold block " +
-                    (window.location.href.indexOf("/admin/settings") !== -1
+                    (window.location.href.indexOf("/admin/orders") !== -1 // Update condition to check for /admin/orders
                       ? "text-lightBlue-500 hover:text-lightBlue-600"
                       : "text-blueGray-700 hover:text-blueGray-500")}
-                  to="/admin/settings"
+                  to="/admin/orders" // Set the correct path
                 >
                   <i
-                    className={"fas fa-tools mr-2 text-sm " +
-                      (window.location.href.indexOf("/admin/settings") !== -1
+                    className={"fas fa-shopping-cart mr-2 text-sm " + // Use an appropriate icon for orders
+                      (window.location.href.indexOf("/admin/orders") !== -1 // Update condition here too
                         ? "opacity-75"
                         : "text-blueGray-300")}
                   >
                   </i>{" "}
-                  Settings
+                  Orders
                 </Link>
               </li>
 
@@ -138,6 +140,28 @@ export default function Sidebar() {
                   Products
                 </Link>
               </li>
+
+              {/* OLD: Keep Settings Link if you still want it */}
+              {
+                /* <li className="items-center">
+    <Link
+      className={"text-xs uppercase py-3 font-bold block " +
+        (window.location.href.indexOf("/admin/settings") !== -1
+          ? "text-lightBlue-500 hover:text-lightBlue-600"
+          : "text-blueGray-700 hover:text-blueGray-500")}
+      to="/admin/settings"
+    >
+      <i
+        className={"fas fa-tools mr-2 text-sm " +
+          (window.location.href.indexOf("/admin/settings") !== -1
+            ? "opacity-75"
+            : "text-blueGray-300")}
+      >
+      </i>{" "}
+      Settings
+    </Link>
+  </li> */
+              }
             </ul>
 
             {/* Divider */}
