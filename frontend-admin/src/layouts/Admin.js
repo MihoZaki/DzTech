@@ -13,9 +13,9 @@ import Dashboard from "views/admin/Dashboard.js";
 import AddProduct from "views/admin/AddProduct.js";
 import EditProduct from "views/admin/EditProduct.js";
 import Products from "views/admin/Products.js"; // Updated import path
-
-// NEW: Import the Orders component
 import Orders from "views/admin/Orders.js";
+
+import Customers from "views/admin/Customers.js";
 
 export default function Admin() {
   return (
@@ -29,6 +29,8 @@ export default function Admin() {
             <Route path="/admin/dashboard" exact component={Dashboard} />
             {/* NEW: Add route for the orders list view */}
             <Route path="/admin/orders" exact component={Orders} />
+            {/* NEW: Add route for the customers list view */}
+            <Route path="/admin/customers" exact component={Customers} />
             {/* NEW: Add route for adding a product */}
             <Route path="/admin/products/new" exact component={AddProduct} />
             {/* NEW: Add route for the product list view - PLACE BEFORE THE EDIT ROUTE */}

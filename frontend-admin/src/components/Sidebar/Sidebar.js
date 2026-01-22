@@ -1,12 +1,89 @@
 /*eslint-disable*/
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom"; // Import useLocation hook
 
 import NotificationDropdown from "components/Dropdowns/NotificationDropdown.js";
 import UserDropdown from "components/Dropdowns/UserDropdown.js";
 
+// Define navigation items in a structured way
+const navItems = [
+  {
+    path: "/admin/dashboard",
+    label: "Dashboard",
+    icon: "fas fa-tv",
+  },
+  {
+    path: "/admin/orders",
+    label: "Orders",
+    icon: "fas fa-shopping-cart",
+  },
+  {
+    path: "/admin/customers",
+    label: "Customers",
+    icon: "fas fa-user-friends",
+  },
+  {
+    path: "/admin/products",
+    label: "Products",
+    icon: "fas fa-table",
+  },
+];
+
+// Define auth items (if needed separately, otherwise can add to navItems)
+const authItems = [
+  {
+    path: "/auth/login",
+    label: "Login",
+    icon: "fas fa-fingerprint",
+  },
+  {
+    path: "/auth/register",
+    label: "Register",
+    icon: "fas fa-clipboard-list",
+  },
+];
+
+// Helper function to determine active link styles
+const getNavLinkClasses = (locationPath, itemPath) => {
+  const isActive = locationPath === itemPath;
+  return `text-xs uppercase py-3 font-bold block ${
+    isActive
+      ? "text-lightBlue-500 hover:text-lightBlue-600"
+      : "text-blueGray-700 hover:text-blueGray-500"
+  }`;
+};
+
+// Helper function to determine active icon styles and combine with icon class
+const getNavIconElement = (locationPath, itemPath, iconClass) => {
+  const isActive = locationPath === itemPath;
+  const baseIconClass = "mr-2 text-sm "; // Base classes
+  const activeInactiveClass = isActive ? "opacity-75" : "text-blueGray-300"; // Active/inactive specific class
+  const fullIconClass = baseIconClass + activeInactiveClass; // Combine them
+
+  return (
+    <i className={fullIconClass}>
+      {/* Apply combined class to the <i> tag */}
+      <i className={iconClass}></i>{" "}
+      {/* Render the actual Font Awesome icon inside */}
+    </i>
+  );
+};
+
+// Helper function for auth icons (simpler, always greyish)
+const getAuthIconElement = (iconClass) => {
+  return (
+    <i className={`mr-2 text-sm text-blueGray-400`}>
+      {/* Fixed class for auth icons */}
+      <i className={iconClass}></i>{" "}
+      {/* Render the actual Font Awesome icon inside */}
+    </i>
+  );
+};
+
 export default function Sidebar() {
   const [collapseShow, setCollapseShow] = React.useState("hidden");
+  const location = useLocation(); // Get the current location using the hook
+
   return (
     <>
       <nav className="md:left-0 md:block md:fixed md:top-0 md:bottom-0 md:overflow-y-auto md:flex-row md:flex-nowrap md:overflow-hidden shadow-xl bg-white flex flex-wrap items-center justify-between relative md:w-64 z-10 py-4 px-6">
@@ -77,123 +154,23 @@ export default function Sidebar() {
             <hr className="my-4 md:min-w-full" />
             {/* Heading */}
             <h6 className="md:min-w-full text-blueGray-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
-              Admin Layout Pages
+              Main Navigation
             </h6>
-
             {/* Navigation */}
-
             <ul className="md:flex-col md:min-w-full flex flex-col list-none">
-              <li className="items-center">
-                <Link
-                  className={"text-xs uppercase py-3 font-bold block " +
-                    (window.location.href.indexOf("/admin/dashboard") !== -1
-                      ? "text-lightBlue-500 hover:text-lightBlue-600"
-                      : "text-blueGray-700 hover:text-blueGray-500")}
-                  to="/admin/dashboard"
-                >
-                  <i
-                    className={"fas fa-tv mr-2 text-sm " +
-                      (window.location.href.indexOf("/admin/dashboard") !== -1
-                        ? "opacity-75"
-                        : "text-blueGray-300")}
+              {navItems.map((item) => (
+                <li key={item.path} className="items-center">
+                  <Link
+                    className={getNavLinkClasses(location.pathname, item.path)} // Use helper function
+                    to={item.path}
                   >
-                  </i>{" "}
-                  Dashboard
-                </Link>
-              </li>
-
-              {/* NEW: Add Orders Link */}
-              <li className="items-center">
-                <Link
-                  className={"text-xs uppercase py-3 font-bold block " +
-                    (window.location.href.indexOf("/admin/orders") !== -1 // Update condition to check for /admin/orders
-                      ? "text-lightBlue-500 hover:text-lightBlue-600"
-                      : "text-blueGray-700 hover:text-blueGray-500")}
-                  to="/admin/orders" // Set the correct path
-                >
-                  <i
-                    className={"fas fa-shopping-cart mr-2 text-sm " + // Use an appropriate icon for orders
-                      (window.location.href.indexOf("/admin/orders") !== -1 // Update condition here too
-                        ? "opacity-75"
-                        : "text-blueGray-300")}
-                  >
-                  </i>{" "}
-                  Orders
-                </Link>
-              </li>
-
-              <li className="items-center">
-                <Link
-                  className={"text-xs uppercase py-3 font-bold block " +
-                    (window.location.href.indexOf("/admin/products") !== -1
-                      ? "text-lightBlue-500 hover:text-lightBlue-600"
-                      : "text-blueGray-700 hover:text-blueGray-500")}
-                  to="/admin/products"
-                >
-                  <i
-                    className={"fas fa-table mr-2 text-sm " +
-                      (window.location.href.indexOf("/admin/products") !== -1
-                        ? "opacity-75"
-                        : "text-blueGray-300")}
-                  >
-                  </i>{" "}
-                  Products
-                </Link>
-              </li>
-
-              {/* OLD: Keep Settings Link if you still want it */}
-              {
-                /* <li className="items-center">
-    <Link
-      className={"text-xs uppercase py-3 font-bold block " +
-        (window.location.href.indexOf("/admin/settings") !== -1
-          ? "text-lightBlue-500 hover:text-lightBlue-600"
-          : "text-blueGray-700 hover:text-blueGray-500")}
-      to="/admin/settings"
-    >
-      <i
-        className={"fas fa-tools mr-2 text-sm " +
-          (window.location.href.indexOf("/admin/settings") !== -1
-            ? "opacity-75"
-            : "text-blueGray-300")}
-      >
-      </i>{" "}
-      Settings
-    </Link>
-  </li> */
-              }
-            </ul>
-
-            {/* Divider */}
-            <hr className="my-4 md:min-w-full" />
-            {/* Heading */}
-            <h6 className="md:min-w-full text-blueGray-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
-              Auth Layout Pages
-            </h6>
-            {/* Navigation */}
-
-            <ul className="md:flex-col md:min-w-full flex flex-col list-none md:mb-4">
-              <li className="items-center">
-                <Link
-                  className="text-blueGray-700 hover:text-blueGray-500 text-xs uppercase py-3 font-bold block"
-                  to="/auth/login"
-                >
-                  <i className="fas fa-fingerprint text-blueGray-400 mr-2 text-sm">
-                  </i>{" "}
-                  Login
-                </Link>
-              </li>
-
-              <li className="items-center">
-                <Link
-                  className="text-blueGray-700 hover:text-blueGray-500 text-xs uppercase py-3 font-bold block"
-                  to="/auth/register"
-                >
-                  <i className="fas fa-clipboard-list text-blueGray-300 mr-2 text-sm">
-                  </i>{" "}
-                  Register
-                </Link>
-              </li>
+                    {getNavIconElement(location.pathname, item.path, item.icon)}
+                    {" "}
+                    {/* Use helper function for icon */}
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
