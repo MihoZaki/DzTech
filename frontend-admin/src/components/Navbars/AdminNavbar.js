@@ -17,20 +17,6 @@ export default function Navbar() {
           >
             Admin Dashboard
           </a>
-          {/* Form */}
-          <form className="md:flex hidden flex-row flex-wrap items-center lg:ml-auto mr-3">
-            <div className="relative flex w-full flex-wrap items-stretch">
-              <span className="z-10 h-full leading-snug font-normal absolute text-center text-indigo-200 absolute bg-transparent rounded text-base items-center justify-center w-8 pl-3 py-3">
-                {/* Changed icon color to indigo-200 for contrast */}
-                <i className="fas fa-search"></i>
-              </span>
-              <input
-                type="text"
-                placeholder="Search here..." // Consider changing placeholder color too
-                className="border-0 px-3 py-3 placeholder-indigo-300 text-indigo-700 relative bg-indigo-100 bg-indigo-100 rounded text-sm shadow outline-none focus:outline-none focus:ring w-full pl-10" // Changed bg to indigo-100, text to indigo-700, placeholder to indigo-300
-              />
-            </div>
-          </form>
           {/* User */}
           <ul className="flex-col md:flex-row list-none items-center hidden md:flex">
             <UserDropdown />

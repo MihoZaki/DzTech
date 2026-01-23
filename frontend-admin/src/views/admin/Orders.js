@@ -452,12 +452,38 @@ const CardOrderList = ({ color = "light" }) => {
                 </td>
                 <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
                   <span
-                    className={`mr-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    className={`mr-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full items-center ${
                       getStatusClass(order.status)
                     }`}
                   >
+                    {/* NEW: Add an icon based on status */}
+                    {order.status === "completed" && (
+                      <i className="fas fa-check-circle mr-1"></i>
+                    )}
+                    {order.status === "shipped" && (
+                      <i className="fas fa-truck mr-1"></i>
+                    )}
+                    {order.status === "delivered" && (
+                      <i className="fas fa-home mr-1"></i>
+                    )}
+                    {order.status === "processing" && (
+                      <i className="fas fa-cog mr-1"></i>
+                    )}
+                    {order.status === "pending" && (
+                      <i className="fas fa-clock mr-1"></i>
+                    )}
+                    {order.status === "cancelled" && (
+                      <i className="fas fa-times-circle mr-1"></i>
+                    )}
+                    {order.status === "returned" && (
+                      <i className="fas fa-undo mr-1"></i>
+                    )}
+                    {order.status === "refunded" && (
+                      <i className="fas fa-credit-card mr-1"></i>
+                    )}
+                    {/* Capitalize status */}
                     {order.status.charAt(0).toUpperCase() +
-                      order.status.slice(1)} {/* Capitalize status */}
+                      order.status.slice(1)}
                   </span>
                 </td>
                 <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
@@ -466,8 +492,8 @@ const CardOrderList = ({ color = "light" }) => {
                 <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
                   {order.itemsCount}
                 </td>
-                {/* NEW: Actions Column with Popper Dropdown - Removed 'relative' class as Popper handles positioning */}
-                <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-right">
+                {/* Actions Column with Dropdown - Added 'relative' class to fix positioning */}
+                <td className="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-right relative">
                   <OrderActionDropdown
                     orderId={order.id}
                     currentStatus={order.status}

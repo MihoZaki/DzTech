@@ -18,13 +18,13 @@ const AddCategory = () => {
 
   // --- Handle Input Changes ---
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value, // Handle checkbox differently
     }));
 
-    // Clear error for this field when user starts typing
+    // Clear error for this field when user starts typing or toggling
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -131,84 +131,99 @@ const AddCategory = () => {
         </div>
         <div className="block w-full overflow-x-auto p-4">
           <form onSubmit={handleSubmit}>
-            {/* Name Field */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="name"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Category Name *
-              </label>
-              <input
-                type="text"
-                name="name"
-                id="name"
-                value={formData.name}
-                onChange={handleChange}
-                className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                  errors.name ? "border-red-600" : "border-gray-300"
-                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                placeholder=" "
-              />
-              {errors.name && (
-                <p className="mt-2 text-xs text-red-600">{errors.name}</p>
-              )}
-            </div>
+            {/* Basic Info Section */}
+            <div className="mb-8">
+              <h4 className="text-lg font-semibold text-blueGray-600 mb-4">
+                Basic Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Name Field */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="name"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Category Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    id="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                      errors.name ? "border-red-600" : "border-gray-300"
+                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                    placeholder=" "
+                  />
+                  {errors.name && (
+                    <p className="mt-2 text-xs text-red-600">{errors.name}</p>
+                  )}
+                </div>
 
-            {/* Type Field (Added) */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="type"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Type * {/* Added */}
-              </label>
-              <select
-                name="type"
-                id="type"
-                value={formData.type}
-                onChange={handleChange}
-                className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
-                  errors.type ? "border-red-600" : "border-gray-300"
-                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-              >
-                {typeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {errors.type && (
-                <p className="mt-2 text-xs text-red-600">{errors.type}</p>
-              )}
-            </div>
+                {/* Type Field (Added) */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="type"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Type * {/* Added */}
+                  </label>
+                  <select
+                    name="type"
+                    id="type"
+                    value={formData.type}
+                    onChange={handleChange}
+                    className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
+                      errors.type ? "border-red-600" : "border-gray-300"
+                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                  >
+                    {typeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.type && (
+                    <p className="mt-2 text-xs text-red-600">{errors.type}</p>
+                  )}
+                </div>
 
-            {/* Parent ID Field (Added - Optional) */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="parentId"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Parent Category
-              </label>
-              <select
-                name="parentId"
-                id="parentId"
-                value={formData.parentId}
-                onChange={handleChange}
-                className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
-                  errors.parentId ? "border-red-600" : "border-gray-300"
-                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-              >
-                {parentOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {errors.parentId && (
-                <p className="mt-2 text-xs text-red-600">{errors.parentId}</p>
-              )}
+                {/* Parent ID Field (Added - Optional) */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="parentId"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Parent Category
+                  </label>
+                  <select
+                    name="parentId"
+                    id="parentId"
+                    value={formData.parentId}
+                    onChange={handleChange}
+                    className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
+                      errors.parentId ? "border-red-600" : "border-gray-300"
+                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                  >
+                    {parentOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.parentId && (
+                    <p className="mt-2 text-xs text-red-600">
+                      {errors.parentId}
+                    </p>
+                  )}
+                </div>
+
+                {/* Placeholder for future fields if needed */}
+                <div className="relative z-0 w-full mb-6 group invisible">
+                  {/* This div acts as a placeholder to maintain the grid layout if needed */}
+                </div>
+              </div>
             </div>
 
             {/* Action Buttons */}

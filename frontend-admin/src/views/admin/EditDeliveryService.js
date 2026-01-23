@@ -291,127 +291,143 @@ const EditDeliveryService = () => {
         </div>
         <div className="block w-full overflow-x-auto p-4">
           <form onSubmit={handleSubmit}>
-            {/* Name Field */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="name"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Service Name *
-              </label>
-              <input
-                type="text"
-                name="name"
-                id="name"
-                value={formData.name}
-                onChange={handleChange}
-                className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                  errors.name ? "border-red-600" : "border-gray-300"
-                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                placeholder=" "
-              />
-              {errors.name && (
-                <p className="mt-2 text-xs text-red-600">{errors.name}</p>
-              )}
-            </div>
+            {/* Basic Info Section */}
+            <div className="mb-8">
+              <h4 className="text-lg font-semibold text-blueGray-600 mb-4">
+                Basic Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Name Field */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="name"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Service Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    id="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                      errors.name ? "border-red-600" : "border-gray-300"
+                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                    placeholder=" "
+                  />
+                  {errors.name && (
+                    <p className="mt-2 text-xs text-red-600">{errors.name}</p>
+                  )}
+                </div>
 
-            {/* Min Price and Estimated Days Fields (Inline) */}
-            <div className="grid md:grid-cols-2 md:gap-6">
-              <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="minPrice"
-                  className="block mb-2 text-sm font-medium text-gray-900"
-                >
-                  Minimum Price (DZD) *
-                </label>
-                <input
-                  type="number"
-                  name="minPrice"
-                  id="minPrice"
-                  value={formData.minPrice}
-                  onChange={handleChange}
-                  step="0.01" // Allow decimal prices
-                  min="0" // Ensure non-negative
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                    errors.minPrice ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                  placeholder=" "
-                />
-                {errors.minPrice && (
-                  <p className="mt-2 text-xs text-red-600">{errors.minPrice}</p>
-                )}
-              </div>
-              <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="estimatedDays"
-                  className="block mb-2 text-sm font-medium text-gray-900"
-                >
-                  Estimated Delivery Days *
-                </label>
-                <input
-                  type="number"
-                  name="estimatedDays"
-                  id="estimatedDays"
-                  value={formData.estimatedDays}
-                  onChange={handleChange}
-                  min="0" // Ensure non-negative
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                    errors.estimatedDays ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                  placeholder=" "
-                />
-                {errors.estimatedDays && (
-                  <p className="mt-2 text-xs text-red-600">
-                    {errors.estimatedDays}
-                  </p>
-                )}
-              </div>
-            </div>
+                {/* Min Price and Estimated Days Fields (Inline) */}
+                <div className="grid md:grid-cols-2 md:gap-6">
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="minPrice"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      Minimum Price (DZD) *
+                    </label>
+                    <input
+                      type="number"
+                      name="minPrice"
+                      id="minPrice"
+                      value={formData.minPrice}
+                      onChange={handleChange}
+                      step="0.01" // Allow decimal prices
+                      min="0" // Ensure non-negative
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.minPrice ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder=" "
+                    />
+                    {errors.minPrice && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {errors.minPrice}
+                      </p>
+                    )}
+                  </div>
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="estimatedDays"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      Estimated Delivery Days *
+                    </label>
+                    <input
+                      type="number"
+                      name="estimatedDays"
+                      id="estimatedDays"
+                      value={formData.estimatedDays}
+                      onChange={handleChange}
+                      min="0" // Ensure non-negative
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.estimatedDays
+                          ? "border-red-600"
+                          : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder=" "
+                    />
+                    {errors.estimatedDays && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {errors.estimatedDays}
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-            {/* Max Price Field (Optional) */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="maxPrice"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Maximum Price (DZD) (Optional)
-              </label>
-              <input
-                type="number"
-                name="maxPrice"
-                id="maxPrice"
-                value={formData.maxPrice}
-                onChange={handleChange}
-                step="0.01" // Allow decimal prices
-                min="0" // Ensure non-negative if entered
-                className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                  errors.maxPrice ? "border-red-600" : "border-gray-300"
-                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                placeholder="Leave blank for no upper limit"
-              />
-              {errors.maxPrice && (
-                <p className="mt-2 text-xs text-red-600">{errors.maxPrice}</p>
-              )}
-            </div>
+                {/* Max Price Field (Optional) */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="maxPrice"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Maximum Price (DZD) (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    name="maxPrice"
+                    id="maxPrice"
+                    value={formData.maxPrice}
+                    onChange={handleChange}
+                    step="0.01" // Allow decimal prices
+                    min="0" // Ensure non-negative if entered
+                    className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                      errors.maxPrice ? "border-red-600" : "border-gray-300"
+                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                    placeholder="Leave blank for no upper limit"
+                  />
+                  {errors.maxPrice && (
+                    <p className="mt-2 text-xs text-red-600">
+                      {errors.maxPrice}
+                    </p>
+                  )}
+                </div>
 
-            {/* Active Status Field (Checkbox) */}
-            <div className="flex items-start mb-6">
-              <div className="flex items-center h-5">
-                <input
-                  id="active"
-                  name="active"
-                  type="checkbox"
-                  checked={formData.active}
-                  onChange={handleChange}
-                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                />
+                {/* Active Status Field (Checkbox) - Placed in the grid layout */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <div className="flex items-start">
+                    <div className="flex items-center h-5">
+                      <input
+                        id="active"
+                        name="active"
+                        type="checkbox"
+                        checked={formData.active}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                    </div>
+                    <label
+                      htmlFor="active"
+                      className="ms-2 text-sm font-medium text-gray-900"
+                    >
+                      Active
+                    </label>
+                  </div>
+                </div>
               </div>
-              <label
-                htmlFor="active"
-                className="ms-2 text-sm font-medium text-gray-900"
-              >
-                Active
-              </label>
             </div>
 
             {/* Action Buttons */}

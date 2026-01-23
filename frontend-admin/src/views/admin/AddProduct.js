@@ -8,26 +8,24 @@ const AddProduct = () => {
   // --- State for Form Fields (Updated for DB Schema) ---
   const [formData, setFormData] = useState({
     name: "",
-    description: "", // Optional
+    description: "",
     shortDescription: "", // Added
-    price: "", // String initially, parse to number (cents) on submit
-    sku: "", // Added (assuming it's separate from slug)
-    stock: "", // String initially, parse to number on submit
-    status: "draft", // Use default value from schema
+    price: "", // String initially (convert from cents on submit)
+    sku: "", // Added
+    stock: "", // String initially
+    status: "draft", // String initially
     brand: "", // Added
-    categoryId: "", // Added (will be a dropdown)
-    // imageUrls: [], // Will be handled separately as an array
-    // specHighlights: {}, // Will be handled separately as an object
+    categoryId: "", // Added (string initially)
   });
 
   // --- State for Image URLs (Array) ---
-  const [imageUrls, setImageUrls] = useState([""]); // Start with one empty input field
+  const [imageUrls, setImageUrls] = useState([""]);
 
   // --- State for Spec Highlights (Object) ---
   const [specHighlights, setSpecHighlights] = useState([{
     key: "",
     value: "",
-  }]); // Start with one key-value pair
+  }]);
 
   // --- State for Validation Errors ---
   const [errors, setErrors] = useState({});
@@ -156,7 +154,6 @@ const AddProduct = () => {
 
     // --- Prepare data for submission (Mock Backend Format) ---
     const productData = {
-      id: Date.now().toString(), // Simple temporary ID generation for simulation (should be UUID from backend)
       name: formData.name,
       description: formData.description,
       short_description: formData.shortDescription, // Map frontend field to DB field name
@@ -173,9 +170,7 @@ const AddProduct = () => {
         }
         return acc;
       }, {}), // Convert array of {key, value} to object
-      created_at: new Date().toISOString(), // Mock timestamp
-      updated_at: new Date().toISOString(), // Mock timestamp
-      // deleted_at: null // Not applicable on create
+      // created_at, updated_at, deleted_at are managed by the backend
     };
 
     console.log("Submitted Product Data (Mock Backend Format):", productData);
@@ -225,335 +220,369 @@ const AddProduct = () => {
         </div>
         <div className="block w-full overflow-x-auto p-4">
           <form onSubmit={handleSubmit}>
-            {/* Name Field */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="name"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Product Name *
-              </label>
-              <input
-                type="text"
-                name="name"
-                id="name"
-                value={formData.name}
-                onChange={handleChange}
-                className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                  errors.name ? "border-red-600" : "border-gray-300"
-                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                placeholder=" "
-              />
-              {errors.name && (
-                <p className="mt-2 text-xs text-red-600">{errors.name}</p>
-              )}
-            </div>
+            {/* Basic Info Section */}
+            <div className="mb-8">
+              <h4 className="text-lg font-semibold text-blueGray-600 mb-4">
+                Basic Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Name Field */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="name"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Product Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    id="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                      errors.name ? "border-red-600" : "border-gray-300"
+                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                    placeholder=" "
+                  />
+                  {errors.name && (
+                    <p className="mt-2 text-xs text-red-600">{errors.name}</p>
+                  )}
+                </div>
 
-            {/* Description Field (Optional) */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="description"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Description
-              </label>
-              <textarea
-                name="description"
-                id="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows="3"
-                className={`block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border ${
-                  errors.description ? "border-red-600" : "border-gray-300"
-                } focus:ring-blue-500 focus:border-blue-500`}
-                placeholder="Enter product description..."
-              >
-              </textarea>
-              {errors.description && (
-                <p className="mt-2 text-xs text-red-600">
-                  {errors.description}
-                </p>
-              )}
-            </div>
+                {/* Description Field (Optional) */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="description"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    name="description"
+                    id="description"
+                    value={formData.description}
+                    onChange={handleChange}
+                    rows="3"
+                    className={`block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border ${
+                      errors.description ? "border-red-600" : "border-gray-300"
+                    } focus:ring-blue-500 focus:border-blue-500`}
+                    placeholder="Enter product description..."
+                  >
+                  </textarea>
+                  {errors.description && (
+                    <p className="mt-2 text-xs text-red-600">
+                      {errors.description}
+                    </p>
+                  )}
+                </div>
 
-            {/* Short Description Field (Added) */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label
-                htmlFor="shortDescription"
-                className="block mb-2 text-sm font-medium text-gray-900"
-              >
-                Short Description
-              </label>
-              <input
-                type="text"
-                name="shortDescription"
-                id="shortDescription"
-                value={formData.shortDescription}
-                onChange={handleChange}
-                className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                  errors.shortDescription ? "border-red-600" : "border-gray-300"
-                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                placeholder=" "
-              />
-              {errors.shortDescription && (
-                <p className="mt-2 text-xs text-red-600">
-                  {errors.shortDescription}
-                </p>
-              )}
-            </div>
+                {/* Short Description Field (Added) */}
+                <div className="relative z-0 w-full mb-6 group">
+                  <label
+                    htmlFor="shortDescription"
+                    className="block mb-2 text-sm font-medium text-gray-900"
+                  >
+                    Short Description
+                  </label>
+                  <input
+                    type="text"
+                    name="shortDescription"
+                    id="shortDescription"
+                    value={formData.shortDescription}
+                    onChange={handleChange}
+                    className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                      errors.shortDescription
+                        ? "border-red-600"
+                        : "border-gray-300"
+                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                    placeholder=" "
+                  />
+                  {errors.shortDescription && (
+                    <p className="mt-2 text-xs text-red-600">
+                      {errors.shortDescription}
+                    </p>
+                  )}
+                </div>
 
-            {/* Price and SKU Fields (Inline) */}
-            <div className="grid md:grid-cols-2 md:gap-6">
-              <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="price"
-                  className="block mb-2 text-sm font-medium text-gray-900"
-                >
-                  Price (DZD) *
-                </label>
-                <input
-                  type="number"
-                  name="price"
-                  id="price"
-                  value={formData.price}
-                  onChange={handleChange}
-                  step="0.01" // Allow decimal prices
-                  min="0" // Ensure non-negative
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                    errors.price ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                  placeholder=" "
-                />
-                {errors.price && (
-                  <p className="mt-2 text-xs text-red-600">{errors.price}</p>
-                )}
+                {/* Price and SKU Fields (Inline) */}
+                <div className="grid md:grid-cols-2 md:gap-6">
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="price"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      Price (DZD) *
+                    </label>
+                    <input
+                      type="number"
+                      name="price"
+                      id="price"
+                      value={formData.price}
+                      onChange={handleChange}
+                      step="0.01"
+                      min="0"
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.price ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder=" "
+                    />
+                    {errors.price && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {errors.price}
+                      </p>
+                    )}
+                  </div>
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="sku"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      SKU * {/* Changed label */}
+                    </label>
+                    <input
+                      type="text"
+                      name="sku"
+                      id="sku"
+                      value={formData.sku}
+                      onChange={handleChange}
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.sku ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder=" "
+                    />
+                    {errors.sku && (
+                      <p className="mt-2 text-xs text-red-600">{errors.sku}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stock and Category Fields (Inline) */}
+                <div className="grid md:grid-cols-2 md:gap-6">
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="stock"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      Stock Quantity *
+                    </label>
+                    <input
+                      type="number"
+                      name="stock"
+                      id="stock"
+                      value={formData.stock}
+                      onChange={handleChange}
+                      min="0"
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.stock ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder=" "
+                    />
+                    {errors.stock && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {errors.stock}
+                      </p>
+                    )}
+                  </div>
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="categoryId"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      Category * {/* Changed label */}
+                    </label>
+                    <select
+                      name="categoryId"
+                      id="categoryId"
+                      value={formData.categoryId}
+                      onChange={handleChange}
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
+                        errors.categoryId ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                    >
+                      {categoryOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.categoryId && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {errors.categoryId}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Brand and Status Fields (Inline) */}
+                <div className="grid md:grid-cols-2 md:gap-6">
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="brand"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      Brand * {/* Added */}
+                    </label>
+                    <input
+                      type="text"
+                      name="brand"
+                      id="brand"
+                      value={formData.brand}
+                      onChange={handleChange}
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.brand ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder=" "
+                    />
+                    {errors.brand && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {errors.brand}
+                      </p>
+                    )}
+                  </div>
+                  <div className="relative z-0 w-full mb-6 group">
+                    <label
+                      htmlFor="status"
+                      className="block mb-2 text-sm font-medium text-gray-900"
+                    >
+                      Status * {/* Added */}
+                    </label>
+                    <select
+                      name="status"
+                      id="status"
+                      value={formData.status}
+                      onChange={handleChange}
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
+                        errors.status ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                    >
+                      {statusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.status && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {errors.status}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="sku"
-                  className="block mb-2 text-sm font-medium text-gray-900"
-                >
-                  SKU * {/* Changed label */}
-                </label>
-                <input
-                  type="text"
-                  name="sku"
-                  id="sku"
-                  value={formData.sku}
-                  onChange={handleChange}
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                    errors.sku ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                  placeholder=" "
-                />
-                {errors.sku && (
-                  <p className="mt-2 text-xs text-red-600">{errors.sku}</p>
-                )}
-              </div>
             </div>
 
-            {/* Stock and Category Fields (Inline) */}
-            <div className="grid md:grid-cols-2 md:gap-6">
+            {/* Images Section */}
+            <div className="mb-8">
+              <h4 className="text-lg font-semibold text-blueGray-600 mb-4">
+                Images
+              </h4>
               <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="stock"
-                  className="block mb-2 text-sm font-medium text-gray-900"
-                >
-                  Stock Quantity *
+                <label className="block mb-2 text-sm font-medium text-gray-900">
+                  Image URLs *
                 </label>
-                <input
-                  type="number"
-                  name="stock"
-                  id="stock"
-                  value={formData.stock}
-                  onChange={handleChange}
-                  min="0" // Ensure non-negative
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                    errors.stock ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                  placeholder=" "
-                />
-                {errors.stock && (
-                  <p className="mt-2 text-xs text-red-600">{errors.stock}</p>
-                )}
-              </div>
-              <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="categoryId"
-                  className="block mb-2 text-sm font-medium text-gray-900"
+                {imageUrls.map((url, index) => (
+                  <div key={index} className="flex items-center mb-2">
+                    <input
+                      type="text"
+                      value={url}
+                      onChange={(e) =>
+                        handleImageUrlChange(index, e.target.value)}
+                      className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.imageUrls ? "border-red-600" : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder="Enter image URL..."
+                    />
+                    {imageUrls.length > 1 && ( // Show remove button if more than one
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeImageUrlField(index)}
+                        className="ml-2 text-red-500 hover:text-red-700"
+                      >
+                        <i className="fas fa-minus"></i>
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addImageUrlField}
+                  className="text-blue-500 hover:text-blue-700"
                 >
-                  Category * {/* Changed label */}
-                </label>
-                <select
-                  name="categoryId"
-                  id="categoryId"
-                  value={formData.categoryId}
-                  onChange={handleChange}
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
-                    errors.categoryId ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                >
-                  {categoryOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                {errors.categoryId && (
+                  <i className="fas fa-plus mr-1"></i> Add Image URL
+                </button>
+                {errors.imageUrls && (
                   <p className="mt-2 text-xs text-red-600">
-                    {errors.categoryId}
+                    {errors.imageUrls}
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Brand and Status Fields (Inline) */}
-            <div className="grid md:grid-cols-2 md:gap-6">
+            {/* Specifications Section */}
+            <div className="mb-8">
+              <h4 className="text-lg font-semibold text-blueGray-600 mb-4">
+                Specifications
+              </h4>
               <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="brand"
-                  className="block mb-2 text-sm font-medium text-gray-900"
-                >
-                  Brand * {/* Added */}
+                <label className="block mb-2 text-sm font-medium text-gray-900">
+                  Specification Highlights
                 </label>
-                <input
-                  type="text"
-                  name="brand"
-                  id="brand"
-                  value={formData.brand}
-                  onChange={handleChange}
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                    errors.brand ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                  placeholder=" "
-                />
-                {errors.brand && (
-                  <p className="mt-2 text-xs text-red-600">{errors.brand}</p>
+                {specHighlights.map((spec, index) => (
+                  <div key={index} className="flex items-center mb-2">
+                    <input
+                      type="text"
+                      value={spec.key}
+                      onChange={(e) =>
+                        handleSpecHighlightChange(index, "key", e.target.value)}
+                      className={`block py-2.5 px-0 w-1/2 text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.specHighlights
+                          ? "border-red-600"
+                          : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer mr-2`}
+                      placeholder="Key (e.g., Cores)..."
+                    />
+                    <input
+                      type="text"
+                      value={spec.value}
+                      onChange={(e) =>
+                        handleSpecHighlightChange(
+                          index,
+                          "value",
+                          e.target.value,
+                        )}
+                      className={`block py-2.5 px-0 w-1/2 text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
+                        errors.specHighlights
+                          ? "border-red-600"
+                          : "border-gray-300"
+                      } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+                      placeholder="Value (e.g., 16)..."
+                    />
+                    {specHighlights.length > 1 && ( // Show remove button if more than one
+                      <button
+                        type="button"
+                        onClick={() => removeSpecHighlightField(index)}
+                        className="ml-2 text-red-500 hover:text-red-700"
+                      >
+                        <i className="fas fa-minus"></i>
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addSpecHighlightField}
+                  className="text-blue-500 hover:text-blue-700"
+                >
+                  <i className="fas fa-plus mr-1"></i> Add Spec Highlight
+                </button>
+                {errors.specHighlights && (
+                  <p className="mt-2 text-xs text-red-600">
+                    {errors.specHighlights}
+                  </p>
                 )}
               </div>
-              <div className="relative z-0 w-full mb-6 group">
-                <label
-                  htmlFor="status"
-                  className="block mb-2 text-sm font-medium text-gray-900"
-                >
-                  Status * {/* Added */}
-                </label>
-                <select
-                  name="status"
-                  id="status"
-                  value={formData.status}
-                  onChange={handleChange}
-                  className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
-                    errors.status ? "border-red-600" : "border-gray-300"
-                  } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                {errors.status && (
-                  <p className="mt-2 text-xs text-red-600">{errors.status}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Image URLs Section */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label className="block mb-2 text-sm font-medium text-gray-900">
-                Image URLs *
-              </label>
-              {imageUrls.map((url, index) => (
-                <div key={index} className="flex items-center mb-2">
-                  <input
-                    type="text"
-                    value={url}
-                    onChange={(e) =>
-                      handleImageUrlChange(index, e.target.value)}
-                    className={`block py-2.5 px-0 w-full text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                      errors.imageUrls ? "border-red-600" : "border-gray-300"
-                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                    placeholder="Enter image URL..."
-                  />
-                  {imageUrls.length > 1 && ( // Show remove button if more than one
-                    <button
-                      type="button"
-                      onClick={() =>
-                        removeImageUrlField(index)}
-                      className="ml-2 text-red-500 hover:text-red-700"
-                    >
-                      <i className="fas fa-minus"></i>
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={addImageUrlField}
-                className="text-blue-500 hover:text-blue-700"
-              >
-                <i className="fas fa-plus mr-1"></i> Add Image URL
-              </button>
-              {errors.imageUrls && (
-                <p className="mt-2 text-xs text-red-600">{errors.imageUrls}</p>
-              )}
-            </div>
-
-            {/* Spec Highlights Section */}
-            <div className="relative z-0 w-full mb-6 group">
-              <label className="block mb-2 text-sm font-medium text-gray-900">
-                Specification Highlights
-              </label>
-              {specHighlights.map((spec, index) => (
-                <div key={index} className="flex items-center mb-2">
-                  <input
-                    type="text"
-                    value={spec.key}
-                    onChange={(e) =>
-                      handleSpecHighlightChange(index, "key", e.target.value)}
-                    className={`block py-2.5 px-0 w-1/2 text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                      errors.specHighlights
-                        ? "border-red-600"
-                        : "border-gray-300"
-                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer mr-2`}
-                    placeholder="Key (e.g., Cores)..."
-                  />
-                  <input
-                    type="text"
-                    value={spec.value}
-                    onChange={(e) =>
-                      handleSpecHighlightChange(index, "value", e.target.value)}
-                    className={`block py-2.5 px-0 w-1/2 text-sm text-gray-900 bg-transparent border-0 border-b-2 ${
-                      errors.specHighlights
-                        ? "border-red-600"
-                        : "border-gray-300"
-                    } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
-                    placeholder="Value (e.g., 16)..."
-                  />
-                  {specHighlights.length > 1 && ( // Show remove button if more than one
-                    <button
-                      type="button"
-                      onClick={() => removeSpecHighlightField(index)}
-                      className="ml-2 text-red-500 hover:text-red-700"
-                    >
-                      <i className="fas fa-minus"></i>
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={addSpecHighlightField}
-                className="text-blue-500 hover:text-blue-700"
-              >
-                <i className="fas fa-plus mr-1"></i> Add Spec Highlight
-              </button>
-              {errors.specHighlights && (
-                <p className="mt-2 text-xs text-red-600">
-                  {errors.specHighlights}
-                </p>
-              )}
             </div>
 
             {/* Action Buttons */}

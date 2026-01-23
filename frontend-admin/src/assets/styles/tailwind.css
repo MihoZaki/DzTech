@@ -1804,6 +1804,10 @@ select {
   margin-bottom: 1.5rem;
 }
 
+.mb-8 {
+  margin-bottom: 2rem;
+}
+
 .mt-10 {
   margin-top: 2.5rem;
 }
@@ -2454,6 +2458,10 @@ select {
   vertical-align: middle;
 }
 
+.invisible {
+  visibility: hidden;
+}
+
 .whitespace-nowrap {
   white-space: nowrap;
 }
@@ -2516,6 +2524,10 @@ select {
 
 .gap-4 {
   gap: 1rem;
+}
+
+.gap-6 {
+  gap: 1.5rem;
 }
 
 .grid-cols-1 {
