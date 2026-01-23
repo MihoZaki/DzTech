@@ -6,10 +6,12 @@ const EditCategory = () => {
   const { id } = useParams(); // Get the category ID from the URL
   const history = useHistory(); // Get the history object
 
-  // --- State for Form Fields ---
+  // --- State for Form Fields (Updated for DB Schema) ---
   const [formData, setFormData] = useState({
     name: "",
-    description: "", // Optional
+    // description: '', // Removed as it's not in the DB
+    type: "", // Added (will be a dropdown)
+    parentId: "", // Added (will be a dropdown, optional)
   });
 
   // --- State for Loading (Optional, for API fetch) ---
@@ -18,74 +20,104 @@ const EditCategory = () => {
   // --- State for Validation Errors ---
   const [errors, setErrors] = useState({});
 
-  // --- Simulate fetching category data by ID ---
+  // --- Simulate fetching category data by ID (including new fields) ---
   // In a real app, you'd likely use useEffect to fetch data from an API
   // using the 'id' obtained from useParams.
   // For now, let's simulate finding the category data.
   const findCategoryById = (categoryId) => {
     // Simulate fetching from a list (in reality, this comes from state or API)
     // Let's use the same placeholder data as in Categories.js for demonstration
+    // Adding 'type' and 'parentId' to the mock data
     const categories = [
       {
         id: "CAT-001",
         name: "Electronics",
-        description: "Devices, gadgets, computers",
+        slug: "electronics",
+        type: "component",
+        parentId: null,
         createdAt: "2023-01-10",
       },
       {
         id: "CAT-002",
         name: "Accessories",
-        description: "Phone cases, cables, peripherals",
+        slug: "accessories",
+        type: "accessory",
+        parentId: null,
         createdAt: "2023-01-12",
       },
       {
         id: "CAT-003",
         name: "Furniture",
-        description: "Chairs, desks, sofas",
+        slug: "furniture",
+        type: "furniture",
+        parentId: null,
         createdAt: "2023-02-01",
       },
       {
         id: "CAT-004",
         name: "Home",
-        description: "Kitchenware, decor, lighting",
+        slug: "home",
+        type: "home",
+        parentId: null,
         createdAt: "2023-02-15",
       },
       {
         id: "CAT-005",
         name: "Wearables",
-        description: "Smartwatches, fitness trackers",
+        slug: "wearables",
+        type: "wearable",
+        parentId: null,
         createdAt: "2023-03-05",
       },
       {
         id: "CAT-006",
         name: "Books",
-        description: "Fiction, non-fiction, educational",
+        slug: "books",
+        type: "book",
+        parentId: null,
         createdAt: "2023-03-20",
       },
       {
         id: "CAT-007",
         name: "Clothing",
-        description: "Shirts, pants, shoes",
+        slug: "clothing",
+        type: "clothing",
+        parentId: null,
         createdAt: "2023-04-10",
       },
       {
         id: "CAT-008",
         name: "Sports",
-        description: "Equipment, gear, apparel",
+        slug: "sports",
+        type: "sport",
+        parentId: null,
         createdAt: "2023-04-25",
       },
       {
         id: "CAT-009",
         name: "Toys",
-        description: "Games, puzzles, dolls",
+        slug: "toys",
+        type: "toy",
+        parentId: null,
         createdAt: "2023-05-10",
       },
       {
         id: "CAT-010",
         name: "Beauty",
-        description: "Cosmetics, skincare, fragrances",
+        slug: "beauty",
+        type: "beauty",
+        parentId: null,
         createdAt: "2023-05-25",
       },
+      // Add more categories if needed, including the seeded ones
+      {
+        id: "CAT-011",
+        name: "CPU",
+        slug: "cpu",
+        type: "component",
+        parentId: "CAT-001",
+        createdAt: "2023-06-01",
+      }, // Example sub-category
     ];
     // Find the category with the given ID
     return categories.find((c) => c.id === categoryId);
@@ -98,7 +130,9 @@ const EditCategory = () => {
       // Pre-populate the form fields with the category data
       setFormData({
         name: categoryToEdit.name || "",
-        description: categoryToEdit.description || "",
+        // description: categoryToEdit.description || '', // Removed
+        type: categoryToEdit.type || "", // Map DB field to frontend field name
+        parentId: categoryToEdit.parentId || "", // Map DB field to frontend field name
       });
     } else {
       // Handle case where category ID is not found
@@ -126,19 +160,22 @@ const EditCategory = () => {
     }
   };
 
-  // --- Validate Form Data ---
+  // --- Validate Form Data (Updated for new fields) ---
   const validateForm = () => {
     const newErrors = {};
 
     if (!formData.name.trim()) {
       newErrors.name = "Name is required.";
     }
-    // Add other validations if needed (e.g., description length)
+    if (!formData.type.trim()) {
+      newErrors.type = "Type is required."; // Added validation
+    }
+    // parentId is optional, no validation needed here unless it must reference a valid existing ID
 
     return newErrors;
   };
 
-  // --- Handle Form Submission (Mock Backend) ---
+  // --- Handle Form Submission (Mock Backend - Slug Generated by Backend) ---
   const handleSubmit = (e) => {
     e.preventDefault(); // Prevent default form submission
 
@@ -149,16 +186,34 @@ const EditCategory = () => {
     }
 
     // --- Prepare data for submission (Mock Backend Format) ---
+    // Note: In a real app, the backend generates the slug.
+    // The frontend sends id, name, type, parentId.
+    // The backend returns the full object including the potentially updated slug.
     const updatedCategoryData = {
       id: id, // Use the ID from the URL
       name: formData.name,
-      description: formData.description,
-      updatedAt: new Date().toISOString(), // Mock timestamp
+      // slug: ... // Backend might regenerate slug from name, or keep existing if name didn't change
+      type: formData.type,
+      parentId: formData.parentId || null, // Send null if no parent selected
+      // updatedAt: new Date().toISOString(), // Backend sets this
     };
 
     console.log(
-      "Submitted Updated Category Data (Mock Backend Format):",
+      "Submitted Updated Category Data (Sent to Backend):",
       updatedCategoryData,
+    );
+
+    // --- Simulate receiving updated data from backend ---
+    // In a real app, you'd get this from the API response.
+    const receivedUpdatedCategoryData = {
+      ...updatedCategoryData,
+      // slug: ... // Backend might send back the updated slug
+      updatedAt: new Date().toISOString(), // Simulate backend timestamp
+    };
+
+    console.log(
+      "Received Updated Category Data (From Backend):",
+      receivedUpdatedCategoryData,
     );
 
     // --- Navigate back to the category list ---
@@ -175,6 +230,31 @@ const EditCategory = () => {
     // Navigate back to the category list
     history.push("/admin/categories");
   };
+
+  // --- Options for Type Dropdown (Mock) ---
+  const typeOptions = [
+    { value: "", label: "Select a type..." },
+    { value: "component", label: "Component" },
+    { value: "laptop", label: "Laptop" },
+    { value: "accessory", label: "Accessory" },
+    { value: "furniture", label: "Furniture" }, // Example, add others as needed
+    { value: "home", label: "Home" },
+    { value: "wearable", label: "Wearable" },
+    { value: "book", label: "Book" },
+    { value: "clothing", label: "Clothing" },
+    { value: "sport", label: "Sport" },
+    { value: "toy", label: "Toy" },
+    { value: "beauty", label: "Beauty" },
+  ];
+
+  // --- Options for Parent Dropdown (Mock) ---
+  // In a real app, this would be fetched from the backend API (GET /api/v1/categories)
+  const parentOptions = [
+    { value: "", label: "No Parent (Top-Level)" },
+    { value: "CAT-001", label: "Electronics" },
+    { value: "CAT-002", label: "Accessories" },
+    // Add more categories as they are created/fetched
+  ];
 
   // --- Show loading message while fetching data (simulated) ---
   if (loading) {
@@ -247,30 +327,59 @@ const EditCategory = () => {
               )}
             </div>
 
-            {/* Description Field (Optional) */}
+            {/* Type Field (Added) */}
             <div className="relative z-0 w-full mb-6 group">
               <label
-                htmlFor="description"
+                htmlFor="type"
                 className="block mb-2 text-sm font-medium text-gray-900"
               >
-                Description
+                Type * {/* Added */}
               </label>
-              <textarea
-                name="description"
-                id="description"
-                value={formData.description}
+              <select
+                name="type"
+                id="type"
+                value={formData.type}
                 onChange={handleChange}
-                rows="3"
-                className={`block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border ${
-                  errors.description ? "border-red-600" : "border-gray-300"
-                } focus:ring-blue-500 focus:border-blue-500`}
-                placeholder="Enter category description..."
+                className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
+                  errors.type ? "border-red-600" : "border-gray-300"
+                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
               >
-              </textarea>
-              {errors.description && (
-                <p className="mt-2 text-xs text-red-600">
-                  {errors.description}
-                </p>
+                {typeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.type && (
+                <p className="mt-2 text-xs text-red-600">{errors.type}</p>
+              )}
+            </div>
+
+            {/* Parent ID Field (Added - Optional) */}
+            <div className="relative z-0 w-full mb-6 group">
+              <label
+                htmlFor="parentId"
+                className="block mb-2 text-sm font-medium text-gray-900"
+              >
+                Parent Category
+              </label>
+              <select
+                name="parentId"
+                id="parentId"
+                value={formData.parentId}
+                onChange={handleChange}
+                className={`block py-2.5 px-0 w-full text-sm text-gray-500 bg-transparent border-0 border-b-2 ${
+                  errors.parentId ? "border-red-600" : "border-gray-300"
+                } appearance-none focus:outline-none focus:ring-0 focus:border-blue-600 peer`}
+              >
+                {parentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {errors.parentId && (
+                <p className="mt-2 text-xs text-red-600">{errors.parentId}</p>
               )}
             </div>
 

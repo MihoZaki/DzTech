@@ -18,10 +18,10 @@ const storeManagementItems = [
     icon: "fas fa-tags", // Using a tags icon for categories
   },
   {
-    path: "/admin/delivery-services", // Placeholder for future
-    label: "Delivery Services", // Placeholder for future
-    icon: "fas fa-truck", // Using a truck icon for delivery
-    disabled: true, // Disable for now
+    path: "/admin/delivery-services", // Pointing to the new route
+    label: "Delivery Services", // Label remains
+    icon: "fas fa-truck", // Icon remains
+    // REMOVED: disabled: true,
   },
 ];
 
@@ -170,45 +170,14 @@ export default function Sidebar() {
             {/* Store Management Navigation */}
             <ul className="md:flex-col md:min-w-full flex flex-col list-none">
               {storeManagementItems.map((item) => (
-                <li
-                  key={item.path}
-                  className={`items-center ${
-                    item.disabled ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                >
-                  {item.disabled
-                    ? (
-                      <span
-                        className={getNavLinkClasses(
-                          location.pathname,
-                          item.path,
-                        ) + " pointer-events-none"}
-                      >
-                        {/* Disable pointer events */}
-                        {getNavIconElement(
-                          location.pathname,
-                          item.path,
-                          item.icon,
-                        )}
-                        {item.label}
-                      </span>
-                    )
-                    : (
-                      <Link
-                        className={getNavLinkClasses(
-                          location.pathname,
-                          item.path,
-                        )}
-                        to={item.path}
-                      >
-                        {getNavIconElement(
-                          location.pathname,
-                          item.path,
-                          item.icon,
-                        )}
-                        {item.label}
-                      </Link>
-                    )}
+                <li key={item.path} className="items-center">
+                  <Link
+                    className={getNavLinkClasses(location.pathname, item.path)}
+                    to={item.path}
+                  >
+                    {getNavIconElement(location.pathname, item.path, item.icon)}
+                    {item.label}
+                  </Link>
                 </li>
               ))}
             </ul>

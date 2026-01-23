@@ -1511,6 +1511,10 @@ select {
   flex-wrap: wrap;
 }
 
+.items-start {
+  align-items: flex-start;
+}
+
 .items-center {
   align-items: center;
 }
@@ -1585,6 +1589,10 @@ select {
 
 .h-2 {
   height: 0.5rem;
+}
+
+.h-4 {
+  height: 1rem;
 }
 
 .h-5 {
@@ -2250,6 +2258,11 @@ select {
   color: rgba(59, 130, 246, var(--tw-text-opacity));
 }
 
+.text-blue-600 {
+  --tw-text-opacity: 1;
+  color: rgba(37, 99, 235, var(--tw-text-opacity));
+}
+
 .text-blue-800 {
   --tw-text-opacity: 1;
   color: rgba(30, 64, 175, var(--tw-text-opacity));
@@ -2447,6 +2460,10 @@ select {
 
 .break-words {
   overflow-wrap: break-word;
+}
+
+.w-4 {
+  width: 1rem;
 }
 
 .w-5 {
