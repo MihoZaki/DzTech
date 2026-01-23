@@ -6,12 +6,26 @@ import NotificationDropdown from "components/Dropdowns/NotificationDropdown.js";
 import UserDropdown from "components/Dropdowns/UserDropdown.js";
 
 // Define navigation items in a structured way
-const navItems = [
+const storeManagementItems = [
   {
-    path: "/admin/dashboard",
-    label: "Dashboard",
-    icon: "fas fa-tv",
+    path: "/admin/products",
+    label: "Products",
+    icon: "fas fa-box-open", // Using a box icon for products
   },
+  {
+    path: "/admin/categories",
+    label: "Categories",
+    icon: "fas fa-tags", // Using a tags icon for categories
+  },
+  {
+    path: "/admin/delivery-services", // Placeholder for future
+    label: "Delivery Services", // Placeholder for future
+    icon: "fas fa-truck", // Using a truck icon for delivery
+    disabled: true, // Disable for now
+  },
+];
+
+const salesManagementItems = [
   {
     path: "/admin/orders",
     label: "Orders",
@@ -22,24 +36,13 @@ const navItems = [
     label: "Customers",
     icon: "fas fa-user-friends",
   },
-  {
-    path: "/admin/products",
-    label: "Products",
-    icon: "fas fa-table",
-  },
 ];
 
-// Define auth items (if needed separately, otherwise can add to navItems)
-const authItems = [
+const dashboardItems = [
   {
-    path: "/auth/login",
-    label: "Login",
-    icon: "fas fa-fingerprint",
-  },
-  {
-    path: "/auth/register",
-    label: "Register",
-    icon: "fas fa-clipboard-list",
+    path: "/admin/dashboard",
+    label: "Dashboard",
+    icon: "fas fa-tachometer-alt", // Using a dashboard icon
   },
 ];
 
@@ -56,26 +59,13 @@ const getNavLinkClasses = (locationPath, itemPath) => {
 // Helper function to determine active icon styles and combine with icon class
 const getNavIconElement = (locationPath, itemPath, iconClass) => {
   const isActive = locationPath === itemPath;
-  const baseIconClass = "mr-2 text-sm "; // Base classes
-  const activeInactiveClass = isActive ? "opacity-75" : "text-blueGray-300"; // Active/inactive specific class
-  const fullIconClass = baseIconClass + activeInactiveClass; // Combine them
+  const baseIconClass = "mr-2 text-sm ";
+  const activeInactiveClass = isActive ? "opacity-75" : "text-blueGray-300";
+  const fullIconClass = baseIconClass + activeInactiveClass;
 
   return (
     <i className={fullIconClass}>
-      {/* Apply combined class to the <i> tag */}
-      <i className={iconClass}></i>{" "}
-      {/* Render the actual Font Awesome icon inside */}
-    </i>
-  );
-};
-
-// Helper function for auth icons (simpler, always greyish)
-const getAuthIconElement = (iconClass) => {
-  return (
-    <i className={`mr-2 text-sm text-blueGray-400`}>
-      {/* Fixed class for auth icons */}
-      <i className={iconClass}></i>{" "}
-      {/* Render the actual Font Awesome icon inside */}
+      <i className={iconClass}></i>
     </i>
   );
 };
@@ -125,7 +115,7 @@ export default function Sidebar() {
                     className="md:block text-left md:pb-2 text-blueGray-600 mr-0 inline-block whitespace-nowrap text-sm uppercase font-bold p-4 px-0"
                     to="/"
                   >
-                    DzTech Store
+                    Notus React
                   </Link>
                 </div>
                 <div className="w-6/12 flex justify-end">
@@ -152,13 +142,10 @@ export default function Sidebar() {
 
             {/* Divider */}
             <hr className="my-4 md:min-w-full" />
-            {/* Heading */}
-            <h6 className="md:min-w-full text-blueGray-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
-              Main Navigation
-            </h6>
-            {/* Navigation */}
+
+            {/* Dashboard Section */}
             <ul className="md:flex-col md:min-w-full flex flex-col list-none">
-              {navItems.map((item) => (
+              {dashboardItems.map((item) => (
                 <li key={item.path} className="items-center">
                   <Link
                     className={getNavLinkClasses(location.pathname, item.path)} // Use helper function
@@ -172,6 +159,84 @@ export default function Sidebar() {
                 </li>
               ))}
             </ul>
+
+            {/* Divider */}
+            <hr className="my-4 md:min-w-full" />
+
+            {/* Store Management Heading */}
+            <h6 className="md:min-w-full text-blueGray-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
+              Store Management
+            </h6>
+            {/* Store Management Navigation */}
+            <ul className="md:flex-col md:min-w-full flex flex-col list-none">
+              {storeManagementItems.map((item) => (
+                <li
+                  key={item.path}
+                  className={`items-center ${
+                    item.disabled ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {item.disabled
+                    ? (
+                      <span
+                        className={getNavLinkClasses(
+                          location.pathname,
+                          item.path,
+                        ) + " pointer-events-none"}
+                      >
+                        {/* Disable pointer events */}
+                        {getNavIconElement(
+                          location.pathname,
+                          item.path,
+                          item.icon,
+                        )}
+                        {item.label}
+                      </span>
+                    )
+                    : (
+                      <Link
+                        className={getNavLinkClasses(
+                          location.pathname,
+                          item.path,
+                        )}
+                        to={item.path}
+                      >
+                        {getNavIconElement(
+                          location.pathname,
+                          item.path,
+                          item.icon,
+                        )}
+                        {item.label}
+                      </Link>
+                    )}
+                </li>
+              ))}
+            </ul>
+
+            {/* Divider */}
+            <hr className="my-4 md:min-w-full" />
+
+            {/* Sales Management Heading */}
+            <h6 className="md:min-w-full text-blueGray-500 text-xs uppercase font-bold block pt-1 pb-4 no-underline">
+              Sales Management
+            </h6>
+            {/* Sales Management Navigation */}
+            <ul className="md:flex-col md:min-w-full flex flex-col list-none">
+              {salesManagementItems.map((item) => (
+                <li key={item.path} className="items-center">
+                  <Link
+                    className={getNavLinkClasses(location.pathname, item.path)}
+                    to={item.path}
+                  >
+                    {getNavIconElement(location.pathname, item.path, item.icon)}
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {/* Divider - Removed Auth section, so this might be the last divider */}
+            <hr className="my-4 md:min-w-full" />
           </div>
         </div>
       </nav>
