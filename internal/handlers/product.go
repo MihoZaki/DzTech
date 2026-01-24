@@ -256,24 +256,33 @@ func (h *ProductHandler) SearchProducts(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
-	// Use the helper for parsing UUID from path
 	productID, err := ParseUUIDPathParam(w, r, "id")
 	if err != nil {
 		slog.Debug("Update product request failed to parse productID", "error", err)
 		return // Error response already sent by helper
 	}
 
-	var req models.CreateProductRequest // Reuse the same request model for updates
-	// Use the helper for decoding and validating
-	if err := DecodeAndValidateJSON(w, r, &req); err != nil {
-		slog.Debug("Update product request failed validation/decoding", "error", err)
-		return // Error response already sent by helper
+	contentType := r.Header.Get("Content-Type")
+
+	// --- Detect Content-Type and Parse Accordingly ---
+	var updatedProduct *models.Product
+
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		slog.Debug("Handling multipart product update request", "product_id", productID)
+		// Handle Multipart Form (File Uploads)
+		updatedProduct, err = h.updateProductFromMultipart(r, productID)
+	} else if contentType == "application/json" || strings.HasPrefix(contentType, "application/json;") {
+		slog.Debug("Handling JSON product update request", "product_id", productID)
+		// Handle Standard JSON - use the new helper-based logic
+		updatedProduct, err = h.updateProductFromJSON(w, r, productID)
+	} else {
+		utils.SendErrorResponse(w, http.StatusUnsupportedMediaType, "Unsupported Media Type", fmt.Sprintf("Unsupported Content-Type: %s", contentType))
+		slog.Debug("Unsupported Content-Type received for update", "content_type", contentType, "product_id", productID)
+		return
 	}
 
-	updatedProduct, err := h.productService.UpdateProduct(r.Context(), productID, req)
 	if err != nil {
 		// Map service errors more specifically if possible, or use a generic helper
-		// For now, let's see if we can make a more generic error sender for product-specific messages
 		if strings.Contains(err.Error(), "product not found") {
 			utils.SendErrorResponse(w, http.StatusNotFound, "Not Found", "Product not found")
 			return
@@ -287,10 +296,99 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Successfully updated product
+	slog.Debug("Successfully updated product", "product_id", updatedProduct.ID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(updatedProduct)
 }
 
+func (h *ProductHandler) updateProductFromJSON(w http.ResponseWriter, r *http.Request, productID uuid.UUID) (*models.Product, error) {
+	var req models.UpdateProductRequest
+	// Use the existing helper for JSON decoding and validation
+	if err := DecodeAndValidateJSON(w, r, &req); err != nil {
+		slog.Debug("Update product request failed validation/decoding", "error", err, "product_id", productID)
+		return nil, err // Propagate error to main handler
+	}
+
+	// Call the service to update the product (passing the validated struct and ID)
+	product, err := h.productService.UpdateProduct(r.Context(), productID, req)
+	if err != nil {
+		return nil, err // Propagate error to main handler
+	}
+
+	return product, nil
+}
+
+func (h *ProductHandler) updateProductFromMultipart(r *http.Request, productID uuid.UUID) (*models.Product, error) {
+	err := r.ParseMultipartForm(32 << 20) // 32 MB
+	if err != nil {
+		return nil, fmt.Errorf("error parsing multipart form: %w", err)
+	}
+
+	var req models.UpdateProductRequest
+
+	// Check if each field is present in the form and assign to the pointer in the struct
+	if val := r.FormValue("name"); val != "" {
+		req.Name = &val
+	}
+	if val := r.FormValue("description"); val != "" {
+		req.Description = &val
+	}
+	if val := r.FormValue("short_description"); val != "" {
+		req.ShortDescription = &val
+	}
+	if val := r.FormValue("price_cents"); val != "" {
+		if parsedVal, err := strconv.ParseInt(val, 10, 64); err == nil && parsedVal >= 0 {
+			req.PriceCents = &parsedVal
+		} else {
+			return nil, fmt.Errorf("invalid price_cents: %v", err)
+		}
+	}
+	if val := r.FormValue("stock_quantity"); val != "" {
+		if parsedVal, err := strconv.Atoi(val); err == nil && parsedVal >= 0 {
+			req.StockQuantity = &parsedVal
+		} else {
+			return nil, fmt.Errorf("invalid stock_quantity: %v", err)
+		}
+	}
+	if val := r.FormValue("status"); val != "" {
+		req.Status = &val
+	}
+	if val := r.FormValue("brand"); val != "" {
+		req.Brand = &val
+	}
+	if val := r.FormValue("slug"); val != "" {
+		req.Slug = &val
+	}
+	if val := r.FormValue("category_id"); val != "" {
+		if parsedUUID, err := uuid.Parse(val); err == nil {
+			req.CategoryID = &parsedUUID
+		} else {
+			return nil, fmt.Errorf("invalid category_id format: %v", err)
+		}
+	}
+	if val := r.FormValue("spec_highlights"); val != "" {
+		var specHighlights map[string]any
+		if err := json.Unmarshal([]byte(val), &specHighlights); err == nil {
+			req.SpecHighlights = &specHighlights
+		} else {
+			return nil, fmt.Errorf("invalid spec_highlights JSON: %w", err)
+		}
+	}
+	imageFiles := r.MultipartForm.File["images"]
+
+	product, err := h.productService.UpdateProductWithUpload(
+		r.Context(),
+		productID,
+		req,        // Pass the UpdateProductRequest struct
+		imageFiles, // Pass the []*multipart.FileHeader
+	)
+	if err != nil {
+		return nil, fmt.Errorf("service error during update with upload: %w", err)
+	}
+
+	return product, nil
+}
 func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	// Use the helper for parsing UUID from path
 	productID, err := ParseUUIDPathParam(w, r, "id")
@@ -373,7 +471,7 @@ func (h *ProductHandler) RegisterRoutes(r chi.Router) {
 
 	r.Get("/categories/{id}", h.GetCategory)
 
-	r.Put("/{id}", h.UpdateProduct)
+	r.Patch("/{id}", h.UpdateProduct)
 	r.Delete("/{id}", h.DeleteProduct)
 
 	r.Get("/search", h.SearchProducts)

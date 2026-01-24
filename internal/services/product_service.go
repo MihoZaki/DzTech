@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"mime/multipart"
+	"strings"
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
@@ -69,11 +70,7 @@ func (s *ProductService) CreateProduct(ctx context.Context, req models.CreatePro
 	return s.toProductModel(dbProduct), nil
 }
 
-func (s *ProductService) CreateProductWithUpload(
-	ctx context.Context,
-	req models.CreateProductRequest,
-	imageFileHeaders []*multipart.FileHeader, // Pass the file headers from the handler
-) (*models.Product, error) {
+func (s *ProductService) CreateProductWithUpload(ctx context.Context, req models.CreateProductRequest, imageFileHeaders []*multipart.FileHeader) (*models.Product, error) {
 	// Validate category exists
 	_, err := s.querier.GetCategory(ctx, req.CategoryID)
 	if err != nil {
@@ -266,52 +263,8 @@ func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category
 	return result, nil
 }
 
-func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req models.CreateProductRequest) (*models.Product, error) {
-	// Validate category exists
-	_, err := s.querier.GetCategory(ctx, req.CategoryID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("category not found")
-		}
-		return nil, err
-	}
-
-	// Marshal spec highlights to JSON
-	specHighlightsJSON, err := json.Marshal(req.SpecHighlights)
-	if err != nil {
-		return nil, errors.New("invalid spec highlights format")
-	}
-
-	// Marshal image urls to JSON
-	imageUrlsJSON, err := json.Marshal(req.ImageUrls)
-	if err != nil {
-		return nil, errors.New("invalid image urls format")
-	}
-
-	// Prepare update parameters
-	params := db.UpdateProductParams{
-		ProductID:        id,
-		CategoryID:       req.CategoryID,
-		Name:             req.Name,
-		Slug:             req.Slug,
-		Description:      nil,
-		ShortDescription: nil,
-		PriceCents:       req.PriceCents,
-		StockQuantity:    int32(req.StockQuantity),
-		Status:           req.Status,
-		Brand:            req.Brand,
-		ImageUrls:        imageUrlsJSON,
-		SpecHighlights:   specHighlightsJSON,
-	}
-
-	if req.Description != nil {
-		params.Description = req.Description
-	}
-	if req.ShortDescription != nil {
-		params.ShortDescription = req.ShortDescription
-	}
-
-	dbProduct, err := s.querier.UpdateProduct(ctx, params)
+func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req models.UpdateProductRequest) (*models.Product, error) {
+	existingDbProduct, err := s.querier.GetProduct(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
@@ -319,7 +272,141 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req mo
 		return nil, err
 	}
 
-	return s.toProductModel(dbProduct), nil
+	var finalImageUrls []string
+	if req.ImageUrls != nil {
+		finalImageUrls = *req.ImageUrls
+	} else {
+		if err := json.Unmarshal(existingDbProduct.ImageUrls, &finalImageUrls); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal existing image URLs: %w", err)
+		}
+	}
+
+	params, err := prepareUpdateProductParams(existingDbProduct, req, finalImageUrls)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare update parameters: %w", err)
+	}
+
+	if req.CategoryID != nil {
+		_, err := s.querier.GetCategory(ctx, *req.CategoryID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, errors.New("category not found")
+			}
+			return nil, err
+		}
+	}
+
+	updatedDbProduct, err := s.querier.UpdateProduct(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("product not found") // Should ideally not happen if GetProduct succeeded
+		}
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+			if strings.Contains(err.Error(), "slug") {
+				return nil, errors.New("product slug already exists")
+			}
+		}
+		return nil, fmt.Errorf("failed to update product in database: %w", err)
+	}
+
+	return s.toProductModel(updatedDbProduct), nil
+}
+
+func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID uuid.UUID, req models.UpdateProductRequest, imageFileHeaders []*multipart.FileHeader,
+) (*models.Product, error) {
+	existingDbProduct, err := s.querier.GetProduct(ctx, productID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("product not found")
+		}
+		return nil, fmt.Errorf("failed to get existing product: %w", err)
+	}
+
+	var finalImageUrls []string
+	if len(imageFileHeaders) > 0 {
+		// If new files are provided, REPLACE ALL existing images with the new ones ("Replace All" strategy).
+		for _, fileHeader := range imageFileHeaders {
+			file, err := fileHeader.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open uploaded file %s: %w", fileHeader.Filename, err)
+			}
+
+			url, err := s.storer.UploadFile(file, fileHeader)
+			file.Close() // Ensure file is closed after processing
+			if err != nil {
+				return nil, fmt.Errorf("failed to upload image %s: %w", fileHeader.Filename, err)
+			}
+			finalImageUrls = append(finalImageUrls, url)
+		}
+	} else {
+		if err := json.Unmarshal(existingDbProduct.ImageUrls, &finalImageUrls); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal existing image URLs: %w", err)
+		}
+	}
+
+	params, err := prepareUpdateProductParams(existingDbProduct, req, finalImageUrls)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare update parameters: %w", err)
+	}
+
+	if req.CategoryID != nil {
+		_, err := s.querier.GetCategory(ctx, *req.CategoryID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, errors.New("category not found")
+			}
+			return nil, err
+		}
+	}
+
+	// --- Call Querier ---
+	updatedDbProduct, err := s.querier.UpdateProduct(ctx, params)
+	if err != nil {
+		// Handle potential DB constraint errors (e.g., unique slug violation)
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") && strings.Contains(err.Error(), "slug") {
+			return nil, errors.New("product slug already exists")
+		}
+		// If DB update fails after upload, consider cleaning up uploaded files
+		// by calling s.storer.DeleteFile on the successfully uploaded URLs.
+		// This is complex and might be handled by a cleanup job later.
+		return nil, fmt.Errorf("failed to update product in database: %w", err)
+	}
+
+	return s.toProductModel(updatedDbProduct), nil
+}
+
+func coalesceUUIDPtr(newVal *uuid.UUID, existingVal uuid.UUID) uuid.UUID {
+	if newVal != nil {
+		return *newVal
+	}
+	return existingVal
+}
+
+func coalesceString(newVal *string, existingVal string) string {
+	if newVal != nil {
+		return *newVal
+	}
+	return existingVal
+}
+
+func coalesceStringPtr(newVal *string, existingVal *string) *string {
+	if newVal != nil {
+		return newVal
+	}
+	return existingVal
+}
+
+func coalesceInt64(newVal *int64, existingVal int64) int64 {
+	if newVal != nil {
+		return *newVal
+	}
+	return existingVal
+}
+func coalesceInt32(newVal *int, existingVal int32) int32 {
+	if newVal != nil {
+		return int32(*newVal)
+	}
+	return existingVal
 }
 
 func (s *ProductService) DeleteProduct(ctx context.Context, id uuid.UUID) error {
@@ -544,4 +631,39 @@ func prepareCreateProductParams(categoryID uuid.UUID, name, slug string, descrip
 	}
 
 	return params
+}
+func prepareUpdateProductParams(
+	existingDbProduct db.Product,
+	updates models.UpdateProductRequest,
+	newImageUrls []string,
+) (db.UpdateProductParams, error) {
+	imageUrlsJSON, err := json.Marshal(newImageUrls)
+	if err != nil {
+		return db.UpdateProductParams{}, errors.New("failed to marshal updated image URLs")
+	}
+
+	params := db.UpdateProductParams{
+		ProductID:        existingDbProduct.ID,
+		CategoryID:       coalesceUUIDPtr(updates.CategoryID, existingDbProduct.CategoryID),
+		Name:             coalesceString(updates.Name, existingDbProduct.Name),
+		Slug:             coalesceString(updates.Slug, existingDbProduct.Slug),
+		Description:      coalesceStringPtr(updates.Description, existingDbProduct.Description),
+		ShortDescription: coalesceStringPtr(updates.ShortDescription, existingDbProduct.ShortDescription),
+		PriceCents:       coalesceInt64(updates.PriceCents, existingDbProduct.PriceCents),
+		StockQuantity:    coalesceInt32(updates.StockQuantity, existingDbProduct.StockQuantity),
+		Status:           coalesceString(updates.Status, existingDbProduct.Status),
+		Brand:            coalesceString(updates.Brand, existingDbProduct.Brand),
+		ImageUrls:        imageUrlsJSON,
+		SpecHighlights:   existingDbProduct.SpecHighlights,
+	}
+
+	if updates.SpecHighlights != nil {
+		newSpecHighlightsJSON, err := json.Marshal(*updates.SpecHighlights)
+		if err != nil {
+			return params, errors.New("failed to marshal updated spec highlights")
+		}
+		params.SpecHighlights = newSpecHighlightsJSON
+	}
+
+	return params, nil
 }
