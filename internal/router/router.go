@@ -42,27 +42,46 @@ func New(cfg *config.Config) http.Handler {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, cfg.JWTSecret)
-	r.Route("/auth", func(r chi.Router) {
+	r.Route("/api/v1/auth", func(r chi.Router) {
 		authHandler.RegisterRoutes(r)
 	})
-	// Product routes
+
+	// Customer-facing Product routes (Public or Authenticated, depending on requirements)
+	// These routes do NOT require admin privileges.
 	productHandler := handlers.NewProductHandler(productService)
-	r.Route("/products", func(r chi.Router) {
-		productHandler.RegisterRoutes(r)
+	r.Route("/api/v1/products", func(r chi.Router) {
+		// These endpoints are for general use
+		r.Get("/", productHandler.ListAllProducts)            // List products (public)
+		r.Get("/{id}", productHandler.GetProduct)             // Get specific product (public)
+		r.Get("/search", productHandler.SearchProducts)       // Search products (public)
+		r.Get("/categories", productHandler.ListCategories)   // List categories (public)
+		r.Get("/categories/{id}", productHandler.GetCategory) // Get category (public)
 	})
 
-	cartHandler := handlers.NewCartHandler(cartService, productService, slog.Default())
-	// Apply JWT middleware to the /cart route group
+	// Admin-specific Product routes (require admin privileges)
+	// These routes use the SAME handlers but apply admin middleware.
 	r.Group(func(r chi.Router) {
-		// Apply JWT middleware here. It will add user to context if token is valid.
-		// If token is missing or invalid, context will lack user info, allowing guest flow.
-		// Pass the cfg containing JWTSecret to the middleware.
+		r.Use(middleware.JWTMiddleware(cfg))
+		r.Use(middleware.RequireAdmin)
+		adminProductHandler := handlers.NewProductHandler(productService) // Reuse handler
+		r.Route("/api/v1/admin/products", func(r chi.Router) {
+			adminProductHandler.RegisterRoutes(r) // Register ALL routes under /admin/products
+		})
+		// r.Route("/api/v1/admin/orders", func(r chi.Router) { /* ... */ })
+		// r.Route("/api/v1/admin/users", func(r chi.Router) { /* ... */ })
+		// r.Route("/api/v1/admin/delivery-services", func(r chi.Router) { /* ... */ })
+	})
+
+	// Cart routes - PROTECTED route group to enable user context and allow guest fallback
+	r.Group(func(r chi.Router) {
 		r.Use(middleware.JWTMiddleware(cfg))
 
-		r.Route("/cart", func(r chi.Router) {
+		r.Route("/api/v1/cart", func(r chi.Router) {
+			cartHandler := handlers.NewCartHandler(cartService, productService, slog.Default())
 			cartHandler.RegisterRoutes(r) // Register routes within the protected group
 		})
 	})
+
 	slog.Info("Router initialized")
 	return r
 }

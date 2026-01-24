@@ -17,8 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// JWTMiddleware validates the JWT token and stores user info in context.
-// Allows requests without a token (for guest access), but adds user info if a valid token is present.
 func JWTMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +80,18 @@ func JWTMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := models.GetUserFromContext(r.Context())
+		if !ok || user == nil || !user.IsAdmin {
+			slog.Warn("Access denied: Admin access required or user not found in context", "user_found_in_context", ok, "user_is_nil", user == nil)
+			utils.SendErrorResponse(w, http.StatusForbidden, "Forbidden", "Admin access required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ApplyMiddleware applies essential middleware for the application.
