@@ -148,7 +148,7 @@ func formatValidationError(err validator.FieldError) string {
 }
 
 func (h *AuthHandler) generateToken(userID, email string, isAdmin bool) (string, error) {
-	expiry := time.Now().Add(15 * time.Minute)
+	expiry := time.Now().Add(30 * time.Minute)
 	refreshExpiry := time.Now().Add(7 * 24 * time.Hour) // 7 days
 
 	claims := jwt.MapClaims{
