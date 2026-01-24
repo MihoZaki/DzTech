@@ -10,6 +10,7 @@ import (
 	"github.com/MihoZaki/DzTech/internal/handlers"
 	"github.com/MihoZaki/DzTech/internal/middleware"
 	"github.com/MihoZaki/DzTech/internal/services"
+	"github.com/MihoZaki/DzTech/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -32,12 +33,21 @@ func New(cfg *config.Config) http.Handler {
 		panic("database pool is not initialized")
 	}
 
+	// --- Initialize Storage Client ---
+	// Example for LocalStorage
+	localStoragePath := "./uploads"                                                // Define this in config or elsewhere
+	localPublicPath := "/uploads"                                                  // Define this in config or elsewhere
+	allowedTypes := []string{"image/jpeg", "image/png", "image/gif", "image/webp"} // Define in config
+	maxFileSize := int64(10 * 1024 * 1024)                                         // 10MB, define in config
+
+	storer := storage.NewLocalStorage(localStoragePath, localPublicPath, allowedTypes, maxFileSize)
+	 
 	// Initialize database querier (using SQLC generated code)
 	querier := db_queries.New(pool)
 
 	// Initialize services
 	userService := services.NewUserService(querier)
-	productService := services.NewProductService(querier)
+	productService := services.NewProductService(querier, storer)
 	cartService := services.NewCartService(querier, productService, slog.Default()) // Inject dependencies
 
 	// Initialize handlers

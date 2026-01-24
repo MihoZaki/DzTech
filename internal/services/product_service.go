@@ -4,22 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
+	"mime/multipart"
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/MihoZaki/DzTech/internal/storage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 type ProductService struct {
 	querier db.Querier
+	storer  storage.Storer
 }
 
-func NewProductService(querier db.Querier) *ProductService {
+func NewProductService(querier db.Querier, storer storage.Storer) *ProductService {
 	return &ProductService{
 		querier: querier,
+		storer:  storer,
 	}
 }
 
@@ -32,40 +37,93 @@ func (s *ProductService) CreateProduct(ctx context.Context, req models.CreatePro
 		}
 		return nil, err
 	}
-
 	// Marshal spec highlights to JSON
 	specHighlightsJSON, err := json.Marshal(req.SpecHighlights)
 	if err != nil {
 		return nil, errors.New("invalid spec highlights format")
 	}
-
 	// Marshal image urls to JSON
-	imageUrlsJSON, err := json.Marshal(req.ImageUrls)
+	imageUrlsJSON, err := json.Marshal(req.ImageUrls) // Uses URLs from request (JSON or handler processing)
 	if err != nil {
 		return nil, errors.New("invalid image urls format")
 	}
+	params := prepareCreateProductParams(
+		req.CategoryID,
+		req.Name,
+		req.Slug,
+		req.Description,      // Pass *string directly
+		req.ShortDescription, // Pass *string directly
+		req.PriceCents,
+		int32(req.StockQuantity),
+		req.Status,
+		req.Brand,
+		imageUrlsJSON,
+		specHighlightsJSON,
+	)
 
-	// Create product
-	params := db.CreateProductParams{
-		CategoryID:       req.CategoryID,
-		Name:             req.Name,
-		Slug:             req.Slug,
-		Description:      nil,
-		ShortDescription: nil,
-		PriceCents:       req.PriceCents,
-		StockQuantity:    int32(req.StockQuantity),
-		Status:           req.Status,
-		Brand:            req.Brand,
-		ImageUrls:        imageUrlsJSON,
-		SpecHighlights:   specHighlightsJSON,
+	dbProduct, err := s.querier.CreateProduct(ctx, params)
+	if err != nil {
+		return nil, err
 	}
 
-	if req.Description != nil {
-		params.Description = req.Description
+	return s.toProductModel(dbProduct), nil
+}
+
+func (s *ProductService) CreateProductWithUpload(
+	ctx context.Context,
+	req models.CreateProductRequest,
+	imageFileHeaders []*multipart.FileHeader, // Pass the file headers from the handler
+) (*models.Product, error) {
+	// Validate category exists
+	_, err := s.querier.GetCategory(ctx, req.CategoryID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("category not found")
+		}
+		return nil, err
 	}
-	if req.ShortDescription != nil {
-		params.ShortDescription = req.ShortDescription
+
+	// --- Process Files using the Storer (Business Logic) ---
+	var processedImageUrls []string
+	for _, fileHeader := range imageFileHeaders {
+		// Open the file
+		file, err := fileHeader.Open()
+		if err != nil {
+			return nil, fmt.Errorf("failed to open uploaded file %s: %w", fileHeader.Filename, err)
+		}
+
+		// Upload the file using the injected storer
+		url, err := s.storer.UploadFile(file, fileHeader)
+		file.Close() // Close the file after uploading (regardless of success/error)
+		if err != nil {
+			return nil, fmt.Errorf("failed to upload image %s: %w", fileHeader.Filename, err)
+		}
+
+		processedImageUrls = append(processedImageUrls, url)
 	}
+
+	req.ImageUrls = processedImageUrls // Assign the processed URLs back to the struct
+	specHighlightsJSON, err := json.Marshal(req.SpecHighlights)
+	if err != nil {
+		return nil, errors.New("invalid spec highlights format")
+	}
+	imageUrlsJSON, err := json.Marshal(req.ImageUrls) // Uses URLs from req (populated by service)
+	if err != nil {
+		return nil, errors.New("invalid image urls format")
+	}
+	params := prepareCreateProductParams(
+		req.CategoryID,
+		req.Name,
+		req.Slug,
+		req.Description,      // Pass *string directly
+		req.ShortDescription, // Pass *string directly
+		req.PriceCents,
+		int32(req.StockQuantity), // Convert int to int32
+		req.Status,
+		req.Brand,
+		imageUrlsJSON,
+		specHighlightsJSON,
+	)
 
 	dbProduct, err := s.querier.CreateProduct(ctx, params)
 	if err != nil {
@@ -460,4 +518,30 @@ func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 	}
 
 	return product
+}
+
+func prepareCreateProductParams(categoryID uuid.UUID, name, slug string, description, shortDescription *string, priceCents int64, stockQuantity int32, status, brand string, imageUrlsJSON, specHighlightsJSON []byte) db.CreateProductParams { // Changed description, shortDescription to *string
+	params := db.CreateProductParams{
+		CategoryID:       categoryID,
+		Name:             name,
+		Slug:             slug,
+		Description:      nil, // Will be set conditionally below
+		ShortDescription: nil, // Will be set conditionally below
+		PriceCents:       priceCents,
+		StockQuantity:    stockQuantity,
+		Status:           status,
+		Brand:            brand,
+		ImageUrls:        imageUrlsJSON,      // Already marshalled JSON bytes
+		SpecHighlights:   specHighlightsJSON, // Already marshalled JSON bytes
+	}
+
+	// Conditionally set optional fields based on whether the pointers are not nil
+	if description != nil {
+		params.Description = description
+	}
+	if shortDescription != nil {
+		params.ShortDescription = shortDescription
+	}
+
+	return params
 }

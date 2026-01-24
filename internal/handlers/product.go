@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -25,23 +26,118 @@ func NewProductHandler(productService *services.ProductService) *ProductHandler 
 }
 
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
-	var req models.CreateProductRequest
-	// Use the helper for decoding and validating
-	if err := DecodeAndValidateJSON(w, r, &req); err != nil {
-		slog.Debug("Create product request failed validation/decoding", "error", err)
-		return // Error response already sent by helper
+	contentType := r.Header.Get("Content-Type")
+	var createdProduct *models.Product
+	var err error
+
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		slog.Debug("Handling multipart product creation request")
+
+		createdProduct, err = h.createProductFromMultipart(r)
+	} else if contentType == "application/json" || strings.HasPrefix(contentType, "application/json;") {
+		slog.Debug("Handling JSON product creation request")
+
+		createdProduct, err = h.createProductFromJSON(w, r)
+	} else {
+		utils.SendErrorResponse(w, http.StatusUnsupportedMediaType, "Unsupported Media Type", fmt.Sprintf("Unsupported Content-Type: %s", contentType))
+		slog.Debug("Unsupported Content-Type received", "content_type", contentType)
+		return
 	}
 
-	product, err := h.productService.CreateProduct(r.Context(), req)
 	if err != nil {
 		slog.Error("Failed to create product", "error", err)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to create product")
 		return
 	}
 
+	slog.Debug("Successfully created product", "product_id", createdProduct.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(product)
+	json.NewEncoder(w).Encode(createdProduct)
+}
+
+func (h *ProductHandler) createProductFromMultipart(r *http.Request) (*models.Product, error) {
+	err := r.ParseMultipartForm(32 << 20) // 32 MB
+	if err != nil {
+		return nil, fmt.Errorf("error parsing multipart form: %w", err)
+	}
+	name := r.FormValue("name")
+	descriptionStr := r.FormValue("description")
+	var description *string
+	if descriptionStr != "" {
+		description = &descriptionStr
+	}
+	shortDescriptionStr := r.FormValue("short_description")
+	var shortDescription *string
+	if shortDescriptionStr != "" {
+		shortDescription = &shortDescriptionStr
+	}
+	priceCentsStr := r.FormValue("price_cents")
+	priceCents, err := strconv.ParseInt(priceCentsStr, 10, 64)
+	if err != nil || priceCents < 0 {
+		return nil, fmt.Errorf("invalid price_cents: %v", err)
+	}
+	stockQuantityStr := r.FormValue("stock_quantity")
+	stockQuantity, err := strconv.Atoi(stockQuantityStr)
+	if err != nil || stockQuantity < 0 {
+		return nil, fmt.Errorf("invalid stock_quantity: %v", err)
+	}
+	status := r.FormValue("status")
+	brand := r.FormValue("brand")
+	categoryIDStr := r.FormValue("category_id")
+	categoryID, err := uuid.Parse(categoryIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid category_id format: %v", err)
+	}
+	slug := r.FormValue("slug")
+
+	specHighlightsJSONStr := r.FormValue("spec_highlights")
+	var specHighlights map[string]any
+	if specHighlightsJSONStr != "" {
+		if err := json.Unmarshal([]byte(specHighlightsJSONStr), &specHighlights); err != nil {
+			return nil, fmt.Errorf("invalid spec_highlights JSON: %w", err)
+		}
+	} else {
+		specHighlights = make(map[string]any) // Initialize as empty map if not provided
+	}
+	imageFileHeaders := r.MultipartForm.File["images"] // Get []*multipart.FileHeader
+
+	req := models.CreateProductRequest{
+		CategoryID:       categoryID,
+		Name:             name,
+		Slug:             slug,
+		Description:      description,
+		ShortDescription: shortDescription,
+		PriceCents:       priceCents,
+		StockQuantity:    stockQuantity, // Keep as int, service converts to int32
+		Status:           status,
+		Brand:            brand,
+		ImageUrls:        []string{}, // Initialize as empty, will be filled by service
+		SpecHighlights:   specHighlights,
+	}
+
+	err = req.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("validation failed for text fields: %w", err)
+	}
+
+	return h.productService.CreateProductWithUpload(r.Context(), req, imageFileHeaders)
+}
+
+func (h *ProductHandler) createProductFromJSON(w http.ResponseWriter, r *http.Request) (*models.Product, error) {
+	var req models.CreateProductRequest
+
+	if err := DecodeAndValidateJSON(w, r, &req); err != nil {
+		slog.Debug("Create product request failed validation/decoding", "error", err)
+		return nil, err
+	}
+
+	product, err := h.productService.CreateProduct(r.Context(), req)
+	if err != nil {
+		return nil, err
+	}
+
+	return product, nil
 }
 
 func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
@@ -271,14 +367,14 @@ func (h *ProductHandler) GetCategory(w http.ResponseWriter, r *http.Request) {
 func (h *ProductHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/", h.CreateProduct)
 	r.Get("/{id}", h.GetProduct)
-	// Add new routes using the specific querier functions
-	r.Get("/", h.ListAllProducts)          // Uses basic ListProducts function (no search)
-	r.Get("/categories", h.ListCategories) // Uses ListCategories function
-	// Add new category endpoint that handles both ID and slug
-	r.Get("/categories/{id}", h.GetCategory) // Smart resolution: UUID or slug
-	// Add update and delete routes
-	r.Put("/{id}", h.UpdateProduct)    // Update product
-	r.Delete("/{id}", h.DeleteProduct) // Delete product
-	// Add search route
-	r.Get("/search", h.SearchProducts) // Advanced product search
+
+	r.Get("/", h.ListAllProducts)
+	r.Get("/categories", h.ListCategories)
+
+	r.Get("/categories/{id}", h.GetCategory)
+
+	r.Put("/{id}", h.UpdateProduct)
+	r.Delete("/{id}", h.DeleteProduct)
+
+	r.Get("/search", h.SearchProducts)
 }
