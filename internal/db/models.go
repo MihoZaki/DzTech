@@ -37,6 +37,51 @@ type Category struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+// Stores available delivery service options.
+type DeliveryService struct {
+	ID uuid.UUID `json:"id"`
+	// Unique name identifying the delivery service.
+	Name string `json:"name"`
+	// Optional description of the delivery service.
+	Description *string `json:"description"`
+	// Base cost of the delivery service in cents.
+	BaseCostCents int64 `json:"base_cost_cents"`
+	// Estimated number of days for delivery.
+	EstimatedDays *int32 `json:"estimated_days"`
+	// Indicates if the delivery service is currently offered.
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Order struct {
+	ID                uuid.UUID          `json:"id"`
+	UserID            uuid.UUID          `json:"user_id"`
+	Status            string             `json:"status"`
+	TotalAmountCents  int64              `json:"total_amount_cents"`
+	PaymentMethod     string             `json:"payment_method"`
+	ShippingAddress   []byte             `json:"shipping_address"`
+	BillingAddress    []byte             `json:"billing_address"`
+	Notes             *string            `json:"notes"`
+	DeliveryServiceID uuid.UUID          `json:"delivery_service_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt       pgtype.Timestamptz `json:"cancelled_at"`
+}
+
+type OrderItem struct {
+	ID            uuid.UUID          `json:"id"`
+	OrderID       uuid.UUID          `json:"order_id"`
+	ProductID     uuid.UUID          `json:"product_id"`
+	ProductName   string             `json:"product_name"`
+	PriceCents    int64              `json:"price_cents"`
+	Quantity      int32              `json:"quantity"`
+	SubtotalCents *int64             `json:"subtotal_cents"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Product struct {
 	ID               uuid.UUID          `json:"id"`
 	CategoryID       uuid.UUID          `json:"category_id"`

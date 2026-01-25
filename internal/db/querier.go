@@ -11,19 +11,37 @@ import (
 )
 
 type Querier interface {
+	// Updates the status of an order to 'cancelled' and sets the cancelled_at timestamp.
+	// This is a soft deletion conceptually.
+	CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
 	CountAllProducts(ctx context.Context) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	// Cart Item Management
 	CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CreateCartItemRow, error)
+	CreateDeliveryService(ctx context.Context, arg CreateDeliveryServiceParams) (DeliveryService, error)
 	CreateGuestCart(ctx context.Context, sessionID *string) (Cart, error)
+	// Creates a new order and returns its details.
+	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	// Creates a new order item and returns its details.
+	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Cart Management
 	CreateUserCart(ctx context.Context, userID uuid.UUID) (Cart, error)
+	// Attempts to decrement the stock_quantity for a product by a given amount.
+	// Succeeds only if the resulting stock_quantity would be >= 0.
+	// Returns the updated product row if successful, or an error if insufficient stock.
+	// Note: The RETURNING clause might not be strictly necessary if we only care about RowsAffected.
+	// If RETURNING is omitted, the querier function will likely return sql.Result.
+	// Let's include RETURNING to get the updated stock if needed for debugging/logging.
+	DecrementStockIfSufficient(ctx context.Context, arg DecrementStockIfSufficientParams) (Product, error)
 	DeleteCart(ctx context.Context, cartID uuid.UUID) error
 	// Cart Cleanup
 	DeleteCartItem(ctx context.Context, itemID uuid.UUID) error
+	// Soft delete could be achieved by updating is_active to FALSE
+	// For hard delete:
+	DeleteDeliveryService(ctx context.Context, id uuid.UUID) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
 	GetCartBySessionID(ctx context.Context, sessionID *string) (GetCartBySessionIDRow, error)
@@ -36,18 +54,48 @@ type Querier interface {
 	GetCartWithItemsAndProducts(ctx context.Context, cartID uuid.UUID) ([]GetCartWithItemsAndProductsRow, error)
 	GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
+	GetDeliveryService(ctx context.Context, arg GetDeliveryServiceParams) (DeliveryService, error)
+	// Allow filtering by active status
+	GetDeliveryServiceByName(ctx context.Context, arg GetDeliveryServiceByNameParams) (DeliveryService, error)
+	// Retrieves an order by its ID.
+	GetOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
+	// Retrieves an order by its ID along with all its items.
+	// This query uses a join and might return multiple rows if there are items.
+	// The service layer needs to aggregate these rows into a single Order object with a slice of OrderItems.
+	GetOrderByIDWithItems(ctx context.Context, orderID uuid.UUID) ([]GetOrderByIDWithItemsRow, error)
+	// Retrieves all items for a specific order ID.
+	GetOrderItemsByOrderID(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error)
 	GetProduct(ctx context.Context, productID uuid.UUID) (Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (Product, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	// Increments the stock_quantity for a product by a given amount.
+	// Suitable for releasing stock back when cancelling an order.
+	IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error)
+	// Retrieves a paginated list of all orders, optionally filtered by status or user_id.
+	// Intended for admin use. Includes cancelled orders.
+	// If filter_user_id is the zero UUID ('00000000-0000-0000-0000-000000000000'), it retrieves orders for all users.
+	// If filter_status is an empty string (''), it retrieves orders of all statuses.
+	ListAllOrders(ctx context.Context, arg ListAllOrdersParams) ([]Order, error)
 	ListCategories(ctx context.Context) ([]Category, error)
+	// Allow filtering by active status
+	ListDeliveryServices(ctx context.Context, arg ListDeliveryServicesParams) ([]DeliveryService, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error)
 	ListProductsWithCategory(ctx context.Context, arg ListProductsWithCategoryParams) ([]ListProductsWithCategoryRow, error)
 	ListProductsWithCategoryDetail(ctx context.Context, arg ListProductsWithCategoryDetailParams) ([]ListProductsWithCategoryDetailRow, error)
+	// Retrieves a paginated list of orders for a specific user, optionally filtered by status.
+	// Excludes cancelled orders by default. Admins should use ListAllOrders.
+	ListUserOrders(ctx context.Context, arg ListUserOrdersParams) ([]Order, error)
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)
+	UpdateDeliveryService(ctx context.Context, arg UpdateDeliveryServiceParams) (DeliveryService, error)
+	// Updates other details of an order (notes, addresses - if allowed).
+	// Example updating notes and timestamps
+	UpdateOrder(ctx context.Context, arg UpdateOrderParams) (Order, error)
+	// Updates the status of an order.
+	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 }
 

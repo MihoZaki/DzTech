@@ -41,14 +41,14 @@ func New(cfg *config.Config) http.Handler {
 	maxFileSize := int64(10 * 1024 * 1024)                                         // 10MB, define in config
 
 	storer := storage.NewLocalStorage(localStoragePath, localPublicPath, allowedTypes, maxFileSize)
-	 
+
 	// Initialize database querier (using SQLC generated code)
 	querier := db_queries.New(pool)
-
 	// Initialize services
 	userService := services.NewUserService(querier)
 	productService := services.NewProductService(querier, storer)
 	cartService := services.NewCartService(querier, productService, slog.Default()) // Inject dependencies
+	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(userService, cfg.JWTSecret)
@@ -77,9 +77,10 @@ func New(cfg *config.Config) http.Handler {
 		r.Route("/api/v1/admin/products", func(r chi.Router) {
 			adminProductHandler.RegisterRoutes(r) // Register ALL routes under /admin/products
 		})
-		// r.Route("/api/v1/admin/orders", func(r chi.Router) { /* ... */ })
-		// r.Route("/api/v1/admin/users", func(r chi.Router) { /* ... */ })
-		// r.Route("/api/v1/admin/delivery-services", func(r chi.Router) { /* ... */ })
+		adminOrderHandler := handlers.NewOrderHandler(orderService, slog.Default())
+		r.Route("/api/v1/admin/orders", func(r chi.Router) {
+			adminOrderHandler.RegisterAdminRoutes(r)
+		})
 	})
 
 	// Cart routes - PROTECTED route group to enable user context and allow guest fallback
@@ -89,6 +90,11 @@ func New(cfg *config.Config) http.Handler {
 		r.Route("/api/v1/cart", func(r chi.Router) {
 			cartHandler := handlers.NewCartHandler(cartService, productService, slog.Default())
 			cartHandler.RegisterRoutes(r) // Register routes within the protected group
+		})
+
+		r.Route("/api/v1/orders", func(r chi.Router) {
+			orderHandler := handlers.NewOrderHandler(orderService, slog.Default())
+			orderHandler.RegisterUserRoutes(r)
 		})
 	})
 

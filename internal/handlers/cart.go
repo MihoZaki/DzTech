@@ -14,14 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// CartHandler manages HTTP requests for cart operations.
 type CartHandler struct {
 	cartService    *services.CartService
 	productService *services.ProductService // Might be needed for future operations
 	logger         *slog.Logger
 }
 
-// NewCartHandler creates a new instance of CartHandler.
 func NewCartHandler(cartService *services.CartService, productService *services.ProductService, logger *slog.Logger) *CartHandler {
 	return &CartHandler{
 		cartService:    cartService,
@@ -29,26 +27,19 @@ func NewCartHandler(cartService *services.CartService, productService *services.
 		logger:         logger,
 	}
 }
-
-// RegisterRoutes registers the cart-related endpoints with the Chi router.
-// This handler only implements GET /cart initially, configured as a public route for guests.
 func (h *CartHandler) RegisterRoutes(r chi.Router) {
-	// No JWT middleware applied here for guest testing
 	r.Get("/", h.GetCart)                            // GET /cart
 	r.Post("/items", h.AddItem)                      // POST /cart/items <- Add this line
 	r.Patch("/items/{itemID}", h.UpdateItemQuantity) // PATCH /cart/items/{id}
 	r.Delete("/items/{itemID}", h.RemoveItem)        // DELETE /cart/items/{id} - Add this line
 	r.Delete("/", h.ClearCart)                       // DELETE /cart - Add this line
-	// Future routes like PATCH /items/{id}, DELETE /items/{id}, etc., will go here.
-	// They might require auth later.
 }
 
 // getSessionIDFromCookie extracts the session ID from the "session_id" cookie.
 // It logs if the cookie is missing but doesn't send an error response.
 func (h *CartHandler) getSessionIDFromCookie(r *http.Request) (string, bool) {
-	cookie, err := r.Cookie("session_id") // Change "X-Session-ID" header to "session_id" cookie
+	cookie, err := r.Cookie("session_id")
 	if err != nil {
-		// http.ErrNoCookie is returned if the cookie doesn't exist
 		h.logger.Debug("Session cookie not found in request", "error", err)
 		return "", false
 	}

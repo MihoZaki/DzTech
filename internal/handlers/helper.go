@@ -76,9 +76,6 @@ func MapServiceErrToHTTPStatus(err error) (int, string) {
 	if strings.Contains(errMsg, "stock") || strings.Contains(errMsg, "check") || strings.Contains(errMsg, "constraint") {
 		return http.StatusConflict, "Request conflicts with current state (e.g., insufficient stock)."
 	}
-	// Add other specific mappings...
-
-	// Default to Internal Server Error for unmapped errors
 	return http.StatusInternalServerError, "An internal server error occurred."
 }
 
