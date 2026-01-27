@@ -100,6 +100,17 @@ type Product struct {
 	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type RefreshToken struct {
+	ID              uuid.UUID          `json:"id"`
+	UserID          uuid.UUID          `json:"user_id"`
+	TokenIdentifier string             `json:"token_identifier"`
+	TokenHash       string             `json:"token_hash"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	Revoked         *bool              `json:"revoked"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type SchemaMigration struct {
 	Version   int64              `json:"version"`
 	IsApplied bool               `json:"is_applied"`

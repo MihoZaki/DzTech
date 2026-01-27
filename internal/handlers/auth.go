@@ -1,28 +1,29 @@
+// internal/handlers/auth_handler.go
+
 package handlers
 
 import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/MihoZaki/DzTech/internal/services"
 	"github.com/MihoZaki/DzTech/internal/utils"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/golang-jwt/jwt/v5"
+	// Import the models package containing RefreshRequest, RefreshResponse, LogoutRequest, LoginResponse
+	// Assuming they are in the same package or correctly imported path
 )
 
 type AuthHandler struct {
-	userService *services.UserService
-	jwtSecret   []byte
+	authService *services.AuthService // Use AuthService instead of UserService directly for auth logic
 }
 
-func NewAuthHandler(userService *services.UserService, jwtSecret string) *AuthHandler {
+func NewAuthHandler(authService *services.AuthService) *AuthHandler { // Take AuthService
 	return &AuthHandler{
-		userService: userService,
-		jwtSecret:   []byte(jwtSecret),
+		authService: authService,
 	}
 }
 
@@ -44,8 +45,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call service layer for registration - now returns uuid.UUID
-	userID, err := h.userService.Register(r.Context(), req.Email, req.Password, req.FullName)
+	// Call AuthService for registration - now expects LoginResponse
+	loginResp, err := h.authService.Register(r.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
 		if err.Error() == "user already exists" {
 			utils.SendErrorResponse(w, http.StatusConflict, "User Already Exists", "A user with this email already exists")
@@ -56,29 +57,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("User registered successfully", "user_id", userID, "email", req.Email)
+	slog.Info("User registered successfully", "user_id", loginResp.User.ID, "email", req.Email)
 
-	// Generate JWT token - convert uuid.UUID to string for the token
-	token, err := h.generateToken(userID.String(), req.Email, false) // assuming not admin
-	if err != nil {
-		slog.Error("Failed to generate token", "error", err, "user_id", userID)
-		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
-		return
-	}
-
-	// Create response - use the uuid.UUID directly
-	response := models.LoginResponse{
-		Token: token,
-		User: models.User{
-			ID:       userID, // Now uuid.UUID
-			Email:    req.Email,
-			FullName: req.FullName,
-			IsAdmin:  false,
-		},
-	}
-
+	// Send the response containing the access/refresh tokens and user details
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusCreated)    // 201 Created for registration
+	json.NewEncoder(w).Encode(loginResp) // Encode LoginResponse
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -99,8 +83,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use service layer to authenticate user
-	user, err := h.userService.Authenticate(r.Context(), req.Email, req.Password)
+	// Use AuthService to handle login - now expects LoginResponse
+	loginResp, err := h.authService.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if err.Error() == "invalid credentials" {
 			slog.Info("Login failed: invalid credentials", "email", req.Email)
@@ -112,24 +96,76 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("User logged in successfully", "user_id", user.ID, "email", user.Email)
+	slog.Info("User logged in successfully", "user_id", loginResp.User.ID, "email", loginResp.User.Email)
 
-	// Generate JWT token - convert uuid.UUID to string for the token
-	token, err := h.generateToken(user.ID.String(), user.Email, user.IsAdmin)
-	if err != nil {
-		slog.Error("Failed to generate token", "error", err, "user_id", user.ID)
-		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate token")
+	// Send the response containing the access/refresh tokens and user details
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(loginResp) // Encode LoginResponse
+}
+
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req models.RefreshRequest // Use the new model
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Invalid JSON", "Request body contains invalid JSON")
 		return
 	}
 
-	// Create response - user is already of type *models.User with uuid.UUID ID
-	response := models.LoginResponse{
-		Token: token,
-		User:  *user, // user is already of type *models.User with uuid.UUID ID
+	// Validate the request struct (optional, if using validator tags)
+	if err := req.Validate(); err != nil {
+		fieldErrors := make(map[string]string)
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			for _, err := range validationErrors {
+				fieldErrors[err.Field()] = formatValidationError(err)
+			}
+		}
+		utils.SendValidationError(w, fieldErrors)
+		return
 	}
 
+	// Call AuthService to perform the refresh logic
+	newTokens, err := h.authService.Refresh(r.Context(), req.RefreshToken)
+	if err != nil {
+		slog.Error("Failed to refresh token", "error", err)
+		// Return 401 for invalid/expired/revoked token
+		utils.SendErrorResponse(w, http.StatusUnauthorized, "Unauthorized", err.Error())
+		return
+	}
+
+	// Send the response containing the new access/refresh tokens
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusOK)         // 200 OK
+	json.NewEncoder(w).Encode(newTokens) // Encode RefreshResponse
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req models.LogoutRequest // Use the new model
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Invalid JSON", "Request body contains invalid JSON")
+		return
+	}
+
+	// Validate the request struct (optional, if using validator tags)
+	if err := req.Validate(); err != nil {
+		fieldErrors := make(map[string]string)
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			for _, err := range validationErrors {
+				fieldErrors[err.Field()] = formatValidationError(err)
+			}
+		}
+		utils.SendValidationError(w, fieldErrors)
+		return
+	}
+
+	// Call AuthService to perform the logout/revocation logic
+	err := h.authService.Logout(r.Context(), req.RefreshToken)
+	if err != nil {
+		slog.Error("Failed to logout", "error", err)
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to logout")
+		return
+	}
+
+	// Send 204 No Content on successful logout
+	w.WriteHeader(http.StatusNoContent) // 204 No Content
 }
 
 func formatValidationError(err validator.FieldError) string {
@@ -147,29 +183,9 @@ func formatValidationError(err validator.FieldError) string {
 	}
 }
 
-func (h *AuthHandler) generateToken(userID, email string, isAdmin bool) (string, error) {
-	expiry := time.Now().Add(30 * time.Minute)
-	refreshExpiry := time.Now().Add(7 * 24 * time.Hour) // 7 days
-
-	claims := jwt.MapClaims{
-		"user_id":     userID, // This should be string for the token
-		"email":       email,
-		"is_admin":    isAdmin,
-		"exp":         expiry.Unix(),
-		"refresh_exp": refreshExpiry.Unix(),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(h.jwtSecret)
-}
-
-func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	slog.Warn("Refresh endpoint not implemented")
-	utils.SendErrorResponse(w, http.StatusNotImplemented, "Not Implemented", "Refresh endpoint not implemented")
-}
-
 func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/register", h.Register)
 	r.Post("/login", h.Login)
 	r.Post("/refresh", h.Refresh)
+	r.Post("/logout", h.Logout) // Add logout route
 }

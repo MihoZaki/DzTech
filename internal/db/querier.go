@@ -26,6 +26,8 @@ type Querier interface {
 	// Creates a new order item and returns its details.
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
+	// Inserts a new refresh token identifier and its bcrypt hash into the database.
+	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Cart Management
 	CreateUserCart(ctx context.Context, userID uuid.UUID) (Cart, error)
@@ -42,6 +44,10 @@ type Querier interface {
 	// Soft delete could be achieved by updating is_active to FALSE
 	// For hard delete:
 	DeleteDeliveryService(ctx context.Context, id uuid.UUID) error
+	// Deletes refresh tokens that have expired and are not revoked.
+	// This can be run periodically as a cleanup job if needed.
+	// Note: Revoked tokens might be kept for audit purposes, so this only cleans up truly expired ones.
+	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
 	GetCartBySessionID(ctx context.Context, sessionID *string) (GetCartBySessionIDRow, error)
@@ -69,6 +75,9 @@ type Querier interface {
 	GetProductBySlug(ctx context.Context, slug string) (Product, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	// Finds a valid (non-expired, non-revoked) refresh token record by its identifier.
+	// The bcrypt hash verification happens in Go code.
+	GetValidRefreshTokenRecord(ctx context.Context, tokenIdentifier string) (RefreshToken, error)
 	// Increments the stock_quantity for a product by a given amount.
 	// Suitable for releasing stock back when cancelling an order.
 	IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error)
@@ -87,6 +96,12 @@ type Querier interface {
 	// Retrieves a paginated list of orders for a specific user, optionally filtered by status.
 	// Excludes cancelled orders by default. Admins should use ListAllOrders.
 	ListUserOrders(ctx context.Context, arg ListUserOrdersParams) ([]Order, error)
+	// Ensure it hasn't been revoked
+	// Marks a specific refresh token as revoked using its identifier.
+	RevokeRefreshTokenByIdentifier(ctx context.Context, tokenIdentifier string) error
+	// Revokes all active refresh tokens for a specific user.
+	// Useful for "logout all devices" or account compromise scenarios.
+	RevokeRefreshTokensByUser(ctx context.Context, userID uuid.UUID) error
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)

@@ -3,6 +3,7 @@ package router
 import (
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/MihoZaki/DzTech/db"
 	"github.com/MihoZaki/DzTech/internal/config"
@@ -15,6 +16,15 @@ import (
 )
 
 func New(cfg *config.Config) http.Handler {
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
+
+	// Create a new logger with the handler
+	logger := slog.New(handler)
+
+	// Set it as the default logger (optional)
+	slog.SetDefault(logger)
 	r := chi.NewRouter()
 
 	// Apply middleware
@@ -49,9 +59,10 @@ func New(cfg *config.Config) http.Handler {
 	productService := services.NewProductService(querier, storer)
 	cartService := services.NewCartService(querier, productService, slog.Default()) // Inject dependencies
 	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
+	authService := services.NewAuthService(querier, userService, cfg.JWTSecret, slog.Default())
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(userService, cfg.JWTSecret)
+	authHandler := handlers.NewAuthHandler(authService)
 	r.Route("/api/v1/auth", func(r chi.Router) {
 		authHandler.RegisterRoutes(r)
 	})
