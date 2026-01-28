@@ -49,6 +49,9 @@ type Querier interface {
 	// Note: Revoked tokens might be kept for audit purposes, so this only cleans up truly expired ones.
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
+	// Retrieves all delivery services that are currently active.
+	// Suitable for user-facing contexts like checkout.
+	GetActiveDeliveryServices(ctx context.Context) ([]DeliveryService, error)
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
 	GetCartBySessionID(ctx context.Context, sessionID *string) (GetCartBySessionIDRow, error)
 	GetCartByUserID(ctx context.Context, userID uuid.UUID) (GetCartByUserIDRow, error)
@@ -61,6 +64,9 @@ type Querier interface {
 	GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
 	GetDeliveryService(ctx context.Context, arg GetDeliveryServiceParams) (DeliveryService, error)
+	// Retrieves a delivery service by its ID, regardless of its active status.
+	// Suitable for admin operations.
+	GetDeliveryServiceByID(ctx context.Context, id uuid.UUID) (DeliveryService, error)
 	// Allow filtering by active status
 	GetDeliveryServiceByName(ctx context.Context, arg GetDeliveryServiceByNameParams) (DeliveryService, error)
 	// Retrieves an order by its ID.
@@ -81,14 +87,15 @@ type Querier interface {
 	// Increments the stock_quantity for a product by a given amount.
 	// Suitable for releasing stock back when cancelling an order.
 	IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error)
+	// Retrieves delivery services, optionally filtered by active status.
+	// Suitable for admin operations.
+	ListAllDeliveryServices(ctx context.Context, arg ListAllDeliveryServicesParams) ([]DeliveryService, error)
 	// Retrieves a paginated list of all orders, optionally filtered by status or user_id.
 	// Intended for admin use. Includes cancelled orders.
 	// If filter_user_id is the zero UUID ('00000000-0000-0000-0000-000000000000'), it retrieves orders for all users.
 	// If filter_status is an empty string (''), it retrieves orders of all statuses.
 	ListAllOrders(ctx context.Context, arg ListAllOrdersParams) ([]Order, error)
 	ListCategories(ctx context.Context) ([]Category, error)
-	// Allow filtering by active status
-	ListDeliveryServices(ctx context.Context, arg ListDeliveryServicesParams) ([]DeliveryService, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error)
 	ListProductsWithCategory(ctx context.Context, arg ListProductsWithCategoryParams) ([]ListProductsWithCategoryRow, error)
@@ -105,6 +112,7 @@ type Querier interface {
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)
+	// Allow filtering by active status
 	UpdateDeliveryService(ctx context.Context, arg UpdateDeliveryServiceParams) (DeliveryService, error)
 	// Updates other details of an order (notes, addresses - if allowed).
 	// Example updating notes and timestamps

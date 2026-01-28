@@ -1,3 +1,27 @@
+-- name: GetDeliveryServiceByID :one
+-- Retrieves a delivery service by its ID, regardless of its active status.
+-- Suitable for admin operations.
+SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
+FROM delivery_services
+WHERE id = sqlc.arg(id);
+
+-- name: GetActiveDeliveryServices :many
+-- Retrieves all delivery services that are currently active.
+-- Suitable for user-facing contexts like checkout.
+SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
+FROM delivery_services
+WHERE is_active = TRUE
+ORDER BY name ASC;
+
+-- name: ListAllDeliveryServices :many
+-- Retrieves delivery services, optionally filtered by active status.
+-- Suitable for admin operations.
+SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
+FROM delivery_services
+WHERE is_active = sqlc.arg(active_filter) -- Filter by active status
+ORDER BY name ASC
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
 -- name: CreateDeliveryService :one
 INSERT INTO delivery_services (
     name, description, base_cost_cents, estimated_days, is_active
@@ -15,13 +39,6 @@ WHERE id = sqlc.arg(id) AND is_active = sqlc.arg(active_filter); -- Allow filter
 SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
 FROM delivery_services
 WHERE name = sqlc.arg(name) AND is_active = sqlc.arg(active_filter); -- Allow filtering by active status
-
--- name: ListDeliveryServices :many
-SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
-FROM delivery_services
-WHERE is_active = sqlc.arg(active_filter) -- Filter by active status
-ORDER BY name ASC
-LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: UpdateDeliveryService :one
 UPDATE delivery_services

@@ -60,6 +60,7 @@ func New(cfg *config.Config) http.Handler {
 	cartService := services.NewCartService(querier, productService, slog.Default()) // Inject dependencies
 	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
 	authService := services.NewAuthService(querier, userService, cfg.JWTSecret, slog.Default())
+	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -92,6 +93,11 @@ func New(cfg *config.Config) http.Handler {
 		r.Route("/api/v1/admin/orders", func(r chi.Router) {
 			adminOrderHandler.RegisterAdminRoutes(r)
 		})
+		adminDeliveryHandler := handlers.NewDeliveryServiceHandler(deliveryService, slog.Default())
+		r.Route("/api/v1/admin/delivery-services", func(r chi.Router) {
+			adminDeliveryHandler.RegisterRoutes(r)
+		})
+
 	})
 
 	// Cart routes - PROTECTED route group to enable user context and allow guest fallback
@@ -106,6 +112,11 @@ func New(cfg *config.Config) http.Handler {
 		r.Route("/api/v1/orders", func(r chi.Router) {
 			orderHandler := handlers.NewOrderHandler(orderService, slog.Default())
 			orderHandler.RegisterUserRoutes(r)
+		})
+		r.Route("/api/v1/delivery-options", func(r chi.Router) {
+			// Inject the DeliveryServiceService into the new handler
+			deliveryOptionsHandler := handlers.NewDeliveryOptionsHandler(deliveryService, slog.Default())
+			deliveryOptionsHandler.RegisterRoutes(r)
 		})
 	})
 

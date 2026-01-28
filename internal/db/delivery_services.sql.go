@@ -61,6 +61,44 @@ func (q *Queries) DeleteDeliveryService(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+const getActiveDeliveryServices = `-- name: GetActiveDeliveryServices :many
+SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
+FROM delivery_services
+WHERE is_active = TRUE
+ORDER BY name ASC
+`
+
+// Retrieves all delivery services that are currently active.
+// Suitable for user-facing contexts like checkout.
+func (q *Queries) GetActiveDeliveryServices(ctx context.Context) ([]DeliveryService, error) {
+	rows, err := q.db.Query(ctx, getActiveDeliveryServices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeliveryService
+	for rows.Next() {
+		var i DeliveryService
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.BaseCostCents,
+			&i.EstimatedDays,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDeliveryService = `-- name: GetDeliveryService :one
 SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
 FROM delivery_services
@@ -74,6 +112,30 @@ type GetDeliveryServiceParams struct {
 
 func (q *Queries) GetDeliveryService(ctx context.Context, arg GetDeliveryServiceParams) (DeliveryService, error) {
 	row := q.db.QueryRow(ctx, getDeliveryService, arg.ID, arg.ActiveFilter)
+	var i DeliveryService
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.BaseCostCents,
+		&i.EstimatedDays,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDeliveryServiceByID = `-- name: GetDeliveryServiceByID :one
+SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
+FROM delivery_services
+WHERE id = $1
+`
+
+// Retrieves a delivery service by its ID, regardless of its active status.
+// Suitable for admin operations.
+func (q *Queries) GetDeliveryServiceByID(ctx context.Context, id uuid.UUID) (DeliveryService, error) {
+	row := q.db.QueryRow(ctx, getDeliveryServiceByID, id)
 	var i DeliveryService
 	err := row.Scan(
 		&i.ID,
@@ -117,8 +179,7 @@ func (q *Queries) GetDeliveryServiceByName(ctx context.Context, arg GetDeliveryS
 	return i, err
 }
 
-const listDeliveryServices = `-- name: ListDeliveryServices :many
-
+const listAllDeliveryServices = `-- name: ListAllDeliveryServices :many
 SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
 FROM delivery_services
 WHERE is_active = $1 -- Filter by active status
@@ -126,15 +187,16 @@ ORDER BY name ASC
 LIMIT $3 OFFSET $2
 `
 
-type ListDeliveryServicesParams struct {
+type ListAllDeliveryServicesParams struct {
 	ActiveFilter bool  `json:"active_filter"`
 	PageOffset   int32 `json:"page_offset"`
 	PageLimit    int32 `json:"page_limit"`
 }
 
-// Allow filtering by active status
-func (q *Queries) ListDeliveryServices(ctx context.Context, arg ListDeliveryServicesParams) ([]DeliveryService, error) {
-	rows, err := q.db.Query(ctx, listDeliveryServices, arg.ActiveFilter, arg.PageOffset, arg.PageLimit)
+// Retrieves delivery services, optionally filtered by active status.
+// Suitable for admin operations.
+func (q *Queries) ListAllDeliveryServices(ctx context.Context, arg ListAllDeliveryServicesParams) ([]DeliveryService, error) {
+	rows, err := q.db.Query(ctx, listAllDeliveryServices, arg.ActiveFilter, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +225,7 @@ func (q *Queries) ListDeliveryServices(ctx context.Context, arg ListDeliveryServ
 }
 
 const updateDeliveryService = `-- name: UpdateDeliveryService :one
+
 UPDATE delivery_services
 SET
     name = COALESCE($1, name),
@@ -184,6 +247,7 @@ type UpdateDeliveryServiceParams struct {
 	ID            uuid.UUID `json:"id"`
 }
 
+// Allow filtering by active status
 func (q *Queries) UpdateDeliveryService(ctx context.Context, arg UpdateDeliveryServiceParams) (DeliveryService, error) {
 	row := q.db.QueryRow(ctx, updateDeliveryService,
 		arg.Name,
