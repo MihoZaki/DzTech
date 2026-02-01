@@ -13,6 +13,7 @@ import (
 	"github.com/MihoZaki/DzTech/internal/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -101,6 +102,13 @@ func ApplyMiddleware(r *chi.Mux) {
 	r.Use(middleware.RealIP)    // Important for rate limiting, analytics and tracing
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 	// Logging middleware with structured logging
 	r.Use(middleware.Logger)
 
