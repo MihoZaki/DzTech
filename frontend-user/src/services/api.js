@@ -2,7 +2,6 @@ const API_BASE_URL = "http://localhost:8080/api/v1";
 
 let categoriesCache = null;
 
-// Fetch categories from the API
 export const fetchCategories = async () => {
   if (categoriesCache) {
     return categoriesCache;
@@ -16,7 +15,7 @@ export const fetchCategories = async () => {
       );
     }
     const data = await response.json();
-    console.log("Raw Categories Response:", data); // Log the raw response
+    // console.log("Raw Categories Response:", data); // Log the raw response
     categoriesCache = data; // Cache the result
     return data;
   } catch (error) {
@@ -58,11 +57,11 @@ export const fetchProducts = async () => {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
     const responseData = await response.json(); // Get the full response object
-    console.log("Raw Products Response:", responseData); // Log the raw response
-
+    // console.log("Raw Products Response:", responseData.data); // Log the raw response
+    console.log("-----------------------------");
     // Extract the 'data' array from the response object
     const dataArray = responseData.data;
-
+    console.log("data array content:", dataArray);
     // Check if the extracted data is an array
     if (!Array.isArray(dataArray)) {
       throw new Error(
@@ -90,7 +89,7 @@ export const fetchProductById = async (id) => {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
     const apiProduct = await response.json();
-    console.log("Raw Single Product Response:", apiProduct); // Log the raw response
+    // console.log("Raw Single Product Response:", apiProduct); // Log the raw response
     return await transformProduct(apiProduct); // Transform the single product asynchronously
   } catch (error) {
     console.error(`Error fetching product with id ${id}:`, error);

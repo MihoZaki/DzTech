@@ -6,6 +6,14 @@ import { fetchCategories, fetchProducts } from "../services/api"; // Import the 
 
 // Import the hero background image
 import heroBackgroundImage from "../assets/heroBackgroundImage.png";
+import cpuImage from "../assets/categoryCpu.jpg";
+import gpuImage from "../assets/categoryGpu.jpg";
+import ramImage from "../assets/categoryRam.jpg";
+import storageImage from "../assets/categoryStorage.jpg";
+import motherboardImage from "../assets/categoryMotherboard.jpg";
+import caseImage from "../assets/categoryCase.jpg";
+import psuImage from "../assets/categoryPsu.jpg";
+import peripheralImage from "../assets/categoryPeripherals.jpg";
 
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -32,56 +40,64 @@ const Home = () => {
     {
       id: "cpus",
       name: "CPUs",
-      image: "https://placehold.co/800x600/1e293b/ffffff?text=CPUs",
+      filter: "CPU",
+      image: cpuImage,
       isBig: true,
     },
     // [1] Top-right
     {
       id: "gpus",
       name: "GPUs",
-      image: "https://placehold.co/600x400/1e293b/ffffff?text=GPUs",
+      filter: "GPU",
+      image: gpuImage,
       isBig: false,
     },
     // [2] Below GPUs
     {
       id: "ram",
       name: "RAM",
-      image: "https://placehold.co/500x400/1e293b/ffffff?text=RAM",
+      filter: "RAM",
+      image: ramImage,
       isBig: false,
     },
     // [3] Below RAM
     {
       id: "storage",
       name: "Storage",
-      image: "https://placehold.co/700x500/1e293b/ffffff?text=Storage",
+      filter: "Storage",
+      image: storageImage,
       isBig: false,
     },
     // [4] Right of big card (row 1, col 3)
     {
       id: "motherboards",
       name: "Motherboards",
-      image: "https://placehold.co/600x450/1e293b/ffffff?text=Mobo",
+      filter: "Motherboard",
+      image: motherboardImage,
       isBig: false,
     },
     // [5] Below motherboards
     {
       id: "cases",
       name: "Cases",
-      image: "https://placehold.co/550x350/1e293b/ffffff?text=Cases",
+      filter: "Case",
+      image: caseImage,
       isBig: false,
     },
     // [6] Below cases
     {
       id: "psus",
       name: "PSUs",
-      image: "https://placehold.co/450x400/1e293b/ffffff?text=PSU",
+      filter: "PSU",
+      image: psuImage,
       isBig: false,
     },
     // [7] Bottom-right (last slot)
     {
       id: "peripherals",
       name: "Peripherals",
-      image: "https://placehold.co/650x450/1e293b/ffffff?text=Peripherals",
+      filter: "Peripheral",
+      image: peripheralImage,
       isBig: false,
     },
   ];
@@ -97,7 +113,7 @@ const Home = () => {
           backgroundPosition: "center",
         }}
       >
-        <div className="hero-overlay bg-opacity-60 bg-base-100"></div>{" "}
+        <div className="hero-overlay bg-opacity-35 bg-base-100"></div>{" "}
         {/* Optional overlay for contrast */}
         <div className="hero-content text-center">
           <div className="max-w-md">
@@ -127,7 +143,7 @@ const Home = () => {
             <Link
               key={hardcodedCategories[0].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[0].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[0].filter.toLowerCase())
               }`}
               className="lg:col-span-2 lg:row-span-2 flex flex-col" // Add flex properties to the link
             >
@@ -153,7 +169,7 @@ const Home = () => {
             <Link
               key={hardcodedCategories[1].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[1].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[1].filter.toLowerCase())
               }`}
               className="lg:col-span-1 lg:row-span-1"
             >
@@ -178,7 +194,7 @@ const Home = () => {
             <Link
               key={hardcodedCategories[2].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[2].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[2].filter.toLowerCase())
               }`}
               className="lg:col-span-1 lg:row-span-1"
             >
@@ -203,7 +219,7 @@ const Home = () => {
             <Link
               key={hardcodedCategories[3].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[3].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[3].filter.toLowerCase())
               }`}
               className="lg:col-span-1 lg:row-span-1"
             >
@@ -228,7 +244,7 @@ const Home = () => {
             <Link
               key={hardcodedCategories[4].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[4].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[4].filter.toLowerCase())
               }`}
               className="lg:col-span-1 lg:row-span-1"
             >
@@ -253,7 +269,7 @@ const Home = () => {
             <Link
               key={hardcodedCategories[5].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[5].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[5].filter.toLowerCase())
               }`}
               className="lg:col-span-1 lg:row-span-1"
             >
@@ -278,7 +294,7 @@ const Home = () => {
             <Link
               key={hardcodedCategories[6].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[6].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[6].filter.toLowerCase())
               }`}
               className="lg:col-span-1 lg:row-span-1"
             >
@@ -303,9 +319,9 @@ const Home = () => {
             <Link
               key={hardcodedCategories[7].id}
               to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[7].name.toLowerCase())
+                encodeURIComponent(hardcodedCategories[7].filter.toLowerCase())
               }`}
-              className="lg:col-span-1 lg:row-span-1"
+              className="lg:col-span-2 lg:row-span-1"
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img

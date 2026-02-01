@@ -50,7 +50,7 @@ const ProductCard = ({ product }) => {
           <div className="card-actions justify-end">
             <button
               className={`btn btn-sm ${
-                isAdded ? "btn-success" : "btn-primary"
+                isAdded ? "btn-success " : "btn-primary"
               }`} // Conditional class based on isAdded state
               onClick={handleQuickAdd} // Call the quick add function
               title={isAdded ? "Added to Cart!" : "Add to Cart"} // Tooltip changes based on state
@@ -60,8 +60,10 @@ const ProductCard = ({ product }) => {
                 ? ( // Conditional rendering based on isAdded state
                   <>
                     {/* Fragment to wrap multiple elements without adding a DOM node */}
-                    <CheckCircleIcon className="h-4 w-4 mr-1" />
-                    Added!
+                    <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
+                    <span className="text-base-content">
+                      Added!
+                    </span>
                   </>
                 )
                 : (
@@ -73,7 +75,7 @@ const ProductCard = ({ product }) => {
               className="btn btn-primary btn-sm"
             >
               <EyeIcon className="h-4 w-4 mr-1" />
-              View Details
+              View
             </Link>
           </div>
         </div>
