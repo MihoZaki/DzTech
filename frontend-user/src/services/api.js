@@ -2,6 +2,7 @@ const API_BASE_URL = "http://localhost:8080/api/v1";
 
 let categoriesCache = null;
 
+// Fetch categories from the API
 export const fetchCategories = async () => {
   if (categoriesCache) {
     return categoriesCache;
@@ -15,7 +16,7 @@ export const fetchCategories = async () => {
       );
     }
     const data = await response.json();
-    // console.log("Raw Categories Response:", data); // Log the raw response
+    console.log("Raw Categories Response:", data); // Log the raw response
     categoriesCache = data; // Cache the result
     return data;
   } catch (error) {
@@ -24,16 +25,17 @@ export const fetchCategories = async () => {
   }
 };
 
-// Function to get category name by ID
-const getCategoryNameById = async (categoryId) => {
-  const categories = await fetchCategories();
-  const category = categories.find((cat) => cat.id === categoryId);
-  return category ? category.name : "Unknown Category"; // Fallback if ID not found
+const createCategoryMap = (categories) => {
+  const categoryMap = new Map();
+  categories.forEach((cat) => {
+    categoryMap.set(cat.id, cat.name);
+  });
+  return categoryMap;
 };
 
-// Transform API product to frontend product shape
-const transformProduct = async (apiProduct) => {
-  const categoryName = await getCategoryNameById(apiProduct.category_id);
+const transformProduct = (apiProduct, categoryMap) => {
+  const categoryName = categoryMap.get(apiProduct.category_id) ||
+    "Unknown Category";
 
   return {
     id: apiProduct.id,
@@ -52,28 +54,27 @@ const transformProduct = async (apiProduct) => {
 
 export const fetchProducts = async () => {
   try {
+    const categories = await fetchCategories();
+    const categoryMap = createCategoryMap(categories);
     const response = await fetch(`${API_BASE_URL}/products`);
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
     const responseData = await response.json(); // Get the full response object
-    // console.log("Raw Products Response:", responseData.data); // Log the raw response
-    console.log("-----------------------------");
-    // Extract the 'data' array from the response object
+    console.log("Raw Products Response:", responseData); // Log the raw response
+
     const dataArray = responseData.data;
-    console.log("data array content:", dataArray);
-    // Check if the extracted data is an array
+
     if (!Array.isArray(dataArray)) {
       throw new Error(
         'Expected an array of products inside the "data" property of the response.',
       );
     }
 
-    // Transform each product in the extracted array
-    const transformedProducts = await Promise.all(
-      dataArray.map(async (apiProduct) => await transformProduct(apiProduct)),
+    const transformedProducts = dataArray.map((apiProduct) =>
+      transformProduct(apiProduct, categoryMap)
     );
-
+    console.log("transformed data:", transformedProducts);
     return transformedProducts;
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -81,16 +82,18 @@ export const fetchProducts = async () => {
   }
 };
 
-// Update fetchProductById to also use the async transform
 export const fetchProductById = async (id) => {
   try {
+    const categories = await fetchCategories();
+    const categoryMap = createCategoryMap(categories);
+
     const response = await fetch(`${API_BASE_URL}/products/${id}`);
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
     const apiProduct = await response.json();
-    // console.log("Raw Single Product Response:", apiProduct); // Log the raw response
-    return await transformProduct(apiProduct); // Transform the single product asynchronously
+    console.log("Raw Single Product Response:", apiProduct); // Log the raw response
+    return transformProduct(apiProduct, categoryMap); // Transform using the map
   } catch (error) {
     console.error(`Error fetching product with id ${id}:`, error);
     throw error;

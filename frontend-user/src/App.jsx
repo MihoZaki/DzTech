@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { CartProvider } from "./contexts/CartContext";
 import { AuthProvider } from "./contexts/AuthContext"; // Import AuthProvider
+import { Toaster } from "sonner";
 import Navbar from "./components/NavBar";
 import Footer from "./components/Footer"; // Import the new Footer component
 import Home from "./pages/Home";
@@ -40,6 +41,7 @@ function App() {
             <div className="border-t border-base-300 my-8"></div>
             <Footer /> {/* Add Footer here */}
           </div>
+          <Toaster position="top-right" richColors />
         </Router>
       </CartProvider>
     </AuthProvider>

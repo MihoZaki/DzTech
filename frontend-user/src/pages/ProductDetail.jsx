@@ -4,48 +4,93 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { useCart } from "../contexts/CartContext";
 import { fetchProductById } from "../services/api"; // Import the new API function
+import { toast } from "sonner";
 
 const ProductDetail = () => {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true); // Add loading state for detail
+  const [error, setError] = useState(null); // Add error state for detail
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const { addToCart } = useCart();
 
   useEffect(() => {
     const loadProduct = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const data = await fetchProductById(id); // Fetch from real API
         setProduct(data);
       } catch (error) {
         console.error("Error fetching product:", error);
-        // Optionally, set an error state or redirect
+        setError(
+          error.message ||
+            "Failed to load product details. Please try again later.",
+        ); // Set error message
+        toast.error("Failed to load product details. Please try again later."); // Show toast
+      } finally {
+        setLoading(false);
       }
     };
     loadProduct();
   }, [id]);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (product) {
-      addToCart({ ...product, quantity });
+      try {
+        await addToCart({ ...product, quantity });
+        toast.success(`"${product.title}" added to cart!`); // Show success toast
+      } catch (error) {
+        console.error("Failed to add item to cart:", error);
+        toast.error("Failed to add item to cart. Please try again."); // Show error toast
+      }
     }
   };
 
-  if (!product) {
+  if (loading) { // Show loading state for product detail
     return (
       <div className="container mx-auto px-4 py-8 bg-base-200 min-h-screen">
-        <div className="skeleton h-96 w-full mb-6 bg-gray-800"></div>
+        <div className="skeleton h-96 w-full mb-6 bg-base-100"></div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div>
-            <div className="skeleton h-8 w-3/4 mb-4 bg-gray-800"></div>
-            <div className="skeleton h-4 w-full mb-2 bg-gray-800"></div>
-            <div className="skeleton h-4 w-5/6 mb-6 bg-gray-800"></div>
-            <div className="skeleton h-12 w-full bg-gray-800"></div>
+            <div className="skeleton h-8 w-3/4 mb-4 bg-base-100"></div>
+            <div className="skeleton h-4 w-full mb-2 bg-base-100"></div>
+            <div className="skeleton h-4 w-5/6 mb-6 bg-base-100"></div>
+            <div className="skeleton h-12 w-full bg-base-100"></div>
           </div>
           <div>
-            <div className="skeleton h-64 w-full bg-gray-800"></div>
+            <div className="skeleton h-64 w-full bg-base-100"></div>
           </div>
         </div>
+      </div>
+    );
+  }
+  if (error) { // Show error state for product detail
+    return (
+      <div className="container mx-auto px-4 py-8 bg-base-200 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-xl mb-4 text-error">
+            Error loading product: {error}
+          </p>
+          <button
+            className="btn btn-primary"
+            onClick={() => window.location.reload()} // Simple retry mechanism
+          >
+            Retry
+          </button>
+          <Link to="/products" className="btn btn-ghost ml-2">
+            Back to Products
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  if (!product) { // Fallback if product state is somehow null after loading
+    return (
+      <div className="container mx-auto px-4 py-8 bg-base-200 min-h-screen">
+        <p className="text-center text-error">Product not found.</p>
+        <Link to="/products" className="btn btn-primary">Back to Products</Link>
       </div>
     );
   }

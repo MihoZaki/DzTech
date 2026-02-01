@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import { fetchCategories, fetchProducts } from "../services/api"; // Import the new API functions
+import { toast } from "sonner";
 
 // Import the hero background image
 import heroBackgroundImage from "../assets/heroBackgroundImage.png";
@@ -18,16 +19,21 @@ import peripheralImage from "../assets/categoryPeripherals.jpg";
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const loadProducts = async () => {
       try {
-        // Fetch products (this internally fetches categories if needed)
+        setError(null);
+        setLoading(true);
         const products = await fetchProducts();
         setFeaturedProducts(products.slice(0, 8)); // Get first 8 products
       } catch (error) {
         console.error("Error fetching products:", error);
-        // Optionally, set an error state or show a message to the user
+        setError(
+          error.message || "Failed to load products, Please try again later.",
+        );
+        toast.error("Failed to load products, Please try again later.");
       } finally {
         setLoading(false); // Stop loading indicator regardless of success/error
       }
@@ -343,7 +349,6 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Featured Products Section */}
       <section className="py-12 px-4 bg-base-200">
         <div className="container mx-auto">
           <h2 className="text-3xl font-bold mb-8 text-center">
@@ -364,6 +369,20 @@ const Home = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )
+            : error
+            ? (
+              <div className="text-center py-12">
+                <p className="text-xl mb-4 text-error">
+                  Error loading products: {error}
+                </p>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => window.location.reload()} // Simple retry mechanism
+                >
+                  Retry
+                </button>
               </div>
             )
             : (

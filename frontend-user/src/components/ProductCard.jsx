@@ -1,26 +1,38 @@
-// src/components/ProductCard.jsx
-import React, { useState } from "react"; // Import useState
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import {
   CheckCircleIcon,
   EyeIcon,
   ShoppingCartIcon,
   StarIcon,
-} from "@heroicons/react/24/solid"; // Import CheckCircleIcon
-import { useCart } from "../contexts/CartContext"; // Import useCart hook
+} from "@heroicons/react/24/solid";
+import { useCart } from "../contexts/CartContext";
 
 const ProductCard = ({ product }) => {
-  const { addToCart } = useCart(); // Get the addToCart function
-  const [isAdded, setIsAdded] = useState(false); // State to track button state
+  const { addToCart } = useCart();
+  const [isAdded, setIsAdded] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
 
-  const handleQuickAdd = () => {
-    addToCart({ ...product, quantity: 1 }); // Add the product with a default quantity of 1
-    setIsAdded(true); // Set the state to indicate the item was added
+  const handleQuickAdd = async () => {
+    if (isAdding) return;
 
-    // Reset the state after 1.5 seconds
-    setTimeout(() => {
-      setIsAdded(false);
-    }, 1500);
+    setIsAdding(true);
+    setIsAdded(false);
+
+    try {
+      await addToCart({ ...product, quantity: 1 });
+      setIsAdded(true);
+      toast.success(`"${product.title}" added to cart!`);
+      setTimeout(() => {
+        setIsAdded(false);
+      }, 1500);
+    } catch (error) {
+      console.error("Failed to add item to cart:", error);
+      toast.error("Failed to add item to cart. Please try again.");
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   return (
@@ -42,7 +54,6 @@ const ProductCard = ({ product }) => {
         <p className="text-sm text-gray-600 line-clamp-2">
           {product.description}
         </p>
-        {/* New structure for price and actions */}
         <div className="mt-2">
           <div className="text-xl font-bold text-base-content mb-2">
             ${product.price}
@@ -51,24 +62,23 @@ const ProductCard = ({ product }) => {
             <button
               className={`btn btn-sm ${
                 isAdded ? "btn-success " : "btn-primary"
-              }`} // Conditional class based on isAdded state
-              onClick={handleQuickAdd} // Call the quick add function
-              title={isAdded ? "Added to Cart!" : "Add to Cart"} // Tooltip changes based on state
-              disabled={isAdded} // Optionally disable the button while showing success
+              }`}
+              onClick={handleQuickAdd}
+              title={isAdded ? "Added to Cart!" : "Add to Cart"}
+              disabled={isAdded || isAdding}
             >
-              {isAdded
-                ? ( // Conditional rendering based on isAdded state
+              {isAdding
+                ? <span className="loading loading-spinner loading-xs"></span>
+                : isAdded
+                ? (
                   <>
-                    {/* Fragment to wrap multiple elements without adding a DOM node */}
                     <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
                     <span className="text-base-content">
                       Added!
                     </span>
                   </>
                 )
-                : (
-                  <ShoppingCartIcon className="h-4 w-4" /> // Original icon
-                )}
+                : <ShoppingCartIcon className="h-4 w-4" />}
             </button>
             <Link
               to={`/product/${product.id}`}

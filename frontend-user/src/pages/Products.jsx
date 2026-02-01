@@ -4,12 +4,14 @@ import { useSearchParams } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import FilterPanel from "../components/FilterPanel";
 import { fetchProducts } from "../services/api"; // Import the new API function
+import { toast } from "sonner";
 
 const Products = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     category: searchParams.get("category") || "",
     minPrice: "",
@@ -23,12 +25,17 @@ const Products = () => {
   useEffect(() => {
     const loadProducts = async () => {
       try {
+        setError(null); // Clear previous errors
+        setLoading(true); // Ensure loading is true before fetch
         const data = await fetchProducts(); // Fetch from real API
         setProducts(data);
         setFilteredProducts(data);
       } catch (error) {
         console.error("Error fetching products:", error);
-        // Optionally, set an error state
+        setError(
+          error.message || "Failed to load products. Please try again later.",
+        ); // Set error message
+        toast.error("Failed to load products. Please try again later."); // Show toast
       } finally {
         setLoading(false);
       }
@@ -112,6 +119,20 @@ const Products = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )
+            : error
+            ? ( // Show error state if error occurred
+              <div className="text-center py-12">
+                <p className="text-xl mb-4 text-error">
+                  Error loading products: {error}
+                </p>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => window.location.reload()} // Simple retry mechanism
+                >
+                  Retry
+                </button>
               </div>
             )
             : (
