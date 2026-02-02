@@ -28,10 +28,6 @@ type UserRegister struct {
 	FullName string `json:"full_name" validate:"max=100"`
 }
 
-type LoginResponse struct {
-	Token string `json:"token"`
-	User  User   `json:"user"`
-}
 
 func (ur *UserRegister) Validate() error {
 	return Validate.Struct(ur)

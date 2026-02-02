@@ -6,16 +6,16 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/MihoZaki/DzTech/internal/services"
 	"github.com/MihoZaki/DzTech/internal/utils"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	// Import the models package containing RefreshRequest, RefreshResponse, LogoutRequest, LoginResponse
-	// Assuming they are in the same package or correctly imported path
 )
+
+const RefreshTokenCookieName = "refresh_token" // Define a constant for the cookie name
 
 type AuthHandler struct {
 	authService *services.AuthService // Use AuthService instead of UserService directly for auth logic
@@ -25,6 +25,36 @@ func NewAuthHandler(authService *services.AuthService) *AuthHandler { // Take Au
 	return &AuthHandler{
 		authService: authService,
 	}
+}
+
+// Helper function to set the refresh token cookie
+func setRefreshTokenCookie(w http.ResponseWriter, token string) {
+	cookie := &http.Cookie{
+		Name:     RefreshTokenCookieName,
+		Value:    token,
+		Path:     "/",                                 // Accessible from all paths under /
+		HttpOnly: true,                                // Prevents JavaScript access (crucial for security)
+		Secure:   true,                                // Requires HTTPS (set to false for local testing with http)
+		SameSite: http.SameSiteStrictMode,             // CSRF protection
+		MaxAge:   int((7 * 24 * time.Hour).Seconds()), // 7 days expiry (should match RT expiry in service)
+		// Expires: time.Now().Add(7 * 24 * time.Hour), // Alternative to MaxAge
+	}
+	http.SetCookie(w, cookie)
+}
+
+// Helper function to clear the refresh token cookie
+func clearRefreshTokenCookie(w http.ResponseWriter) {
+	cookie := &http.Cookie{
+		Name:     RefreshTokenCookieName,
+		Value:    "", // Empty value
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true, // Should match how it was set
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,              // Delete cookie
+		Expires:  time.Unix(0, 0), // Expire immediately
+	}
+	http.SetCookie(w, cookie)
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +75,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call AuthService for registration - now expects LoginResponse
-	loginResp, err := h.authService.Register(r.Context(), req.Email, req.Password, req.FullName)
+	// Call AuthService for registration - now expects (LoginResponse, refreshTokenString, error)
+	loginResp, refreshTokenStr, err := h.authService.Register(r.Context(), req.Email, req.Password, req.FullName)
 	if err != nil {
 		if err.Error() == "user already exists" {
 			utils.SendErrorResponse(w, http.StatusConflict, "User Already Exists", "A user with this email already exists")
@@ -59,10 +89,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("User registered successfully", "user_id", loginResp.User.ID, "email", req.Email)
 
-	// Send the response containing the access/refresh tokens and user details
+	// Set the refresh token as a secure HTTP-only cookie
+	setRefreshTokenCookie(w, refreshTokenStr)
+
+	// Send the response containing only the access token and user details (refresh token is in cookie)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)    // 201 Created for registration
-	json.NewEncoder(w).Encode(loginResp) // Encode LoginResponse
+	json.NewEncoder(w).Encode(loginResp) // Encode LoginResponse (without refresh token)
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +116,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use AuthService to handle login - now expects LoginResponse
-	loginResp, err := h.authService.Login(r.Context(), req.Email, req.Password)
+	// Use AuthService to handle login - now expects (LoginResponse, refreshTokenString, error)
+	loginResp, refreshTokenStr, err := h.authService.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if err.Error() == "invalid credentials" {
 			slog.Info("Login failed: invalid credentials", "email", req.Email)
@@ -98,71 +131,70 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("User logged in successfully", "user_id", loginResp.User.ID, "email", loginResp.User.Email)
 
-	// Send the response containing the access/refresh tokens and user details
+	// Set the refresh token as a secure HTTP-only cookie
+	setRefreshTokenCookie(w, refreshTokenStr)
+
+	// Send the response containing only the access token and user details (refresh token is in cookie)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(loginResp) // Encode LoginResponse
+	json.NewEncoder(w).Encode(loginResp) // Encode LoginResponse (without refresh token)
 }
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	var req models.RefreshRequest // Use the new model
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Invalid JSON", "Request body contains invalid JSON")
+	// Read the refresh token from the cookie
+	refreshTokenCookie, err := r.Cookie(RefreshTokenCookieName)
+	if err != nil {
+		// Cookie not found or invalid
+		slog.Warn("Refresh token cookie not found or invalid", "error", err)
+		utils.SendErrorResponse(w, http.StatusUnauthorized, "Unauthorized", "Refresh token not found or invalid")
 		return
 	}
+	refreshTokenStr := refreshTokenCookie.Value
 
-	// Validate the request struct (optional, if using validator tags)
-	if err := req.Validate(); err != nil {
-		fieldErrors := make(map[string]string)
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			for _, err := range validationErrors {
-				fieldErrors[err.Field()] = formatValidationError(err)
-			}
-		}
-		utils.SendValidationError(w, fieldErrors)
-		return
-	}
-
-	// Call AuthService to perform the refresh logic
-	newTokens, err := h.authService.Refresh(r.Context(), req.RefreshToken)
+	// Call AuthService to perform the refresh logic (returns new access token and new refresh token string)
+	newAccessToken, newRefreshTokenStr, err := h.authService.Refresh(r.Context(), refreshTokenStr)
 	if err != nil {
 		slog.Error("Failed to refresh token", "error", err)
+		// Clear the invalid cookie if the token was rejected
+		clearRefreshTokenCookie(w)
 		// Return 401 for invalid/expired/revoked token
 		utils.SendErrorResponse(w, http.StatusUnauthorized, "Unauthorized", err.Error())
 		return
 	}
 
-	// Send the response containing the new access/refresh tokens
+	// If rotation is enabled, set the *new* refresh token as the cookie
+	if newRefreshTokenStr != "" {
+		setRefreshTokenCookie(w, newRefreshTokenStr)
+	}
+
+	// Send the response containing only the new access token
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)         // 200 OK
-	json.NewEncoder(w).Encode(newTokens) // Encode RefreshResponse
+	w.WriteHeader(http.StatusOK)                                                   // 200 OK
+	json.NewEncoder(w).Encode(models.RefreshResponse{AccessToken: newAccessToken}) // Encode RefreshResponse (without refresh token)
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	var req models.LogoutRequest // Use the new model
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.SendErrorResponse(w, http.StatusBadRequest, "Invalid JSON", "Request body contains invalid JSON")
+	// Read the refresh token from the cookie
+	refreshTokenCookie, err := r.Cookie(RefreshTokenCookieName)
+	if err != nil {
+		// Cookie not found. Log as warning, but treat as successful logout attempt.
+		slog.Warn("Logout attempt without refresh token cookie", "error", err)
+		// Still clear the cookie if it exists (might be stale)
+		clearRefreshTokenCookie(w)
+		w.WriteHeader(http.StatusNoContent) // 204 No Content
 		return
 	}
-
-	// Validate the request struct (optional, if using validator tags)
-	if err := req.Validate(); err != nil {
-		fieldErrors := make(map[string]string)
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			for _, err := range validationErrors {
-				fieldErrors[err.Field()] = formatValidationError(err)
-			}
-		}
-		utils.SendValidationError(w, fieldErrors)
-		return
-	}
+	refreshTokenStr := refreshTokenCookie.Value
 
 	// Call AuthService to perform the logout/revocation logic
-	err := h.authService.Logout(r.Context(), req.RefreshToken)
+	err = h.authService.Logout(r.Context(), refreshTokenStr)
 	if err != nil {
 		slog.Error("Failed to logout", "error", err)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to logout")
 		return
 	}
+
+	// Clear the refresh token cookie after successful revocation
+	clearRefreshTokenCookie(w)
 
 	// Send 204 No Content on successful logout
 	w.WriteHeader(http.StatusNoContent) // 204 No Content

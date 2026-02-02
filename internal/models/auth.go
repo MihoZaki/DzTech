@@ -1,22 +1,26 @@
 package models
 
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+type LoginResponse struct {
+	Token string `json:"access_token"` // Rename for clarity
+	User  User   `json:"user"`
 }
 
 type RefreshResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token,omitempty"`
+	AccessToken string `json:"access_token"` // New access token
+}
+
+type RefreshRequest struct {
 }
 
 type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
-type LoginResponseWithToken struct {
-	Token        string `json:"access_token"`  // Rename for clarity if both tokens are returned here
-	RefreshToken string `json:"refresh_token"` // Add refresh token
-	User         User   `json:"user"`
+func (lr *LoginResponse) Validate() error {
+	return nil
+}
+
+func (rr *RefreshResponse) Validate() error {
+	return nil
 }
 
 func (rr *RefreshRequest) Validate() error {
@@ -25,8 +29,4 @@ func (rr *RefreshRequest) Validate() error {
 
 func (lr *LogoutRequest) Validate() error {
 	return Validate.Struct(lr)
-}
-
-func (lr *LoginResponseWithToken) Validate() error {
-	return nil
 }
