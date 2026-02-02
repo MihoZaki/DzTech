@@ -30,8 +30,10 @@ func NewAdminUserHandler(service *services.AdminUserService, logger *slog.Logger
 // RegisterRoutes registers the admin user management-related routes with the provided Chi router.
 // Assumes the router 'r' has admin middleware applied (e.g., JWT + RequireAdmin).
 func (h *AdminUserHandler) RegisterRoutes(r chi.Router) {
-	r.Get("/", h.ListUsers)   // GET /api/v1/admin/users (with ?active_only=&page=&limit=)
-	r.Get("/{id}", h.GetUser) // GET /api/v1/admin/users/{id}
+	r.Get("/", h.ListUsers)                      // GET /api/v1/admin/users (with ?active_only=&page=&limit=)
+	r.Get("/{id}", h.GetUser)                    // GET /api/v1/admin/users/{id}
+	r.Post("/{id}/activate", h.ActivateUser)     // POST /api/v1/admin/users/{id}/activate
+	r.Post("/{id}/deactivate", h.DeactivateUser) // POST /api/v1/admin/users/{id}/deactivate
 	// Add other routes like SearchUsers, ActivateUser, DeactivateUser here later
 }
 
@@ -100,11 +102,42 @@ func (h *AdminUserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// SearchUsers handles searching users.
-// func (h *AdminUserHandler) SearchUsers(w http.ResponseWriter, r *http.Request) { ... }
-
 // ActivateUser handles activating a user.
-// func (h *AdminUserHandler) ActivateUser(w http.ResponseWriter, r *http.Request) { ... }
+func (h *AdminUserHandler) ActivateUser(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.ActivateUser(r.Context(), id)
+	if err != nil {
+		h.logger.Error("Failed to activate user", "error", err, "user_id", id)
+		http.Error(w, "Failed to activate user", http.StatusInternalServerError)
+		return
+	}
+
+	// Return 204 No Content on successful activation
+	w.WriteHeader(http.StatusNoContent) // 204 No Content
+}
 
 // DeactivateUser handles deactivating a user.
-// func (h *AdminUserHandler) DeactivateUser(w http.ResponseWriter, r *http.Request) { ... }
+func (h *AdminUserHandler) DeactivateUser(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.DeactivateUser(r.Context(), id)
+	if err != nil {
+		h.logger.Error("Failed to deactivate user", "error", err, "user_id", id)
+		http.Error(w, "Failed to deactivate user", http.StatusInternalServerError)
+		return
+	}
+
+	// Return 204 No Content on successful deactivation
+	w.WriteHeader(http.StatusNoContent) // 204 No Content
+}

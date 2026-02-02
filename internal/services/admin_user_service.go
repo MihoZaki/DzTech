@@ -71,6 +71,22 @@ func (s *AdminUserService) GetUser(ctx context.Context, id uuid.UUID) (*models.A
 	return apiUser, nil
 }
 
+func (s *AdminUserService) ActivateUser(ctx context.Context, id uuid.UUID) error {
+	err := s.querier.ActivateUser(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to activate user: %w", err)
+	}
+	return nil
+}
+
+func (s *AdminUserService) DeactivateUser(ctx context.Context, id uuid.UUID) error {
+	err := s.querier.SoftDeleteUser(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to deactivate user: %w", err)
+	}
+	return nil
+}
+
 // toAdminUserListItemModel converts a DB row (from GetUserWithDetails) to the API list item model.
 // Handles the interface{} type for LastOrderDate.
 func (s *AdminUserService) toAdminUserListItemModel(dbUser db.GetUserWithDetailsRow) *models.AdminUserListItem {
