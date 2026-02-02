@@ -139,8 +139,6 @@ const Account = () => {
               </div>
             </div>
           </div>
-
-          {/* Removed Wishlist Preview section */}
         </div>
       </div>
     </div>

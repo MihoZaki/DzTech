@@ -56,7 +56,7 @@ const ProductCard = ({ product }) => {
         </p>
         <div className="mt-2">
           <div className="text-xl font-bold text-base-content mb-2">
-            ${product.price}
+            DZD {product.price}
           </div>
           <div className="card-actions justify-end">
             <button

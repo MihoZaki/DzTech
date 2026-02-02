@@ -1,56 +1,45 @@
-// src/components/ThemeSwitcher.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const ThemeSwitcher = () => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const checkboxRef = useRef(null);
-
-  const setThemeAndBody = (darkMode) => {
-    const themeName = darkMode ? "coffee" : "winter";
-    setIsDarkMode(darkMode);
-    document.documentElement.setAttribute("data-theme", themeName);
-  };
-
-  // Initialize theme and set checkbox ref
-  useEffect(() => {
+  // Determine initial theme based on localStorage or default to light ('fantasy')
+  const getInitialTheme = () => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme) {
-      const initialIsDarkMode = savedTheme === "coffee";
-      setThemeAndBody(initialIsDarkMode);
-      // Ensure the checkbox reflects the loaded state
-      if (checkboxRef.current) {
-        checkboxRef.current.checked = initialIsDarkMode;
-      }
-    } else {
-      const prefersDark =
-        window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setThemeAndBody(prefersDark);
-      if (checkboxRef.current) {
-        checkboxRef.current.checked = prefersDark;
+      // Validate saved theme exists in our list (optional but good practice)
+      const availableThemes = ["fantasy", "night"];
+      if (availableThemes.includes(savedTheme)) {
+        return savedTheme;
       }
     }
-  }, []);
+    // Default to light theme ('fantasy')
+    return "fantasy";
+  };
 
-  // Sync checkbox ref with state changes (if needed for daisyUI to pick up)
+  const [currentTheme, setCurrentTheme] = useState(getInitialTheme);
+
+  // Apply theme on component mount and when currentTheme changes
   useEffect(() => {
-    if (checkboxRef.current) {
-      checkboxRef.current.checked = isDarkMode;
-    }
-  }, [isDarkMode]);
+    document.documentElement.setAttribute("data-theme", currentTheme);
+    // Save the theme to localStorage whenever it changes
+    localStorage.setItem("theme", currentTheme);
+  }, [currentTheme]);
 
   const toggleTheme = () => {
-    const newIsDarkMode = !isDarkMode;
-    setThemeAndBody(newIsDarkMode);
-    localStorage.setItem("theme", newIsDarkMode ? "coffee" : "winter");
+    const newTheme = currentTheme === "fantasy" ? "night" : "fantasy";
+    setCurrentTheme(newTheme);
+    // The useEffect will handle saving to localStorage and applying the attribute
   };
 
   return (
     <button
       onClick={toggleTheme}
-      className="btn btn-sm btn-ghost bg-base-100" // Ensure text is visible on navbar
-      aria-label="Toggle theme"
+      className="btn btn-sm btn-ghost bg-base-100" // Keeping your original classes
+      aria-label={`Toggle to ${
+        currentTheme === "fantasy" ? "dark" : "light"
+      } mode`}
     >
-      {isDarkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+      {currentTheme === "fantasy" ? "🌙 Dark Mode" : "☀️ Light Mode"}{" "}
+      {/* Using text labels */}
     </button>
   );
 };

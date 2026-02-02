@@ -75,7 +75,7 @@ const CartModal = ({ isOpen, onClose }) => {
                                 {item.title}
                               </p>
                               <p className="text-sm text-gray-500">
-                                ${item.price}
+                                DZD {item.price}
                               </p>
                             </div>
                             <div className="flex items-center space-x-2">
@@ -114,15 +114,15 @@ const CartModal = ({ isOpen, onClose }) => {
                   <div className="mt-6 space-y-2">
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
-                      <span>${subtotal.toFixed(2)}</span>
+                      <span>DZD {subtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Tax (8%):</span>
-                      <span>${tax.toFixed(2)}</span>
+                      <span>DZD {tax.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg">
                       <span>Total:</span>
-                      <span>${total.toFixed(2)}</span>
+                      <span>DZD {total.toFixed(2)}</span>
                     </div>
                     <button className="btn btn-primary w-full mt-4">
                       Checkout

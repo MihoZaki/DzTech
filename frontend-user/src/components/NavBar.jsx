@@ -15,7 +15,7 @@ import { useAuth } from "../contexts/AuthContext"; // Import useAuth
 import ThemeSwitcher from "./ThemeSwitcher"; // Import the new component
 
 // Import the logo image
-import logoImage from "../assets/logo.png"; // Adjust the filename if needed (e.g., logo.svg, logo.jpg)
+import logoImage from "../assets/logo.jpg"; // Adjust the filename if needed (e.g., logo.svg, logo.jpg)
 
 const Navbar = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -275,7 +275,7 @@ const Navbar = () => {
                               {item.title}
                             </p>
                             <p className="text-primary font-bold text-sm">
-                              ${item.price}
+                              DZD {item.price}
                             </p>
                             <p className="text-base-content/70 text-xs">
                               Qty: {item.quantity}
@@ -289,7 +289,7 @@ const Navbar = () => {
                     {/* Changed divider color */}
                     <div className="flex justify-between items-center font-bold">
                       <span>Total:</span>
-                      <span>${subtotal.toFixed(2)}</span>
+                      <span>DZD {subtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex gap-2 mt-4">
                       <Link
@@ -371,6 +371,7 @@ const Navbar = () => {
                 />
               </form>
 
+              <ThemeSwitcher /> {/* Add the ThemeSwitcher component */}
               <Link
                 to="/build-pc"
                 className={`flex items-center px-4 py-2 rounded-lg ${

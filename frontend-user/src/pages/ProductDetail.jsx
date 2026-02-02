@@ -142,7 +142,7 @@ const ProductDetail = () => {
           <h1 className="text-3xl font-bold mb-4">{product.title}</h1>
           <div className="flex items-center gap-2 mb-4">
             <span className="text-2xl font-bold text-primary">
-              ${product.price}
+              DZD {product.price}
             </span>
             {/* Removed discount calculation if not in API */}
             {/* <span className="line-through text-gray-500">${(product.price * 1.2).toFixed(2)}</span> */}

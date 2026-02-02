@@ -11,8 +11,8 @@ export default {
   plugins: [require("daisyui")],
   daisyui: {
     themes: [
-      "coffee", // Dracula theme
-      "winter", // Light theme
+      "night", // Dracula theme
+      "fantasy", // Light theme
     ],
   },
 };
