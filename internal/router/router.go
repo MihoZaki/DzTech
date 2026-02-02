@@ -61,6 +61,7 @@ func New(cfg *config.Config) http.Handler {
 	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
 	authService := services.NewAuthService(querier, userService, cfg.JWTSecret, slog.Default())
 	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
+	adminUserService := services.NewAdminUserService(querier, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -97,7 +98,10 @@ func New(cfg *config.Config) http.Handler {
 		r.Route("/api/v1/admin/delivery-services", func(r chi.Router) {
 			adminDeliveryHandler.RegisterRoutes(r)
 		})
-
+		r.Route("/api/v1/admin/users", func(r chi.Router) {
+			adminUserHandler := handlers.NewAdminUserHandler(adminUserService, slog.Default())
+			adminUserHandler.RegisterRoutes(r)
+		})
 	})
 
 	// Cart routes - PROTECTED route group to enable user context and allow guest fallback

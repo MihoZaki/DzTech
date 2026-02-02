@@ -11,12 +11,23 @@ import (
 )
 
 type Querier interface {
+	// Removes the soft-delete marker by setting deleted_at to NULL.
+	ActivateUser(ctx context.Context, userID uuid.UUID) error
+	// Gets a specific user by ID, regardless of soft-delete status.
+	// Useful for admin to see any user, active or inactive.
+	AdminGetUser(ctx context.Context, userID uuid.UUID) (User, error)
 	// Updates the status of an order to 'cancelled' and sets the cancelled_at timestamp.
 	// This is a soft deletion conceptually.
 	CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
 	CountAllProducts(ctx context.Context) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
+	// Counts users matching the search term, optionally filtered by active status.
+	// Useful for pagination metadata with search.
+	CountSearchUsers(ctx context.Context, arg CountSearchUsersParams) (int64, error)
+	// Counts total users, optionally filtered by active status (soft-deleted).
+	// Useful for pagination metadata.
+	CountUsers(ctx context.Context, activeOnly bool) (int64, error)
 	// Cart Item Management
 	CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CreateCartItemRow, error)
 	CreateDeliveryService(ctx context.Context, arg CreateDeliveryServiceParams) (DeliveryService, error)
@@ -81,6 +92,10 @@ type Querier interface {
 	GetProductBySlug(ctx context.Context, slug string) (Product, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	// Fetches a specific user by ID along with order count and last order date.
+	// Joins with the orders table to get aggregated details.
+	// Includes soft-deleted users as well.
+	GetUserWithDetails(ctx context.Context, userID uuid.UUID) (GetUserWithDetailsRow, error)
 	// Finds a valid (non-expired, non-revoked) refresh token record by its identifier.
 	// The bcrypt hash verification happens in Go code.
 	GetValidRefreshTokenRecord(ctx context.Context, tokenIdentifier string) (RefreshToken, error)
@@ -103,6 +118,17 @@ type Querier interface {
 	// Retrieves a paginated list of orders for a specific user, optionally filtered by status.
 	// Excludes cancelled orders by default. Admins should use ListAllOrders.
 	ListUserOrders(ctx context.Context, arg ListUserOrdersParams) ([]Order, error)
+	// Lists users, optionally filtered by active status (soft-deleted).
+	// Paginated using LIMIT and OFFSET.
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	// Lists users with essential details for admin list view (name, email, registration date, last order date, order count, status).
+	// Optionally filter by active status.
+	// Paginated using LIMIT and OFFSET.
+	ListUsersWithListDetails(ctx context.Context, arg ListUsersWithListDetailsParams) ([]ListUsersWithListDetailsRow, error)
+	// Lists users with their total order counts.
+	// Optionally filter by active status.
+	// Paginated using LIMIT and OFFSET.
+	ListUsersWithOrderCounts(ctx context.Context, arg ListUsersWithOrderCountsParams) ([]ListUsersWithOrderCountsRow, error)
 	// Ensure it hasn't been revoked
 	// Marks a specific refresh token as revoked using its identifier.
 	RevokeRefreshTokenByIdentifier(ctx context.Context, tokenIdentifier string) error
@@ -111,6 +137,11 @@ type Querier interface {
 	RevokeRefreshTokensByUser(ctx context.Context, userID uuid.UUID) error
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
+	// Searches users by email or full_name, optionally filtered by active status.
+	// Paginated using LIMIT and OFFSET.
+	SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error)
+	// Marks a user as soft-deleted by setting deleted_at to NOW().
+	SoftDeleteUser(ctx context.Context, userID uuid.UUID) error
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)
 	// Allow filtering by active status
 	UpdateDeliveryService(ctx context.Context, arg UpdateDeliveryServiceParams) (DeliveryService, error)

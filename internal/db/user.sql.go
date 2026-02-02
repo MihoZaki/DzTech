@@ -12,6 +12,91 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateUser = `-- name: ActivateUser :exec
+UPDATE users
+SET deleted_at = NULL, updated_at = NOW()
+WHERE id = $1::uuid
+`
+
+// Removes the soft-delete marker by setting deleted_at to NULL.
+func (q *Queries) ActivateUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, activateUser, userID)
+	return err
+}
+
+const adminGetUser = `-- name: AdminGetUser :one
+SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+FROM users
+WHERE id = $1::uuid
+`
+
+// Gets a specific user by ID, regardless of soft-delete status.
+// Useful for admin to see any user, active or inactive.
+func (q *Queries) AdminGetUser(ctx context.Context, userID uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, adminGetUser, userID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FullName,
+		&i.IsAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const countSearchUsers = `-- name: CountSearchUsers :one
+SELECT COUNT(*) AS total_matching_users
+FROM users
+WHERE 
+  (LOWER(email) LIKE LOWER($1::text || '%') OR LOWER(full_name) LIKE LOWER($1::text || '%'))
+  AND
+  -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
+  CASE 
+    WHEN $2::boolean THEN deleted_at IS NULL 
+    WHEN NOT $2::boolean THEN TRUE -- Include both active and inactive
+    ELSE TRUE -- Default if active_only is NULL (count all matching)
+  END
+`
+
+type CountSearchUsersParams struct {
+	SearchTerm string `json:"search_term"`
+	ActiveOnly bool   `json:"active_only"`
+}
+
+// Counts users matching the search term, optionally filtered by active status.
+// Useful for pagination metadata with search.
+func (q *Queries) CountSearchUsers(ctx context.Context, arg CountSearchUsersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchUsers, arg.SearchTerm, arg.ActiveOnly)
+	var total_matching_users int64
+	err := row.Scan(&total_matching_users)
+	return total_matching_users, err
+}
+
+const countUsers = `-- name: CountUsers :one
+SELECT COUNT(*) AS total_users
+FROM users
+WHERE 
+  -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
+  CASE 
+    WHEN $1::boolean THEN deleted_at IS NULL 
+    WHEN NOT $1::boolean THEN TRUE -- Include both active and inactive
+    ELSE TRUE -- Default if active_only is NULL (count all)
+  END
+`
+
+// Counts total users, optionally filtered by active status (soft-deleted).
+// Useful for pagination metadata.
+func (q *Queries) CountUsers(ctx context.Context, activeOnly bool) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsers, activeOnly)
+	var total_users int64
+	err := row.Scan(&total_users)
+	return total_users, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
     email, password_hash, full_name, is_admin, created_at, updated_at
@@ -94,4 +179,322 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const getUserWithDetails = `-- name: GetUserWithDetails :one
+SELECT 
+    u.id, 
+    u.email, 
+    u.full_name, 
+    u.created_at AS registration_date, -- User registration date
+    u.deleted_at, -- Needed to determine activity status
+    COUNT(o.id) AS total_order_count,
+    MAX(o.created_at) AS last_order_date -- Get the latest order date
+FROM 
+    users u
+LEFT JOIN 
+    orders o ON u.id = o.user_id
+WHERE 
+    u.id = $1::uuid
+GROUP BY 
+    u.id
+`
+
+type GetUserWithDetailsRow struct {
+	ID               uuid.UUID          `json:"id"`
+	Email            string             `json:"email"`
+	FullName         *string            `json:"full_name"`
+	RegistrationDate pgtype.Timestamptz `json:"registration_date"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+	TotalOrderCount  int64              `json:"total_order_count"`
+	LastOrderDate    interface{}        `json:"last_order_date"`
+}
+
+// Fetches a specific user by ID along with order count and last order date.
+// Joins with the orders table to get aggregated details.
+// Includes soft-deleted users as well.
+func (q *Queries) GetUserWithDetails(ctx context.Context, userID uuid.UUID) (GetUserWithDetailsRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithDetails, userID)
+	var i GetUserWithDetailsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.FullName,
+		&i.RegistrationDate,
+		&i.DeletedAt,
+		&i.TotalOrderCount,
+		&i.LastOrderDate,
+	)
+	return i, err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+FROM users
+WHERE 
+  -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
+  CASE 
+    WHEN $1::boolean THEN deleted_at IS NULL 
+    WHEN NOT $1::boolean THEN TRUE -- Include both active and inactive
+    ELSE TRUE -- Default if active_only is NULL (list all)
+  END
+ORDER BY created_at DESC -- Or another relevant order
+LIMIT $3::int4 OFFSET $2::int4
+`
+
+type ListUsersParams struct {
+	ActiveOnly bool  `json:"active_only"`
+	PageOffset int32 `json:"page_offset"`
+	PageLimit  int32 `json:"page_limit"`
+}
+
+// Lists users, optionally filtered by active status (soft-deleted).
+// Paginated using LIMIT and OFFSET.
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers, arg.ActiveOnly, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.FullName,
+			&i.IsAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersWithListDetails = `-- name: ListUsersWithListDetails :many
+SELECT
+    u.id,
+    u.email,
+    u.full_name,
+    u.created_at AS registration_date, -- User's registration date
+    MAX(o.created_at) AS last_order_date, -- Latest order date for the user (will be NULL if no orders)
+    COUNT(o.id) AS total_order_count,
+    u.deleted_at -- Needed for determining activity status
+FROM
+    users u
+LEFT JOIN
+    orders o ON u.id = o.user_id
+WHERE
+  CASE
+    WHEN $1::boolean THEN u.deleted_at IS NULL
+    WHEN NOT $1::boolean THEN TRUE
+    ELSE TRUE
+  END
+GROUP BY
+    u.id
+ORDER BY
+    u.created_at DESC -- Or another relevant order
+LIMIT $3::int4 OFFSET $2::int4
+`
+
+type ListUsersWithListDetailsParams struct {
+	ActiveOnly bool  `json:"active_only"`
+	PageOffset int32 `json:"page_offset"`
+	PageLimit  int32 `json:"page_limit"`
+}
+
+type ListUsersWithListDetailsRow struct {
+	ID               uuid.UUID          `json:"id"`
+	Email            string             `json:"email"`
+	FullName         *string            `json:"full_name"`
+	RegistrationDate pgtype.Timestamptz `json:"registration_date"`
+	LastOrderDate    interface{}        `json:"last_order_date"`
+	TotalOrderCount  int64              `json:"total_order_count"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
+// Lists users with essential details for admin list view (name, email, registration date, last order date, order count, status).
+// Optionally filter by active status.
+// Paginated using LIMIT and OFFSET.
+func (q *Queries) ListUsersWithListDetails(ctx context.Context, arg ListUsersWithListDetailsParams) ([]ListUsersWithListDetailsRow, error) {
+	rows, err := q.db.Query(ctx, listUsersWithListDetails, arg.ActiveOnly, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersWithListDetailsRow
+	for rows.Next() {
+		var i ListUsersWithListDetailsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FullName,
+			&i.RegistrationDate,
+			&i.LastOrderDate,
+			&i.TotalOrderCount,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersWithOrderCounts = `-- name: ListUsersWithOrderCounts :many
+SELECT 
+    u.id, 
+    u.email, 
+    u.full_name, 
+    u.is_admin, 
+    u.created_at, 
+    u.updated_at, 
+    u.deleted_at,
+    COUNT(o.id) AS total_order_count
+FROM 
+    users u
+LEFT JOIN 
+    orders o ON u.id = o.user_id
+WHERE 
+  CASE 
+    WHEN $1::boolean THEN u.deleted_at IS NULL 
+    WHEN NOT $1::boolean THEN TRUE 
+    ELSE TRUE 
+  END
+GROUP BY 
+    u.id
+ORDER BY 
+    u.created_at DESC -- Or another relevant order
+LIMIT $3::int4 OFFSET $2::int4
+`
+
+type ListUsersWithOrderCountsParams struct {
+	ActiveOnly bool  `json:"active_only"`
+	PageOffset int32 `json:"page_offset"`
+	PageLimit  int32 `json:"page_limit"`
+}
+
+type ListUsersWithOrderCountsRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Email           string             `json:"email"`
+	FullName        *string            `json:"full_name"`
+	IsAdmin         bool               `json:"is_admin"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	TotalOrderCount int64              `json:"total_order_count"`
+}
+
+// Lists users with their total order counts.
+// Optionally filter by active status.
+// Paginated using LIMIT and OFFSET.
+func (q *Queries) ListUsersWithOrderCounts(ctx context.Context, arg ListUsersWithOrderCountsParams) ([]ListUsersWithOrderCountsRow, error) {
+	rows, err := q.db.Query(ctx, listUsersWithOrderCounts, arg.ActiveOnly, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersWithOrderCountsRow
+	for rows.Next() {
+		var i ListUsersWithOrderCountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FullName,
+			&i.IsAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.TotalOrderCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchUsers = `-- name: SearchUsers :many
+SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
+FROM users
+WHERE 
+  (LOWER(email) LIKE LOWER($1::text || '%') OR LOWER(full_name) LIKE LOWER($1::text || '%'))
+  AND
+  -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
+  CASE 
+    WHEN $2::boolean THEN deleted_at IS NULL 
+    WHEN NOT $2::boolean THEN TRUE -- Include both active and inactive
+    ELSE TRUE -- Default if active_only is NULL (list all matching)
+  END
+ORDER BY created_at DESC -- Or relevance if using full-text search
+LIMIT $4::int4 OFFSET $3::int4
+`
+
+type SearchUsersParams struct {
+	SearchTerm string `json:"search_term"`
+	ActiveOnly bool   `json:"active_only"`
+	PageOffset int32  `json:"page_offset"`
+	PageLimit  int32  `json:"page_limit"`
+}
+
+// Searches users by email or full_name, optionally filtered by active status.
+// Paginated using LIMIT and OFFSET.
+func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, searchUsers,
+		arg.SearchTerm,
+		arg.ActiveOnly,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.FullName,
+			&i.IsAdmin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteUser = `-- name: SoftDeleteUser :exec
+UPDATE users
+SET deleted_at = NOW(), updated_at = NOW()
+WHERE id = $1::uuid
+`
+
+// Marks a user as soft-deleted by setting deleted_at to NOW().
+func (q *Queries) SoftDeleteUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteUser, userID)
+	return err
 }
