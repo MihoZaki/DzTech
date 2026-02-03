@@ -1,36 +1,20 @@
 -- name: CreateRefreshToken :exec
--- Inserts a new refresh token identifier and its bcrypt hash into the database.
-INSERT INTO refresh_tokens (
-    user_id, token_identifier, token_hash, expires_at
-) VALUES (
-    sqlc.arg(user_id), sqlc.arg(token_identifier), sqlc.arg(token_hash), sqlc.arg(expires_at)
-);
+INSERT INTO refresh_tokens (jti, user_id, token_hash, expires_at)
+VALUES (@jti::text, @user_id::uuid, @token_hash::char(64), @expires_at::timestamptz);
 
 -- name: GetValidRefreshTokenRecord :one
--- Finds a valid (non-expired, non-revoked) refresh token record by its identifier.
--- The bcrypt hash verification happens in Go code.
-SELECT id, user_id, token_identifier, token_hash, expires_at, revoked, created_at, updated_at
+SELECT id, jti, user_id, token_hash, expires_at, revoked_at, created_at, updated_at
 FROM refresh_tokens
-WHERE token_identifier = sqlc.arg(token_identifier) -- Lookup by the unique identifier string
-  AND expires_at > NOW() -- Ensure it hasn't expired
-  AND revoked = FALSE; -- Ensure it hasn't been revoked
+WHERE jti = @jti::text AND expires_at > NOW() AND revoked_at IS NULL;
 
--- name: RevokeRefreshTokenByIdentifier :exec
--- Marks a specific refresh token as revoked using its identifier.
+-- name: RevokeRefreshTokenByJTI :exec
+UPDATE refresh_tokens SET revoked_at = NOW(), updated_at = NOW() WHERE jti = @jti::text;
+
+-- name: CleanupExpiredRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE expires_at < NOW() AND revoked_at IS NULL;
+
+-- name: RevokeAllRefreshTokensByUserID :exec
+-- Revokes all refresh tokens for a specific user.
 UPDATE refresh_tokens
-SET revoked = TRUE, updated_at = NOW()
-WHERE token_identifier = sqlc.arg(token_identifier);
-
--- name: RevokeRefreshTokensByUser :exec
--- Revokes all active refresh tokens for a specific user.
--- Useful for "logout all devices" or account compromise scenarios.
-UPDATE refresh_tokens
-SET revoked = TRUE, updated_at = NOW()
-WHERE user_id = sqlc.arg(user_id) AND revoked = FALSE;
-
--- name: DeleteExpiredRefreshTokens :exec
--- Deletes refresh tokens that have expired and are not revoked.
--- This can be run periodically as a cleanup job if needed.
--- Note: Revoked tokens might be kept for audit purposes, so this only cleans up truly expired ones.
-DELETE FROM refresh_tokens
-WHERE expires_at <= NOW() AND revoked = FALSE;
+SET revoked_at = NOW(), updated_at = NOW()
+WHERE user_id = @user_id::uuid AND revoked_at IS NULL; -- Only revoke non-already-revoked tokens

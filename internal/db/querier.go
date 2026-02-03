@@ -19,6 +19,7 @@ type Querier interface {
 	// Updates the status of an order to 'cancelled' and sets the cancelled_at timestamp.
 	// This is a soft deletion conceptually.
 	CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
+	CleanupExpiredRefreshTokens(ctx context.Context) error
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
 	CountAllProducts(ctx context.Context) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
@@ -37,7 +38,6 @@ type Querier interface {
 	// Creates a new order item and returns its details.
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
-	// Inserts a new refresh token identifier and its bcrypt hash into the database.
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Cart Management
@@ -55,10 +55,6 @@ type Querier interface {
 	// Soft delete could be achieved by updating is_active to FALSE
 	// For hard delete:
 	DeleteDeliveryService(ctx context.Context, id uuid.UUID) error
-	// Deletes refresh tokens that have expired and are not revoked.
-	// This can be run periodically as a cleanup job if needed.
-	// Note: Revoked tokens might be kept for audit purposes, so this only cleans up truly expired ones.
-	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
 	// Retrieves all delivery services that are currently active.
 	// Suitable for user-facing contexts like checkout.
@@ -96,9 +92,7 @@ type Querier interface {
 	// Joins with the orders table to get aggregated details.
 	// Includes soft-deleted users as well.
 	GetUserWithDetails(ctx context.Context, userID uuid.UUID) (GetUserWithDetailsRow, error)
-	// Finds a valid (non-expired, non-revoked) refresh token record by its identifier.
-	// The bcrypt hash verification happens in Go code.
-	GetValidRefreshTokenRecord(ctx context.Context, tokenIdentifier string) (RefreshToken, error)
+	GetValidRefreshTokenRecord(ctx context.Context, jti string) (RefreshToken, error)
 	// Increments the stock_quantity for a product by a given amount.
 	// Suitable for releasing stock back when cancelling an order.
 	IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error)
@@ -129,12 +123,9 @@ type Querier interface {
 	// Optionally filter by active status.
 	// Paginated using LIMIT and OFFSET.
 	ListUsersWithOrderCounts(ctx context.Context, arg ListUsersWithOrderCountsParams) ([]ListUsersWithOrderCountsRow, error)
-	// Ensure it hasn't been revoked
-	// Marks a specific refresh token as revoked using its identifier.
-	RevokeRefreshTokenByIdentifier(ctx context.Context, tokenIdentifier string) error
-	// Revokes all active refresh tokens for a specific user.
-	// Useful for "logout all devices" or account compromise scenarios.
-	RevokeRefreshTokensByUser(ctx context.Context, userID uuid.UUID) error
+	// Revokes all refresh tokens for a specific user.
+	RevokeAllRefreshTokensByUserID(ctx context.Context, userID uuid.UUID) error
+	RevokeRefreshTokenByJTI(ctx context.Context, jti string) error
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
 	// Searches users by email or full_name, optionally filtered by active status.

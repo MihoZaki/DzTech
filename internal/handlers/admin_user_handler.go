@@ -34,7 +34,6 @@ func (h *AdminUserHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/{id}", h.GetUser)                    // GET /api/v1/admin/users/{id}
 	r.Post("/{id}/activate", h.ActivateUser)     // POST /api/v1/admin/users/{id}/activate
 	r.Post("/{id}/deactivate", h.DeactivateUser) // POST /api/v1/admin/users/{id}/deactivate
-	// Add other routes like SearchUsers, ActivateUser, DeactivateUser here later
 }
 
 // ListUsers handles listing users.
