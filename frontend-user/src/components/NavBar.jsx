@@ -153,7 +153,7 @@ const Navbar = () => {
             />
             <span className="text-xl md:text-2xl font-bold text-base-content">
               {/* Changed text-white to text-base-content */}
-              ALM<span className="text-primary">.</span> Informatique
+              YC<span className="text-primary">.</span> Informatique
             </span>
           </Link>
 

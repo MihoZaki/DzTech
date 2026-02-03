@@ -124,7 +124,7 @@ const Home = () => {
         <div className="hero-content text-center">
           <div className="max-w-md">
             <h1 className="text-4xl md:text-6xl font-bold mb-4">
-              Welcome to ALM Informatique
+              Welcome to YC Informatique
             </h1>
             <p className="text-xl mb-8 text-base-content/80">
               Your trusted partner for all your tech needs.
