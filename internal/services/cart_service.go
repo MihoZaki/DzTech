@@ -207,7 +207,6 @@ func (s *CartService) AddItemToCart(ctx context.Context, userID *uuid.UUID, sess
 	if quantity <= 0 {
 		return nil, fmt.Errorf("quantity must be greater than 0")
 	}
-
 	// Validate product exists and get its details (including stock)
 	// Note: We might not need the full product details here if the DB query handles stock checks,
 	// but validating existence is good.
@@ -254,6 +253,64 @@ func (s *CartService) AddItemToCart(ctx context.Context, userID *uuid.UUID, sess
 	}
 
 	return &updatedOrCreatedItem, nil
+}
+
+// AddBulkItems adds multiple items to the user's or guest's cart efficiently in a single database call.
+// It performs upserts and checks stock availability for all items in the batch atomically in the DB.
+// It determines the cart based on userID (authenticated) or sessionID (guest).
+func (s *CartService) AddBulkItems(ctx context.Context, userID *uuid.UUID, sessionID string, items []models.BulkAddItemRequest_Item) error {
+	if len(items) == 0 {
+		return fmt.Errorf("cannot add empty item list to cart")
+	}
+
+	// Determine the cart ID based on user or session (mirroring AddItemToCart logic)
+	var cartID uuid.UUID
+	if userID != nil {
+		userCart, err := s.getOrCreateUserCart(ctx, *userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user cart: %w", err)
+		}
+		cartID = userCart.ID
+	} else if sessionID != "" {
+		guestCart, err := s.getOrCreateGuestCart(ctx, sessionID)
+		if err != nil {
+			return fmt.Errorf("failed to get guest cart: %w", err)
+		}
+		cartID = guestCart.ID
+	} else {
+		return fmt.Errorf("either userID or sessionID must be provided to add items to cart")
+	}
+
+	// Validate items before preparing DB parameters
+	for _, item := range items {
+		if item.Quantity <= 0 {
+			return fmt.Errorf("quantity for product %s must be greater than 0", item.ProductID)
+		}
+	}
+
+	// Prepare slices for the SQLC query parameters (AddCartItemsBulkParams)
+	productIDs := make([]uuid.UUID, len(items))
+	quantities := make([]int32, len(items))
+
+	for i, item := range items {
+		productIDs[i] = item.ProductID
+		quantities[i] = int32(item.Quantity) // Cast int to int32 as required by AddCartItemsBulkParams
+	}
+
+	// Call the generated SQLC query which handles upserts and stock checks atomically
+	params := db.AddCartItemsBulkParams{
+		CartID:     cartID, // Use the fetched or created cart ID
+		ProductIds: productIDs,
+		Quantities: quantities,
+	}
+	err := s.querier.AddCartItemsBulk(ctx, params)
+	if err != nil {
+		s.logger.Error("Failed to add bulk items to cart in DB", "error", err, "user_id", userID, "session_id", sessionID, "items", items)
+		return fmt.Errorf("failed to add items to cart: %w", err)
+	}
+
+	s.logger.Debug("Successfully added bulk items to cart", "user_id", userID, "session_id", sessionID, "num_items", len(items))
+	return nil
 }
 
 // UpdateItemQuantityInCart updates the quantity of an item in the specified user's or guest's cart.

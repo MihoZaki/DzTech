@@ -59,6 +59,13 @@ type AddItemRequest struct {
 	ProductID string `json:"product_id" validate:"required,uuid"` // Expecting UUID string
 	Quantity  int    `json:"quantity" validate:"required,min=1"`  // Minimum quantity is 1
 }
+type BulkAddItemRequest_Item struct {
+	ProductID uuid.UUID `json:"product_id"`
+	Quantity  int       `json:"quantity"`
+}
+type BulkAddItemRequest struct {
+	Items []BulkAddItemRequest_Item `json:"items"`
+}
 
 func (ir *AddItemRequest) Validate() error {
 	return Validate.Struct(ir)

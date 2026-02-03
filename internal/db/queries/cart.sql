@@ -68,6 +68,31 @@ RETURNING
     created_at,
     updated_at;
 
+-- name: AddCartItemsBulk :exec
+INSERT INTO cart_items (cart_id, product_id, quantity, created_at, updated_at)
+SELECT 
+  $1,
+  input.product_id,
+  input.quantity,
+  NOW(),
+  NOW()
+FROM (
+  SELECT 
+    UNNEST(@product_ids::uuid[]) as product_id,
+    UNNEST(@quantities::int[]) as quantity
+) as input
+INNER JOIN products p ON p.id = input.product_id
+  AND p.stock_quantity >= input.quantity
+  AND p.status = 'active'
+  AND p.deleted_at IS NULL
+ON CONFLICT (cart_id, product_id)
+DO UPDATE SET
+  quantity = LEAST(
+    cart_items.quantity + EXCLUDED.quantity,
+    (SELECT stock_quantity FROM products WHERE id = EXCLUDED.product_id)
+  ),
+  updated_at = NOW();   
+
 -- name: UpdateCartItemQuantity :one
 UPDATE cart_items ci
 SET quantity = sqlc.arg(new_quantity), updated_at = NOW()

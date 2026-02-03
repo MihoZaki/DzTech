@@ -12,6 +12,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addCartItemsBulk = `-- name: AddCartItemsBulk :exec
+INSERT INTO cart_items (cart_id, product_id, quantity, created_at, updated_at)
+SELECT 
+  $1,
+  input.product_id,
+  input.quantity,
+  NOW(),
+  NOW()
+FROM (
+  SELECT 
+    UNNEST($2::uuid[]) as product_id,
+    UNNEST($3::int[]) as quantity
+) as input
+INNER JOIN products p ON p.id = input.product_id
+  AND p.stock_quantity >= input.quantity
+  AND p.status = 'active'
+  AND p.deleted_at IS NULL
+ON CONFLICT (cart_id, product_id)
+DO UPDATE SET
+  quantity = LEAST(
+    cart_items.quantity + EXCLUDED.quantity,
+    (SELECT stock_quantity FROM products WHERE id = EXCLUDED.product_id)
+  ),
+  updated_at = NOW()
+`
+
+type AddCartItemsBulkParams struct {
+	CartID     uuid.UUID   `json:"cart_id"`
+	ProductIds []uuid.UUID `json:"product_ids"`
+	Quantities []int32     `json:"quantities"`
+}
+
+func (q *Queries) AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) error {
+	_, err := q.db.Exec(ctx, addCartItemsBulk, arg.CartID, arg.ProductIds, arg.Quantities)
+	return err
+}
+
 const clearCart = `-- name: ClearCart :exec
 UPDATE cart_items
 SET deleted_at = NOW()

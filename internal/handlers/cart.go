@@ -31,8 +31,9 @@ func (h *CartHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/", h.GetCart)                            // GET /cart
 	r.Post("/items", h.AddItem)                      // POST /cart/items <- Add this line
 	r.Patch("/items/{itemID}", h.UpdateItemQuantity) // PATCH /cart/items/{id}
-	r.Delete("/items/{itemID}", h.RemoveItem)        // DELETE /cart/items/{id} - Add this line
-	r.Delete("/", h.ClearCart)                       // DELETE /cart - Add this line
+	r.Post("/add-bulk", h.AddBulkItemsToCart)
+	r.Delete("/items/{itemID}", h.RemoveItem) // DELETE /cart/items/{id} - Add this line
+	r.Delete("/", h.ClearCart)                // DELETE /cart - Add this line
 }
 
 // getSessionIDFromCookie extracts the session ID from the "session_id" cookie.
@@ -441,4 +442,79 @@ func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
 
 	// Successfully cleared cart - Return 204 No Content
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// AddBulkItemsToCart adds multiple items to the user's or guest's cart in a single request.
+// It expects a JSON body with an array of {product_id, quantity} objects.
+func (h *CartHandler) AddBulkItemsToCart(w http.ResponseWriter, r *http.Request) {
+	var userID *uuid.UUID
+	var sessionID string
+
+	// Extract user ID from context if authenticated
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user adding bulk items to cart", "user_id", user.ID)
+		userID = &user.ID
+		// sessionID remains empty for authenticated users
+	} else {
+		// Fall back to session ID from cookie for guest users
+		var hasSessionCookie bool
+		sessionID, hasSessionCookie = h.getSessionIDFromCookie(r)
+		if !hasSessionCookie {
+			// Generate a new session ID if the cookie is missing for a guest request
+			sessionID = uuid.New().String()
+			h.logger.Debug("No session cookie found, generated new session ID for guest bulk add request", "session_id", sessionID)
+		}
+		h.logger.Debug("Guest user adding bulk items to cart", "session_id", sessionID)
+	}
+
+	h.logger.Debug("Handling cart bulk add items request")
+
+	// Parse the request body
+	var req models.BulkAddItemRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Invalid JSON body.")
+		h.logger.Debug("Failed to decode bulk add items request body", "error", err)
+		return
+	}
+
+	// Validate the request structure (check for nil or empty items array)
+	if req.Items == nil {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Request body must contain an 'items' array.")
+		h.logger.Debug("Bulk add request body missing 'items' array", "request", req)
+		return
+	}
+	if len(req.Items) == 0 {
+		utils.SendErrorResponse(w, http.StatusBadRequest, "Bad Request", "Request body 'items' array cannot be empty.")
+		h.logger.Debug("Bulk add request 'items' array is empty", "request", req)
+		return
+	}
+
+	h.logger.Debug("Adding bulk items to cart", "user_id", userID, "session_id", sessionID, "num_items", len(req.Items))
+
+	// Call the service to add the items (passes userID if present, otherwise sessionID)
+	err = h.cartService.AddBulkItems(r.Context(), userID, sessionID, req.Items)
+	if err != nil {
+		// Log the specific error from the service
+		h.logger.Error("Failed to add bulk items to cart", "user_id", userID, "session_id", sessionID, "num_items", len(req.Items), "error", err)
+
+		// Check for specific known errors like stock issues
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "stock") || strings.Contains(errMsg, "check") {
+			utils.SendErrorResponse(w, http.StatusConflict, "Conflict", "Requested quantity for one or more items exceeds available stock or other constraint violated.")
+			return
+		}
+
+		// Generic error for other failures
+		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to add items to cart.")
+		return
+	}
+
+	// If the request was for a guest and we generated a new session ID, set the cookie.
+	if userID == nil && !h.hasSessionCookie(r) { // Only for guests who didn't have a cookie initially
+		h.setSessionIDCookie(w, sessionID)
+	}
+
+	w.WriteHeader(http.StatusOK) // 200 OK indicates successful addition
+	fmt.Fprintf(w, "Successfully added %d items to cart", len(req.Items))
 }

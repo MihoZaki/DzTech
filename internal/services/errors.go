@@ -4,8 +4,9 @@ import "errors"
 
 // Sentinel errors for ProductService
 var (
-	ErrProductNotFound  = errors.New("product not found")
-	ErrCategoryNotFound = errors.New("category not found")
+	ErrProductNotFound   = errors.New("product not found")
+	ErrCategoryNotFound  = errors.New("category not found")
+	ErrInsufficientStock = errors.New("insufficient stock")
 	// Add more as needed, e.g., ErrUserNotFound, ErrInsufficientStock, etc.
 )
 

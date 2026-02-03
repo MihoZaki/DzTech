@@ -13,6 +13,7 @@ import (
 type Querier interface {
 	// Removes the soft-delete marker by setting deleted_at to NULL.
 	ActivateUser(ctx context.Context, userID uuid.UUID) error
+	AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) error
 	// Gets a specific user by ID, regardless of soft-delete status.
 	// Useful for admin to see any user, active or inactive.
 	AdminGetUser(ctx context.Context, userID uuid.UUID) (User, error)
