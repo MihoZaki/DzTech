@@ -80,11 +80,14 @@ type Discount struct {
 type Order struct {
 	ID                uuid.UUID          `json:"id"`
 	UserID            uuid.UUID          `json:"user_id"`
+	UserFullName      string             `json:"user_full_name"`
 	Status            string             `json:"status"`
 	TotalAmountCents  int64              `json:"total_amount_cents"`
 	PaymentMethod     string             `json:"payment_method"`
-	ShippingAddress   []byte             `json:"shipping_address"`
-	BillingAddress    []byte             `json:"billing_address"`
+	Province          string             `json:"province"`
+	City              string             `json:"city"`
+	PhoneNumber1      string             `json:"phone_number_1"`
+	PhoneNumber2      *string            `json:"phone_number_2"`
 	Notes             *string            `json:"notes"`
 	DeliveryServiceID uuid.UUID          `json:"delivery_service_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`

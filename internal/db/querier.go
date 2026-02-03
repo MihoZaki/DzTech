@@ -22,8 +22,9 @@ type Querier interface {
 	// Include usage limit check
 	// Associates a discount with a specific product (simplified version, might need more checks).
 	ApplyDiscountToProduct(ctx context.Context, arg ApplyDiscountToProductParams) error
-	// Updates the status of an order to 'cancelled' and sets the cancelled_at timestamp.
-	// This is a soft deletion conceptually.
+	// Order items consistently
+	// Updates the status of an order to 'cancelled' and sets the cancelled_at and completed_at timestamps.
+	// This is a soft cancellation.
 	CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
 	CleanupExpiredRefreshTokens(ctx context.Context) error
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
@@ -41,10 +42,8 @@ type Querier interface {
 	// Inserts a new discount record.
 	CreateDiscount(ctx context.Context, arg CreateDiscountParams) (Discount, error)
 	CreateGuestCart(ctx context.Context, sessionID *string) (Cart, error)
-	// Creates a new order and returns its details.
+	// Creates a new order with denormalized address fields and returns its details.
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
-	// Creates a new order item and returns its details.
-	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -102,14 +101,15 @@ type Querier interface {
 	GetDiscountsByCategoryID(ctx context.Context, categoryID uuid.UUID) ([]Discount, error)
 	// Fetches active discounts applicable to a specific product.
 	GetDiscountsByProductID(ctx context.Context, productID uuid.UUID) ([]Discount, error)
-	// Retrieves an order by its ID.
+	// Array of quantities
+	// Retrieves an order by its ID with denormalized address fields.
 	GetOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
-	// Retrieves an order by its ID along with all its items.
-	// This query uses a join and might return multiple rows if there are items.
-	// The service layer needs to aggregate these rows into a single Order object with a slice of OrderItems.
-	GetOrderByIDWithItems(ctx context.Context, orderID uuid.UUID) ([]GetOrderByIDWithItemsRow, error)
 	// Retrieves all items for a specific order ID.
 	GetOrderItemsByOrderID(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error)
+	// Retrieves an order by its ID along with all its items, including denormalized address fields.
+	// This query uses a join and might return multiple rows if there are items.
+	// The service layer needs to aggregate these rows into a single Order object with a slice of OrderItems.
+	GetOrderWithItems(ctx context.Context, orderID uuid.UUID) ([]GetOrderWithItemsRow, error)
 	GetProduct(ctx context.Context, productID uuid.UUID) (Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (Product, error)
 	// Fetches a specific product with its original price and potential discounted price and code if an active discount applies.
@@ -132,6 +132,9 @@ type Querier interface {
 	// Increments the stock_quantity for a product by a given amount.
 	// Suitable for releasing stock back when cancelling an order.
 	IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error)
+	// Inserts multiple order items efficiently in a single query.
+	// Requires arrays of equal length for product_ids, quantities, names, and prices_cents.
+	InsertOrderItemsBulk(ctx context.Context, arg InsertOrderItemsBulkParams) error
 	// Check usage limit
 	// Associates a category with a discount.
 	LinkCategoryToDiscount(ctx context.Context, arg LinkCategoryToDiscountParams) error
@@ -142,7 +145,8 @@ type Querier interface {
 	// Retrieves delivery services, optionally filtered by active status.
 	// Suitable for admin operations.
 	ListAllDeliveryServices(ctx context.Context, arg ListAllDeliveryServicesParams) ([]DeliveryService, error)
-	// Retrieves a paginated list of all orders, optionally filtered by status or user_id.
+	// Page limit and offset
+	// Retrieves a paginated list of all orders with denormalized address fields, optionally filtered by status or user_id.
 	// Intended for admin use. Includes cancelled orders.
 	// If filter_user_id is the zero UUID ('00000000-0000-0000-0000-000000000000'), it retrieves orders for all users.
 	// If filter_status is an empty string (''), it retrieves orders of all statuses.
@@ -154,7 +158,8 @@ type Querier interface {
 	ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error)
 	ListProductsWithCategory(ctx context.Context, arg ListProductsWithCategoryParams) ([]ListProductsWithCategoryRow, error)
 	ListProductsWithCategoryDetail(ctx context.Context, arg ListProductsWithCategoryDetailParams) ([]ListProductsWithCategoryDetailRow, error)
-	// Retrieves a paginated list of orders for a specific user, optionally filtered by status.
+	// Order items consistently
+	// Retrieves a paginated list of orders for a specific user with denormalized address fields, optionally filtered by status.
 	// Excludes cancelled orders by default. Admins should use ListAllOrders.
 	ListUserOrders(ctx context.Context, arg ListUserOrdersParams) ([]Order, error)
 	// Lists users, optionally filtered by active status (soft-deleted).
@@ -187,10 +192,11 @@ type Querier interface {
 	UpdateDeliveryService(ctx context.Context, arg UpdateDeliveryServiceParams) (DeliveryService, error)
 	// Updates an existing discount record.
 	UpdateDiscount(ctx context.Context, arg UpdateDiscountParams) (Discount, error)
-	// Updates other details of an order (notes, addresses - if allowed).
-	// Example updating notes and timestamps
+	// Page limit and offset
+	// Updates other details of an order (notes, timestamps).
+	// Address fields are denormalized and set during creation.
 	UpdateOrder(ctx context.Context, arg UpdateOrderParams) (Order, error)
-	// Updates the status of an order.
+	// Updates the status of an order and manages completion/cancellation timestamps.
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 }

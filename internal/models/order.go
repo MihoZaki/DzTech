@@ -1,3 +1,5 @@
+// internal/models/order.go
+
 package models
 
 import (
@@ -6,80 +8,95 @@ import (
 	"github.com/google/uuid"
 )
 
-type Order struct {
-	ID                uuid.UUID    `json:"id"`
-	UserID            uuid.UUID    `json:"user_id"`
-	Status            string       `json:"status"` // e.g., pending, confirmed, shipped, delivered, cancelled
-	TotalAmountCents  int64        `json:"total_amount_cents"`
-	PaymentMethod     string       `json:"payment_method"`      // e.g., "Cash on Delivery"
-	ShippingAddress   LocalAddress `json:"shipping_address"`    // Using LocalAddress
-	BillingAddress    LocalAddress `json:"billing_address"`     // Using LocalAddress
-	Notes             *string      `json:"notes,omitempty"`     // Optional notes from customer or admin
-	DeliveryServiceID uuid.UUID    `json:"delivery_service_id"` // Added
-	CreatedAt         time.Time    `json:"created_at"`
-	UpdatedAt         time.Time    `json:"updated_at"`
-	CompletedAt       *time.Time   `json:"completed_at,omitempty"` // When status becomes 'delivered' or 'cancelled'
-	CancelledAt       *time.Time   `json:"cancelled_at,omitempty"` // When status is explicitly set to 'cancelled'
+// Address represents the structure for shipping and billing addresses stored as JSONB.
+type Address struct {
+	FullName     string  `json:"full_name" validate:"required"`      // Required
+	PhoneNumber1 string  `json:"phone_number_1" validate:"required"` // Required
+	PhoneNumber2 *string `json:"phone_number_2,omitempty"`           // Optional
+	Province     string  `json:"province" validate:"required"`       // Required (formerly 'Provenance')
+	City         string  `json:"city" validate:"required"`           // Required
+	// Add other potential address fields if needed later
 }
 
-// OrderItem represents an item within an order.
-type OrderItem struct {
-	ID            uuid.UUID `json:"id"`
-	OrderID       uuid.UUID `json:"order_id"`
-	ProductID     uuid.UUID `json:"product_id"`
-	ProductName   string    `json:"product_name"` // Denormalized for easier retrieval
-	PriceCents    int64     `json:"price_cents"`  // Price at time of order
-	Quantity      int       `json:"quantity"`
-	SubtotalCents int64     `json:"subtotal_cents"` // PriceCents * Quantity
+func (a *Address) Validate() error {
+	return Validate.Struct(a)
 }
 
-// OrderWithItems represents an order along with its associated items.
-// This is useful for responses like GET /api/v1/orders/{id}.
-type OrderWithItems struct {
-	Order Order       `json:"order"`
-	Items []OrderItem `json:"items"`
+func (i *BulkAddItemRequest_Item) Validate() error {
+	return Validate.Struct(i)
 }
 
-// LocalAddress represents a shipping/billing address for local delivery only.
-type LocalAddress struct {
-	Street1     string `json:"street1"`
-	Street2     string `json:"street2,omitempty"` // Optional second line
-	City        string `json:"city"`              // City is required for local context
-	State       string `json:"state"`             // State/Province/Region for local context
-	PostalCode  string `json:"postal_code"`       // Postal Code is important for local delivery
-	PhoneNumber string `json:"phone_number"`      // Required phone number for contact
+// CreateOrderFromCartRequest represents the request body for creating an order from the current cart state.
+type CreateOrderFromCartRequest struct {
+	Items             []BulkAddItemRequest_Item `json:"items"` // Explicitly specify diving into struct elements
+	ShippingAddress   Address                   `json:"shipping_address"`
+	BillingAddress    Address                   `json:"billing_address"`
+	Notes             *string                   `json:"notes,omitempty"`     // Optional notes for the order
+	DeliveryServiceID uuid.UUID                 `json:"delivery_service_id"` // Required delivery service ID
 }
 
-type CreateOrderRequest struct {
-	UserID            uuid.UUID    `json:"user_id" validate:"required,uuid"` // Might come from context
-	CartID            uuid.UUID    `json:"cart_id" validate:"required,uuid"`
-	ShippingAddress   LocalAddress `json:"shipping_address" validate:"required,dive"` // dive validates nested struct fields
-	BillingAddress    LocalAddress `json:"billing_address" validate:"required,dive"`
-	DeliveryServiceID uuid.UUID    `json:"delivery_service_id" validate:"required,uuid"` // Add delivery service ID
-	Notes             *string      `json:"notes,omitempty"`
-	// Items are usually derived from the user's cart at checkout time,
-	// not sent explicitly in the request body for CreateOrder.
-	// However, you might send cart_id or similar.
-	// For now, let's assume the service fetches items from the cart.
+func (r *CreateOrderFromCartRequest) Validate() error {
+	return Validate.Struct(r)
 }
 
+// UpdateOrderStatusRequest represents the request body for updating an order's status.
 type UpdateOrderStatusRequest struct {
 	Status string `json:"status" validate:"required,oneof=pending confirmed shipped delivered cancelled"`
-}
-
-type UpdateOrderRequest struct {
-	Status *string `json:"status,omitempty" validate:"omitempty,oneof=pending confirmed shipped delivered cancelled"`
-	Notes  *string `json:"notes,omitempty"`
-}
-
-func (r *CreateOrderRequest) Validate() error {
-	return Validate.Struct(r)
 }
 
 func (r *UpdateOrderStatusRequest) Validate() error {
 	return Validate.Struct(r)
 }
 
+// UpdateOrderRequest represents the request body for updating other order details (e.g., notes).
+type UpdateOrderRequest struct {
+	Notes *string `json:"notes,omitempty" validate:"omitempty,max=500"` // Optional notes, max length 500 chars
+}
+
 func (r *UpdateOrderRequest) Validate() error {
 	return Validate.Struct(r)
+}
+
+// Order represents the main order entity returned by the service.
+type Order struct {
+	ID                uuid.UUID  `json:"id"`
+	UserID            uuid.UUID  `json:"user_id"`
+	UserFullName      string     `json:"user_full_name"`
+	Status            string     `json:"status"`
+	TotalAmountCents  int64      `json:"total_amount_cents"`
+	PaymentMethod     string     `json:"payment_method"`
+	Province          string     `json:"province"`
+	City              string     `json:"city"`
+	PhoneNumber1      string     `json:"phone_number_1"`
+	PhoneNumber2      *string    `json:"phone_number_2"`
+	DeliveryServiceID uuid.UUID  `json:"delivery_service_id"`
+	Notes             *string    `json:"notes,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	CompletedAt       *time.Time `json:"completed_at,omitempty"`
+	CancelledAt       *time.Time `json:"cancelled_at,omitempty"`
+}
+
+// OrderItem represents an individual item within an order.
+type OrderItem struct {
+	ID            uuid.UUID `json:"id"`
+	OrderID       uuid.UUID `json:"order_id"`
+	ProductID     uuid.UUID `json:"product_id"`
+	ProductName   string    `json:"product_name"`
+	PriceCents    int64     `json:"price_cents"`
+	Quantity      int32     `json:"quantity"`
+	SubtotalCents int64     `json:"subtotal_cents"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// OrderWithItems represents the complete state of an order for display purposes.
+type OrderWithItems struct {
+	Order Order       `json:"order"`
+	Items []OrderItem `json:"items"`
+}
+
+// ListOrdersResponse wraps the result of a list orders query.
+type ListOrdersResponse struct {
+	Orders []Order `json:"orders"`
 }

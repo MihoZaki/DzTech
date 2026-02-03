@@ -3,12 +3,15 @@
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- Link to users table
+    user_full_name VARCHAR(255) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'shipped', 'delivered', 'cancelled')), -- Enum-like constraint
     total_amount_cents BIGINT NOT NULL DEFAULT 0, -- Total amount in cents
     payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash on Delivery', -- Fixed for COD system
     -- payment_status VARCHAR(20) DEFAULT 'pending', -- Could add if needed later
-    shipping_address JSONB NOT NULL, -- Store address as JSONB
-    billing_address JSONB NOT NULL,  -- Store address as JSONB
+    province VARCHAR(255) NOT NULL,
+    city VARCHAR(255) NOT NULL, 
+    phone_number_1 VARCHAR(255) NOT NULL,
+    phone_number_2 VARCHAR(255),
     notes TEXT, -- Optional notes
     delivery_service_id UUID NOT NULL REFERENCES delivery_services(id), -- Link to delivery_services table
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

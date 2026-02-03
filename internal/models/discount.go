@@ -49,25 +49,4 @@ type Discount struct {
 }
 
 // FromDB converts the generated db.Discount to the service-level models.Discount.
-func (d *Discount) FromDB(dbDisc *db.Discount) {
-	d.ID = dbDisc.ID
-	d.Name = dbDisc.Name
-	d.Description = dbDisc.Description
-	d.DiscountType = DiscountType(dbDisc.DiscountType)
-	d.DiscountValue = dbDisc.DiscountValue.Int.Int64()
-	d.TargetType = TargetType(dbDisc.TargetType)
-	if dbDisc.TargetID != uuid.Nil {
-		d.TargetID = &dbDisc.TargetID
-	} else {
-		d.TargetID = nil
-	}
-	d.StartDate = dbDisc.StartDate.Time // Assuming Timestamptz
-	d.EndDate = dbDisc.EndDate.Time
-	d.MinOrderAmountCents = dbDisc.MinOrderAmountCents
-	d.MaxDiscountAmountCents = dbDisc.MaxDiscountAmountCents
-	d.UsageLimit = dbDisc.UsageLimit
-	d.UsageCount = dbDisc.UsageCount
-	d.IsActive = *dbDisc.IsActive
-	d.CreatedAt = dbDisc.CreatedAt.Time
-	d.UpdatedAt = dbDisc.UpdatedAt.Time
-}
+func (d *Discount) FromDB(dbDisc *db.Discount) {}

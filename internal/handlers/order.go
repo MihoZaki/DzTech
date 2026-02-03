@@ -46,42 +46,42 @@ func (h *OrderHandler) RegisterAdminRoutes(r chi.Router) {
 // Expected JSON body: models.CreateOrderRequest
 // Requires UserID from JWT context.
 func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
-	// Extract UserID from JWT context
-	userIDVal := r.Context().Value("user_id")
+	// 1. Extract UserID from JWT context (existing logic)
+	var userIDVal *uuid.UUID
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user accessing order", "user_id", user.ID)
+		userIDVal = &user.ID
+	}
 	if userIDVal == nil {
 		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
 		return
 	}
-	userID, ok := userIDVal.(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: invalid user context", http.StatusUnauthorized)
-		return
-	}
+	userID := *userIDVal // Dereference for easier use
 
-	var req models.CreateOrderRequest
+	// 2. Decode Request Body into CreateOrderFromCartRequest (NEW)
+	var req models.CreateOrderFromCartRequest // Use the NEW request model
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON in request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Validate the request struct (optional, if using validator tags)
+	// 3. Validate the NEW request struct (NEW)
 	if err := req.Validate(); err != nil {
 		http.Error(w, "Validation error: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Ensure UserID from context is used, not from the request body
-	req.UserID = userID
-
-	orderSummary, err := h.service.CreateOrder(r.Context(), req)
+	// 4. Call the REFACTORED Service Method (NEW)
+	orderSummary, err := h.service.CreateOrder(r.Context(), req, userID) // Pass the NEW req and userID
 	if err != nil {
 		// Log the error server-side
 		h.logger.Error("Failed to create order", "error", err, "user_id", userID)
 		// Return a generic error message to the client
-		http.Error(w, "Failed to create order", http.StatusInternalServerError)
+		http.Error(w, "Failed to create order: "+err.Error(), http.StatusInternalServerError) // More specific error message
 		return
 	}
 
+	// 5. Send Success Response (201 Created) (existing logic)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated) // 201 Created
 	if err := json.NewEncoder(w).Encode(orderSummary); err != nil {
@@ -102,14 +102,14 @@ func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract UserID from JWT context
-	userIDVal := r.Context().Value("user_id")
+	var userIDVal *uuid.UUID
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user accessing cart", "user_id", user.ID)
+		userIDVal = &user.ID
+		// sessionID remains empty for authenticated users
+	}
 	if userIDVal == nil {
 		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
-		return
-	}
-	userID, ok := userIDVal.(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: invalid user context", http.StatusUnauthorized)
 		return
 	}
 
@@ -119,15 +119,15 @@ func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Order not found", http.StatusNotFound)
 			return
 		}
-		h.logger.Error("Failed to get order", "error", err, "order_id", orderID, "user_id", userID)
+		h.logger.Error("Failed to get order", "error", err, "order_id", orderID, "user_id", *userIDVal)
 		http.Error(w, "Failed to retrieve order", http.StatusInternalServerError)
 		return
 	}
 
 	// Check if the order belongs to the requesting user
-	if orderWithItems.Order.UserID != userID {
+	if orderWithItems.Order.UserID != *userIDVal {
 		// Log potential security issue
-		h.logger.Warn("User attempted to access another user's order", "requesting_user_id", userID, "order_owner_id", orderWithItems.Order.UserID, "order_id", orderID)
+		h.logger.Warn("User attempted to access another user's order", "requesting_user_id", *userIDVal, "order_owner_id", orderWithItems.Order.UserID, "order_id", orderID)
 		http.Error(w, "Forbidden: access denied", http.StatusForbidden)
 		return
 	}
@@ -149,16 +149,14 @@ func (h *OrderHandler) GetOrderByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid order ID format", http.StatusBadRequest)
 		return
 	}
-
-	// Extract UserID from JWT context (admin check assumed handled by middleware upstream)
-	userIDVal := r.Context().Value("user_id")
-	if userIDVal == nil {
-		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
-		return
+	var userID *uuid.UUID
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user accessing cart", "user_id", user.ID)
+		userID = &user.ID
+		// sessionID remains empty for authenticated users
 	}
-	userID, ok := userIDVal.(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: invalid user context", http.StatusUnauthorized)
+	if userID == nil {
+		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
 		return
 	}
 
@@ -185,14 +183,14 @@ func (h *OrderHandler) GetOrderByID(w http.ResponseWriter, r *http.Request) {
 // Requires UserID from JWT context.
 func (h *OrderHandler) ListUserOrders(w http.ResponseWriter, r *http.Request) {
 	// Extract UserID from JWT context
-	userIDVal := r.Context().Value("user_id")
+	var userIDVal *uuid.UUID
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user accessing cart", "user_id", user.ID)
+		userIDVal = &user.ID
+		// sessionID remains empty for authenticated users
+	}
 	if userIDVal == nil {
 		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
-		return
-	}
-	userID, ok := userIDVal.(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: invalid user context", http.StatusUnauthorized)
 		return
 	}
 
@@ -215,9 +213,9 @@ func (h *OrderHandler) ListUserOrders(w http.ResponseWriter, r *http.Request) {
 		} // else, keep default
 	}
 
-	orders, err := h.service.ListUserOrders(r.Context(), userID, statusFilter, page, limit)
+	orders, err := h.service.ListUserOrders(r.Context(), *userIDVal, statusFilter, page, limit)
 	if err != nil {
-		h.logger.Error("Failed to list user orders", "error", err, "user_id", userID)
+		h.logger.Error("Failed to list user orders", "error", err, "user_id", *userIDVal)
 		http.Error(w, "Failed to retrieve orders", http.StatusInternalServerError)
 		return
 	}
@@ -233,17 +231,16 @@ func (h *OrderHandler) ListUserOrders(w http.ResponseWriter, r *http.Request) {
 // Requires UserID from JWT context and admin privileges
 func (h *OrderHandler) ListAllOrders(w http.ResponseWriter, r *http.Request) {
 	// Extract UserID from JWT context
-	userIDVal := r.Context().Value("user_id")
+	var userIDVal *uuid.UUID
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user accessing cart", "user_id", user.ID)
+		userIDVal = &user.ID
+		// sessionID remains empty for authenticated users
+	}
 	if userIDVal == nil {
 		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
 		return
 	}
-	userID, ok := userIDVal.(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: invalid user context", http.StatusUnauthorized)
-		return
-	}
-
 	// Parse query parameters for pagination and filtering
 	userFilterStr := r.URL.Query().Get("user_id")
 	statusFilter := r.URL.Query().Get("status")
@@ -276,7 +273,7 @@ func (h *OrderHandler) ListAllOrders(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := h.service.ListAllOrders(r.Context(), userFilterID, statusFilter, page, limit)
 	if err != nil {
-		h.logger.Error("Failed to list all orders", "error", err, "user_id", userID) // Log the admin user ID making the request
+		h.logger.Error("Failed to list all orders", "error", err, "user_id", *userIDVal) // Log the admin user ID making the request
 		http.Error(w, "Failed to retrieve orders", http.StatusInternalServerError)
 		return
 	}
@@ -300,15 +297,14 @@ func (h *OrderHandler) UpdateOrderStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Extract UserID from JWT context
-	userIDVal := r.Context().Value("user_id")
+	var userIDVal *uuid.UUID
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user accessing cart", "user_id", user.ID)
+		userIDVal = &user.ID
+		// sessionID remains empty for authenticated users
+	}
 	if userIDVal == nil {
 		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
-		return
-	}
-	userID, ok := userIDVal.(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: invalid user context", http.StatusUnauthorized)
 		return
 	}
 
@@ -336,7 +332,7 @@ func (h *OrderHandler) UpdateOrderStatus(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusConflict) // 409 Conflict for invalid transitions
 			return
 		}
-		h.logger.Error("Failed to update order status", "error", err, "order_id", orderID, "user_id", userID, "new_status", req.Status)
+		h.logger.Error("Failed to update order status", "error", err, "order_id", orderID, "user_id", *userIDVal, "new_status", req.Status)
 		http.Error(w, "Failed to update order status", http.StatusInternalServerError)
 		return
 	}
@@ -359,15 +355,14 @@ func (h *OrderHandler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract UserID from JWT context
-	userIDVal := r.Context().Value("user_id")
+	var userIDVal *uuid.UUID
+	if user, ok := models.GetUserFromContext(r.Context()); ok {
+		h.logger.Debug("Authenticated user accessing cart", "user_id", user.ID)
+		userIDVal = &user.ID
+		// sessionID remains empty for authenticated users
+	}
 	if userIDVal == nil {
 		http.Error(w, "Unauthorized: missing user context", http.StatusUnauthorized)
-		return
-	}
-	userID, ok := userIDVal.(uuid.UUID)
-	if !ok {
-		http.Error(w, "Unauthorized: invalid user context", http.StatusUnauthorized)
 		return
 	}
 
@@ -383,7 +378,7 @@ func (h *OrderHandler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusConflict) // 409 Conflict for invalid cancellation
 			return
 		}
-		h.logger.Error("Failed to cancel order", "error", err, "order_id", orderID, "user_id", userID)
+		h.logger.Error("Failed to cancel order", "error", err, "order_id", orderID, "user_id", *userIDVal)
 		http.Error(w, "Failed to cancel order", http.StatusInternalServerError)
 		return
 	}

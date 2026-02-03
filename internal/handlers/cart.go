@@ -100,12 +100,6 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 			// The handler should then set the cookie.
 			// For now, let's assume we want to allow the request to proceed to the service,
 			// which will generate a session ID if necessary, and then we set the cookie here.
-			// Let's adjust the logic slightly: allow an empty sessionID to be passed initially,
-			// let the service create a cart if needed, and then set the cookie *after* the cart is created.
-			// However, GetCartForContext needs the sessionID upfront.
-			// Option 1: Pass an empty string, let service handle creating a new session ID internally if needed, then set cookie.
-			// Option 2: Generate session ID here if missing, then pass it.
-			// Option 2 is cleaner for separation of concerns.
 			sessionID = uuid.New().String()
 			h.logger.Debug("No session cookie found, generated new session ID for guest cart request", "session_id", sessionID)
 			// Do NOT set the cookie yet. We need to call the service first to ensure the cart exists/gets created.
@@ -130,23 +124,9 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 	// If the request was for a guest and we generated a new session ID (or just read an existing one),
 	// ensure the cookie is set in the response.
 	if userID == nil { // Only for guests
-		// Check if the session ID was generated *during* the service call (unlikely with current logic)
-		// or if it was read from the cookie or generated here.
-		// Since we generated it here if missing, or read it from the cookie, we should set it.
-		// However, if the session ID was *read* from the cookie, it's already present in the client.
-		// The crucial moment to set the cookie is *after* the first interaction that necessitates a session ID,
-		// i.e., when the cart is created for a guest who didn't have a cookie.
-		// The service layer might indicate if a *new* cart was created for a guest.
-		// For simplicity now, we can just set the cookie with the session ID we used,
-		// but only if we generated it (indicating the client didn't have one).
-		// A more robust way would be for the service to return a flag indicating a new session was initiated.
-		// For now, let's set the cookie if we generated the ID (which implies no cookie existed).
-		// But this logic is tricky without a flag from the service. Let's assume the service ensures the cart exists,
-		// and if the cookie was missing, we set it here.
 		if !h.hasSessionCookie(r) {
 			h.setSessionIDCookie(w, sessionID) // Set the cookie with the session ID used
 		}
-		// If the cookie existed, the client already has it, no need to set it again.
 	}
 
 	w.Header().Set("Content-Type", "application/json")

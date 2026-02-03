@@ -32,8 +32,6 @@ func NewCartService(querier db.Querier, productSvc *ProductService, logger *slog
 
 // GetCartForContext retrieves the cart for the given user ID or session ID.
 // It ensures the cart exists, fetching or creating it as necessary.
-// GetCartForContext retrieves the cart for the given user ID or session ID.
-// It ensures the cart exists, fetching or creating it as necessary.
 func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, sessionID string) (*models.CartSummary, error) {
 	if userID == nil && sessionID == "" {
 		return nil, fmt.Errorf("either userID or sessionID must be provided")
@@ -69,31 +67,57 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 		cartUpdatedAt = dbCart.UpdatedAt.Time
 	}
 
-	// Fetch items for the cart with product details
-	dbItemsWithProduct, err := s.querier.GetCartWithItemsAndProducts(ctx, cartID)
+	// --- CHANGE: Use the new query that includes discount calculations ---
+	// Fetch items for the cart with product details and discounts
+	dbItemsWithProductAndDiscounts, err := s.querier.GetCartWithItemsAndProductsWithDiscounts(ctx, cartID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		s.logger.Error("Error fetching cart items with product details", "error", err, "cart_id", cartID)
-		return nil, fmt.Errorf("failed to retrieve cart items: %w", err)
+		s.logger.Error("Error fetching cart items with product details and discounts", "error", err, "cart_id", cartID)
+		return nil, fmt.Errorf("failed to retrieve cart items with discounts: %w", err)
+	}
+
+	if len(dbItemsWithProductAndDiscounts) == 0 {
+		// Return an empty summary if the cart exists but has no items
+		return &models.CartSummary{
+			ID:         cartID,
+			UserID:     cartUserID,
+			SessionID:  cartSessionID,
+			CreatedAt:  cartCreatedAt,
+			UpdatedAt:  cartUpdatedAt,
+			Items:      []models.CartItemSummary{},
+			TotalItems: 0, TotalQty: 0,
+			TotalValue: 0,
+		}, nil
 	}
 
 	// Calculate totals and build the summary model
 	var totalItems, totalQuantity int
 	var totalValueCents int64
-	items := make([]models.CartItemSummary, 0, len(dbItemsWithProduct))
+	items := make([]models.CartItemSummary, 0, len(dbItemsWithProductAndDiscounts)) // Pre-allocate slice
 
-	for _, itemRow := range dbItemsWithProduct {
-		// Only process items where the product still exists and is active
-		if itemRow.ProductName != nil && itemRow.ProductPriceCents != nil {
-			qty := int(*itemRow.CartItemQuantity) // Quantity is a pointer because of emit_pointers_for_null_types
-			priceCents := *itemRow.ProductPriceCents
+	// Use a map to track distinct product IDs for TotalItems count
+	distinctProducts := make(map[uuid.UUID]bool)
 
-			totalItems++
+	for _, itemRow := range dbItemsWithProductAndDiscounts {
+		// Only process items where the product still exists and is active (ProductName is not nil)
+		// The GetCartWithItemsAndProductsWithDiscounts query includes products even if soft-deleted (p.deleted_at IS NULL OR p.id IS NULL)
+		// However, if p.name (ProductName) is nil, it means the product was deleted after the item was added.
+		if itemRow.ProductName != nil {
+			qty := int(*itemRow.CartItemQuantity)                  // Quantity is a pointer because of emit_pointers_for_null_types
+			finalPriceCents := itemRow.ProductDiscountedPriceCents // Use the final price calculated in the query
+
+			itemSubtotalCents := finalPriceCents * int64(qty)
+			totalValueCents += itemSubtotalCents
+
+			productID := itemRow.CartItemProductID
+			if !distinctProducts[productID] {
+				totalItems++
+				distinctProducts[productID] = true
+			}
 			totalQuantity += qty
-			totalValueCents += int64(qty) * priceCents
 
 			// Decode the image URLs JSONB array from []byte to []string
 			var imageUrls []string
-			if itemRow.ProductImageUrls != nil {
+			if itemRow.ProductImageUrls != nil { // Check if JSONB column is not NULL
 				err := json.Unmarshal(itemRow.ProductImageUrls, &imageUrls)
 				if err != nil {
 					s.logger.Warn("Failed to decode image URLs for product in cart", "product_id", itemRow.CartItemProductID, "error", err)
@@ -105,26 +129,30 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 			}
 
 			productLite := &models.ProductLite{
-				ID:            itemRow.CartItemProductID,
-				Name:          *itemRow.ProductName,
-				PriceCents:    priceCents,
-				StockQuantity: int(*itemRow.ProductStockQuantity),
-				ImageUrls:     imageUrls, // Now properly decoded
-				Brand:         *itemRow.ProductBrand,
+				ID:                 itemRow.CartItemProductID,          // Use ID from the joined query result
+				Name:               *itemRow.ProductName,               // Use Name from the joined query result
+				OriginalPriceCents: *itemRow.ProductOriginalPriceCents, // Include original price
+				FinalPriceCents:    finalPriceCents,                    // Use the final discounted price
+				StockQuantity:      *itemRow.ProductStockQuantity,      // Use Stock from the joined query result
+				ImageUrls:          imageUrls,                          // Now properly decoded
+				Brand:              *itemRow.ProductBrand,              // Use Brand from the joined query result
+				DiscountCode:       itemRow.DiscountCode,
+				DiscountType:       itemRow.DiscountType,
+				DiscountValue:      itemRow.DiscountValue,
 			}
 
 			itemSummary := models.CartItemSummary{
-				ID:       itemRow.CartItemID,
-				CartID:   itemRow.CartItemCartID,
-				Product:  productLite,
-				Quantity: qty,
+				ID:       itemRow.CartItemID,     // Use ID from the joined query result
+				CartID:   itemRow.CartItemCartID, // Use CartID from the joined query result
+				Product:  productLite,            // Use the updated ProductLite
+				Quantity: qty,                    // Use quantity from the joined query result
 			}
 			items = append(items, itemSummary)
 		} else {
-			// If the product was deleted or became inactive since being added to the cart,
-			// we could log this or handle it differently.
-			// For now, we just skip it in the summary, but the item remains in the DB until explicitly removed.
-			s.logger.Debug("Skipping cart item with missing/inactive product", "item_id", itemRow.CartItemID, "product_id", itemRow.CartItemProductID)
+			// If the product was deleted after being added to the cart,
+			// log this and skip it in the summary.
+			// The item might still exist in the DB until explicitly removed by cleanup logic or user action.
+			s.logger.Debug("Skipping cart item with missing/deleted product", "item_id", itemRow.CartItemID, "product_id", itemRow.CartItemProductID)
 		}
 	}
 
@@ -137,7 +165,7 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 		Items:      items,
 		TotalItems: totalItems,
 		TotalQty:   totalQuantity,
-		TotalValue: totalValueCents,
+		TotalValue: totalValueCents, // <--- CRITICAL: Use total calculated with FinalPriceCents
 	}, nil
 }
 

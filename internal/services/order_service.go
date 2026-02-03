@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,123 +35,126 @@ func NewOrderService(querier db.Querier, pool *pgxpool.Pool, cartService *CartSe
 		logger:         logger,
 	}
 }
-func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderRequest) (*models.OrderWithItems, error) {
-	dbCart, err := s.querier.GetCartByID(ctx, req.CartID)
+
+// CreateOrder creates a new order from the items in the user's cart.
+func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFromCartRequest, userID uuid.UUID) (*models.OrderWithItems, error) {
+	cartSummary, err := s.cartService.GetCartForContext(ctx, &userID, "")
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("specified cart not found")
-		}
-		return nil, fmt.Errorf("failed to fetch cart: %w", err)
+		return nil, fmt.Errorf("failed to fetch current cart state for user %s: %w", userID, err)
 	}
 
-	if dbCart.UserID != req.UserID {
-		return nil, errors.New("access denied: cart does not belong to the specified user")
-	}
-	cartItemsWithProducts, err := s.querier.GetCartWithItemsAndProducts(ctx, req.CartID) // Use req.CartID
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("cannot create order from an empty cart")
+	s.logger.Debug("successfully fetched cart summary", "summart cart id", cartSummary.ID)
+	cartItemsMap := make(map[uuid.UUID]int) // product_id -> quantity
+	for _, item := range cartSummary.Items {
+		if item.Product != nil {
+			cartItemsMap[item.Product.ID] = item.Quantity
 		}
-		return nil, fmt.Errorf("failed to fetch items from the specified cart: %w", err)
+	}
+	for _, reqItem := range req.Items {
+		cartQty, exists := cartItemsMap[reqItem.ProductID]
+		if !exists {
+			return nil, fmt.Errorf("product %s in request is not present in the current cart", reqItem.ProductID)
+		}
+		if cartQty != reqItem.Quantity {
+			return nil, fmt.Errorf("quantity mismatch for product %s: requested %d, cart has %d", reqItem.ProductID, reqItem.Quantity, cartQty)
+		}
 	}
 
-	var totalAmountCents int64 = 0
-	orderItemsToCreate := make([]db.CreateOrderItemParams, len(cartItemsWithProducts))
+	deliveryFrees, error := s.querier.GetDeliveryServiceByID(ctx, req.DeliveryServiceID)
+	s.logger.Debug("delivery service error", "err", error, "delivery service id", deliveryFrees.ID, "delivery fees", deliveryFrees.BaseCostCents)
+	totalAmountCents := cartSummary.TotalValue
 
-	for i, itemRow := range cartItemsWithProducts {
-		if itemRow.ProductName == nil || itemRow.ProductPriceCents == nil {
-			return nil, fmt.Errorf("product associated with item %s in cart has been removed, cannot proceed", itemRow.CartItemID)
-		}
-		dbProduct, err := s.querier.GetProduct(ctx, itemRow.CartItemProductID) // Use itemRow.CartItemProductID
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("product %s in cart not found during checkout, cannot proceed", itemRow.CartItemProductID)
+	createOrderParams := db.CreateOrderParams{
+		UserID:            userID,
+		UserFullName:      req.ShippingAddress.FullName,
+		Status:            "pending",
+		TotalAmountCents:  totalAmountCents,
+		PaymentMethod:     "Cash on Delivery",
+		Province:          req.ShippingAddress.Province,
+		City:              req.ShippingAddress.City,
+		PhoneNumber1:      req.ShippingAddress.PhoneNumber1,
+		PhoneNumber2:      req.ShippingAddress.PhoneNumber2,
+		Notes:             req.Notes,
+		DeliveryServiceID: req.DeliveryServiceID,
+	}
+
+	numItems := len(req.Items)
+	if numItems == 0 {
+		return nil, fmt.Errorf("cannot create order from an empty cart/request")
+	}
+
+	orderItemProductIDs := make([]uuid.UUID, numItems)
+	orderItemProductNames := make([]string, numItems)
+	orderItemPricesCents := make([]int64, numItems)
+	orderItemQuantities := make([]int32, numItems)
+
+	for i, reqItem := range req.Items {
+		var cartItem *models.CartItemSummary
+		for _, item := range cartSummary.Items {
+			if item.Product != nil && item.Product.ID == reqItem.ProductID {
+				cartItem = &item
+				break
 			}
-			return nil, fmt.Errorf("failed to fetch product %s details during checkout for snapshot: %w", itemRow.CartItemProductID, err)
+		}
+		if cartItem == nil {
+			return nil, fmt.Errorf("validated cart item for product %s not found in summary", reqItem.ProductID)
 		}
 
-		cartItemQuantity := int(*itemRow.CartItemQuantity)
+		orderItemProductIDs[i] = reqItem.ProductID
+		orderItemProductNames[i] = cartItem.Product.Name           // Use name from summary for consistency
+		orderItemPricesCents[i] = cartItem.Product.FinalPriceCents // <--- CRITICAL: Use discounted price
+		orderItemQuantities[i] = int32(reqItem.Quantity)
+	}
 
-		if dbProduct.StockQuantity < int32(cartItemQuantity) {
-			return nil, fmt.Errorf("insufficient stock for product %s (requested: %d, available: %d) at checkout time", dbProduct.Name, cartItemQuantity, dbProduct.StockQuantity)
-		}
-
-		itemSubtotalCents := dbProduct.PriceCents * int64(cartItemQuantity)
-		totalAmountCents += itemSubtotalCents
-
-		orderItemsToCreate[i] = db.CreateOrderItemParams{
-			OrderID:     uuid.Nil, // Will be set after the main order is created within the transaction
-			ProductID:   dbProduct.ID,
-			ProductName: dbProduct.Name,          // Snapshotted name from Querier at checkout
-			PriceCents:  dbProduct.PriceCents,    // Snapshotted price from Querier at checkout
-			Quantity:    int32(cartItemQuantity), // Quantity from the cart item row
-		}
+	bulkOrderItemsParams := db.InsertOrderItemsBulkParams{
+		OrderID:      uuid.Nil, // Will be set after the order is created
+		ProductIds:   orderItemProductIDs,
+		ProductNames: orderItemProductNames,
+		PricesCents:  orderItemPricesCents, // Use the discounted prices
+		Quantities:   orderItemQuantities,
 	}
 
 	queries, ok := s.querier.(*db.Queries)
 	if !ok {
 		return nil, errors.New("querier type assertion to *db.Queries failed, cannot create transactional querier")
 	}
-	tx, err := s.pool.Begin(ctx) // Use s.pool
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction for order creation: %w", err)
 	}
-
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 			s.logger.Error("Error during transaction rollback", "error", err)
 		}
 	}()
 
-	txQuerier := queries.WithTx(tx) // <-- Use the concrete type's method
+	txQuerier := queries.WithTx(tx)
 
-	shippingAddressBytes, err := json.Marshal(req.ShippingAddress) // req.ShippingAddress includes PhoneNumber
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal shipping address: %w", err)
-	}
-	billingAddressBytes, err := json.Marshal(req.BillingAddress) // req.BillingAddress includes PhoneNumber
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal billing address: %w", err)
-	}
-
-	createOrderParams := db.CreateOrderParams{
-		UserID:            req.UserID,
-		Status:            "pending", // Default status upon creation
-		TotalAmountCents:  totalAmountCents,
-		PaymentMethod:     "Cash on Delivery", // Fixed for COD system
-		ShippingAddress:   shippingAddressBytes,
-		BillingAddress:    billingAddressBytes,
-		Notes:             req.Notes,
-		DeliveryServiceID: req.DeliveryServiceID, // Include the delivery service ID from the request
-	}
-
-	dbOrder, err := txQuerier.CreateOrder(ctx, createOrderParams) // Use txQuerier
+	dbOrder, err := txQuerier.CreateOrder(ctx, createOrderParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order record in transaction: %w", err)
 	}
 
 	orderID := dbOrder.ID
-	for i := range orderItemsToCreate {
-		orderItemsToCreate[i].OrderID = orderID                         // Set the actual OrderID now that the order exists in the transaction
-		_, err := txQuerier.CreateOrderItem(ctx, orderItemsToCreate[i]) // Use txQuerier
-		if err != nil {
-			return nil, fmt.Errorf("failed to create order item in transaction: %w", err)
-		}
-	}
 
+	bulkOrderItemsParams.OrderID = orderID
+
+	err = txQuerier.InsertOrderItemsBulk(ctx, bulkOrderItemsParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order items in transaction: %w", err)
+	}
 	err = tx.Commit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to commit order creation transaction: %w", err)
 	}
 
-	err = s.querier.ClearCart(ctx, req.CartID)
+	err = s.cartService.ClearCart(ctx, &userID, "")
 	if err != nil {
 		s.logger.Error("CRITICAL: Failed to clear user's cart after successful order creation",
-			"cart_id", req.CartID, "user_id", req.UserID, "order_id", orderID, "error", err)
-		// return nil, fmt.Errorf("order created successfully, but failed to clear cart afterwards: %w", err)
+			"cart_id", cartSummary.ID, "user_id", userID, "order_id", orderID, "error", err)
 	}
 
-	createdOrderWithItems, err := s.GetOrder(ctx, orderID)
+	createdOrderWithItems, err := s.GetOrder(ctx, orderID) // Use the existing GetOrder method
 	if err != nil {
 		s.logger.Error("CRITICAL: Failed to fetch newly created order", "order_id", orderID, "error", err)
 		return nil, fmt.Errorf("order created successfully, but failed to fetch details: %w", err)
@@ -161,72 +163,89 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderRe
 	return createdOrderWithItems, nil
 }
 
+// GetOrder retrieves an order by its ID along with its associated items.
+// It aggregates the results from the GetOrderWithItems query which returns multiple rows.
 func (s *OrderService) GetOrder(ctx context.Context, orderID uuid.UUID) (*models.OrderWithItems, error) {
-	rows, err := s.querier.GetOrderByIDWithItems(ctx, orderID)
+	rows, err := s.querier.GetOrderWithItems(ctx, orderID) // Use the generated query that returns multiple rows
+	errorOrderNotFound := errors.New("order not found")
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrOrderNotFound
+			return nil, fmt.Errorf("%w: order with id %s not found", errorOrderNotFound, orderID) // Assuming ErrOrderNotFound is defined
 		}
 		return nil, fmt.Errorf("failed to fetch order with items from DB: %w", err)
 	}
 
 	if len(rows) == 0 {
-		return nil, ErrOrderNotFound
-	}
-	firstRow := rows[0]
-
-	var order models.Order
-	order.ID = firstRow.ID
-	order.UserID = firstRow.UserID
-	order.Status = firstRow.Status
-	order.TotalAmountCents = firstRow.TotalAmountCents
-	order.PaymentMethod = firstRow.PaymentMethod
-	order.Notes = firstRow.Notes
-	order.DeliveryServiceID = firstRow.DeliveryServiceID
-	order.CreatedAt = firstRow.CreatedAt.Time
-	order.UpdatedAt = firstRow.UpdatedAt.Time
-	if firstRow.CompletedAt.Valid {
-		order.CompletedAt = &firstRow.CompletedAt.Time
-	}
-	if firstRow.CancelledAt.Valid {
-		order.CancelledAt = &firstRow.CancelledAt.Time
+		return nil, fmt.Errorf("%w: order with id %s not found (no rows returned)", errorOrderNotFound, orderID)
 	}
 
-	if err := json.Unmarshal(firstRow.ShippingAddress, &order.ShippingAddress); err != nil {
-		s.logger.Error("Failed to unmarshal shipping address for order", "order_id", firstRow.ID, "error", err)
-		order.ShippingAddress = models.LocalAddress{}
-	}
-	if err := json.Unmarshal(firstRow.BillingAddress, &order.BillingAddress); err != nil {
-		s.logger.Error("Failed to unmarshal billing address for order", "order_id", firstRow.ID, "error", err)
-		order.BillingAddress = models.LocalAddress{} // Assign empty as fallback
-	}
+	// Aggregate rows into OrderWithItems structure
+	var order *models.Order
+	items := make([]models.OrderItem, 0)
 
-	var orderItems []models.OrderItem
 	for _, row := range rows {
-		if row.ItemID != uuid.Nil {
-			if row.ItemProductName == nil || row.ItemPriceCents == nil || row.ItemQuantity == nil || row.ItemSubtotalCents == nil {
-				s.logger.Warn("Order item row has NULL critical fields, skipping", "order_id", order.ID, "item_row_id", row.ItemID)
-				continue // Skip this item row
+		// Process the order header data (only needs to be done once, ideally from the first row where item fields might be NULL)
+		if order == nil {
+			// Initialize the main Order object from the first row's order fields
+			order = &models.Order{
+				ID:                row.ID,
+				UserID:            row.UserID,
+				UserFullName:      row.UserFullName,
+				Status:            row.Status,
+				TotalAmountCents:  row.TotalAmountCents,
+				PaymentMethod:     row.PaymentMethod,
+				Province:          row.Province,
+				City:              row.City,
+				PhoneNumber1:      row.PhoneNumber1,
+				PhoneNumber2:      row.PhoneNumber2,
+				DeliveryServiceID: row.DeliveryServiceID,
+				Notes:             row.Notes,
+				CreatedAt:         row.CreatedAt.Time,
+				UpdatedAt:         row.UpdatedAt.Time,
+				CompletedAt:       nil, // Initialize, will set if not null
+				CancelledAt:       nil, // Initialize, will set if not null
 			}
+			// Set nullable timestamps
+			if row.CompletedAt.Valid {
+				order.CompletedAt = &row.CompletedAt.Time
+			}
+			if row.CancelledAt.Valid {
+				order.CancelledAt = &row.CancelledAt.Time
+			}
+		}
+
+		// Process the item data if the item fields are not null (i.e., if an order item exists in this row)
+		// Check if item_id is not null (assuming ItemID is a UUID and will be uuid.Nil if NULL from the LEFT JOIN)
+		// However, checking ItemID for uuid.Nil might not be reliable if uuid.Nil is a valid ID.
+		// A better check is if row.ItemProductName is not nil, or if any of the item-specific fields (other than IDs potentially) are not null.
+		// Since ProductName is text, checking for nil is a good indicator.
+		if row.ItemProductName != nil { // If this is nil, the LEFT JOIN found no item for this order row iteration
 			item := models.OrderItem{
 				ID:            row.ItemID,
-				OrderID:       row.ItemOrderID, // Should match order.ID
+				OrderID:       row.ItemOrderID,
 				ProductID:     row.ItemProductID,
-				ProductName:   *row.ItemProductName,   // Safe to dereference due to check above
-				PriceCents:    *row.ItemPriceCents,    // Safe to dereference
-				Quantity:      int(*row.ItemQuantity), // Safe to dereference, cast int32->int
-				SubtotalCents: *row.ItemSubtotalCents, // Safe to dereference
+				ProductName:   *row.ItemProductName,   // Safe to dereference if we checked for nil above
+				PriceCents:    *row.ItemPriceCents,    // Safe to dereference if we checked for nil above
+				Quantity:      *row.ItemQuantity,      // Safe to dereference if we checked for nil above
+				SubtotalCents: *row.ItemSubtotalCents, // Safe to dereference if we checked for nil above
+				CreatedAt:     row.ItemCreatedAt.Time,
+				UpdatedAt:     row.ItemUpdatedAt.Time,
 			}
-			orderItems = append(orderItems, item)
+			items = append(items, item)
 		}
 	}
 
-	orderWithItems := &models.OrderWithItems{
-		Order: order,
-		Items: orderItems,
+	// Ensure we got the order header data
+	if order == nil {
+		// This should not happen if the query returned rows for an existing order.
+		// Indicates a potential issue with the query or data.
+		return nil, fmt.Errorf("internal error: no order header data found in query results for order %s", orderID)
 	}
 
-	return orderWithItems, nil
+	return &models.OrderWithItems{
+		Order: *order, // Dereference the pointer we created
+		Items: items,
+	}, nil
 }
 
 // dbOrderToModelOrder converts a db.Order to a models.Order.
@@ -247,15 +266,6 @@ func (s *OrderService) dbOrderToModelOrder(dbOrder db.Order) models.Order {
 	}
 	if dbOrder.CancelledAt.Valid {
 		order.CancelledAt = &dbOrder.CancelledAt.Time
-	}
-
-	if err := json.Unmarshal(dbOrder.ShippingAddress, &order.ShippingAddress); err != nil {
-		s.logger.Error("Failed to unmarshal shipping address for order", "order_id", dbOrder.ID, "error", err)
-		order.ShippingAddress = models.LocalAddress{}
-	}
-	if err := json.Unmarshal(dbOrder.BillingAddress, &order.BillingAddress); err != nil {
-		s.logger.Error("Failed to unmarshal billing address for order", "order_id", dbOrder.ID, "error", err)
-		order.BillingAddress = models.LocalAddress{}
 	}
 
 	return order

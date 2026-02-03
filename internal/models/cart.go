@@ -34,12 +34,16 @@ type CartItemSummary struct {
 // ProductLite holds essential product info for display in cart/order summaries.
 // This mirrors the structure needed from the database join results.
 type ProductLite struct {
-	ID            uuid.UUID `json:"id"`
-	Name          string    `json:"name"`
-	PriceCents    int64     `json:"price_cents"`
-	StockQuantity int       `json:"stock_quantity"`
-	ImageUrls     []string  `json:"image_urls"` // Assumes proper decoding from DB JSONB
-	Brand         string    `json:"brand"`
+	ID                 uuid.UUID `json:"id"`
+	Name               string    `json:"name"`
+	OriginalPriceCents int64     `json:"original_price_cents"` // The base price from the product table
+	FinalPriceCents    int64     `json:"final_price_cents"`    // The price after applying any active discounts
+	StockQuantity      int32     `json:"stock_quantity"`
+	ImageUrls          []string  `json:"image_urls"`
+	Brand              string    `json:"brand"`
+	DiscountCode       *string   `json:"discount_code,omitempty"`
+	DiscountType       *string   `json:"discount_type,omitempty"`
+	DiscountValue      *int64    `json:"discount_value,omitempty"`
 }
 
 // CartSummary represents the complete state of a cart for display purposes.

@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "product_id": "8fb78241-b145-4f0b-8688-9016033c043a",
+      "quantity": 3
+    }
+  ],
+  "shipping_address": {
+    "full_name": "John Doe",
+    "phone_number_1": "1234567890",
+    "province": "Luzon",
+    "city": "Manila"
+  },
+  "billing_address": {
+    "full_name": "Jane Doe",
+    "phone_number_1": "0987654321",
+    "province": "Luzon",
+    "city": "Quezon City"
+  },
+  "delivery_service_id": "68f4944d-2edf-4e6a-836b-9075b3008e77",
+  "notes": "Please deliver after 5 PM."
+}
