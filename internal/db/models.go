@@ -37,6 +37,13 @@ type Category struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type CategoryDiscount struct {
+	ID         uuid.UUID          `json:"id"`
+	CategoryID uuid.UUID          `json:"category_id"`
+	DiscountID uuid.UUID          `json:"discount_id"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 // Stores available delivery service options.
 type DeliveryService struct {
 	ID uuid.UUID `json:"id"`
@@ -52,6 +59,22 @@ type DeliveryService struct {
 	IsActive  bool               `json:"is_active"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Discount struct {
+	ID                 uuid.UUID          `json:"id"`
+	Code               string             `json:"code"`
+	Description        *string            `json:"description"`
+	DiscountType       string             `json:"discount_type"`
+	DiscountValue      int64              `json:"discount_value"`
+	MinOrderValueCents *int64             `json:"min_order_value_cents"`
+	MaxUses            *int32             `json:"max_uses"`
+	CurrentUses        *int32             `json:"current_uses"`
+	ValidFrom          pgtype.Timestamptz `json:"valid_from"`
+	ValidUntil         pgtype.Timestamptz `json:"valid_until"`
+	IsActive           *bool              `json:"is_active"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Order struct {
@@ -98,6 +121,13 @@ type Product struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type ProductDiscount struct {
+	ID         uuid.UUID          `json:"id"`
+	ProductID  uuid.UUID          `json:"product_id"`
+	DiscountID uuid.UUID          `json:"discount_id"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type RefreshToken struct {

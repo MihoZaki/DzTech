@@ -17,6 +17,11 @@ type Querier interface {
 	// Gets a specific user by ID, regardless of soft-delete status.
 	// Useful for admin to see any user, active or inactive.
 	AdminGetUser(ctx context.Context, userID uuid.UUID) (User, error)
+	// Associates a discount with a specific category (simplified version, might need more checks).
+	ApplyDiscountToCategory(ctx context.Context, arg ApplyDiscountToCategoryParams) error
+	// Include usage limit check
+	// Associates a discount with a specific product (simplified version, might need more checks).
+	ApplyDiscountToProduct(ctx context.Context, arg ApplyDiscountToProductParams) error
 	// Updates the status of an order to 'cancelled' and sets the cancelled_at timestamp.
 	// This is a soft deletion conceptually.
 	CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
@@ -33,6 +38,8 @@ type Querier interface {
 	// Cart Item Management
 	CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CreateCartItemRow, error)
 	CreateDeliveryService(ctx context.Context, arg CreateDeliveryServiceParams) (DeliveryService, error)
+	// Inserts a new discount record.
+	CreateDiscount(ctx context.Context, arg CreateDiscountParams) (Discount, error)
 	CreateGuestCart(ctx context.Context, sessionID *string) (Cart, error)
 	// Creates a new order and returns its details.
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
@@ -56,10 +63,16 @@ type Querier interface {
 	// Soft delete could be achieved by updating is_active to FALSE
 	// For hard delete:
 	DeleteDeliveryService(ctx context.Context, id uuid.UUID) error
+	// Deletes a discount record (and associated links via CASCADE).
+	DeleteDiscount(ctx context.Context, id uuid.UUID) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
 	// Retrieves all delivery services that are currently active.
 	// Suitable for user-facing contexts like checkout.
 	GetActiveDeliveryServices(ctx context.Context) ([]DeliveryService, error)
+	// Check usage limit
+	// --- Specific Use Case Queries ---
+	// Fetches all currently active discounts (within date range and usage limits).
+	GetActiveDiscounts(ctx context.Context) ([]Discount, error)
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
 	GetCartBySessionID(ctx context.Context, sessionID *string) (GetCartBySessionIDRow, error)
 	GetCartByUserID(ctx context.Context, userID uuid.UUID) (GetCartByUserIDRow, error)
@@ -69,6 +82,10 @@ type Querier interface {
 	GetCartItemsWithProductDetails(ctx context.Context, cartID uuid.UUID) ([]GetCartItemsWithProductDetailsRow, error)
 	GetCartStats(ctx context.Context, cartID uuid.UUID) (GetCartStatsRow, error)
 	GetCartWithItemsAndProducts(ctx context.Context, cartID uuid.UUID) ([]GetCartWithItemsAndProductsRow, error)
+	// Fetches a cart's items along with product details and potential discounted prices for active discounts.
+	// Includes full product details.
+	// Join with product_discounts and discounts to find applicable active discounts
+	GetCartWithItemsAndProductsWithDiscounts(ctx context.Context, id uuid.UUID) ([]GetCartWithItemsAndProductsWithDiscountsRow, error)
 	GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
 	GetDeliveryService(ctx context.Context, arg GetDeliveryServiceParams) (DeliveryService, error)
@@ -77,6 +94,14 @@ type Querier interface {
 	GetDeliveryServiceByID(ctx context.Context, id uuid.UUID) (DeliveryService, error)
 	// Allow filtering by active status
 	GetDeliveryServiceByName(ctx context.Context, arg GetDeliveryServiceByNameParams) (DeliveryService, error)
+	// Fetches a discount by its unique code.
+	GetDiscountByCode(ctx context.Context, code string) (Discount, error)
+	// Fetches a discount by its ID.
+	GetDiscountByID(ctx context.Context, id uuid.UUID) (Discount, error)
+	// Fetches active discounts applicable to a specific category.
+	GetDiscountsByCategoryID(ctx context.Context, categoryID uuid.UUID) ([]Discount, error)
+	// Fetches active discounts applicable to a specific product.
+	GetDiscountsByProductID(ctx context.Context, productID uuid.UUID) ([]Discount, error)
 	// Retrieves an order by its ID.
 	GetOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
 	// Retrieves an order by its ID along with all its items.
@@ -87,6 +112,12 @@ type Querier interface {
 	GetOrderItemsByOrderID(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error)
 	GetProduct(ctx context.Context, productID uuid.UUID) (Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (Product, error)
+	// Fetches a specific product with its original price and potential discounted price and code if an active discount applies.
+	// Includes full product details.
+	GetProductWithDiscountInfo(ctx context.Context, id uuid.UUID) (GetProductWithDiscountInfoRow, error)
+	// Fetches products with their original price and potential discounted price and code if an active discount applies.
+	// Includes full product details.
+	GetProductsWithDiscountInfo(ctx context.Context) ([]GetProductsWithDiscountInfoRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Fetches a specific user by ID along with order count and last order date.
@@ -94,9 +125,20 @@ type Querier interface {
 	// Includes soft-deleted users as well.
 	GetUserWithDetails(ctx context.Context, userID uuid.UUID) (GetUserWithDetailsRow, error)
 	GetValidRefreshTokenRecord(ctx context.Context, jti string) (RefreshToken, error)
+	// Pagination using limit and offset
+	// Increments the current_uses count for a specific discount.
+	// This should ideally be called within a transaction when applying the discount.
+	IncrementDiscountUsage(ctx context.Context, id uuid.UUID) error
 	// Increments the stock_quantity for a product by a given amount.
 	// Suitable for releasing stock back when cancelling an order.
 	IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error)
+	// Check usage limit
+	// Associates a category with a discount.
+	LinkCategoryToDiscount(ctx context.Context, arg LinkCategoryToDiscountParams) error
+	// Prevent exceeding max_uses
+	// --- Link/Unlink Queries ---
+	// Associates a product with a discount.
+	LinkProductToDiscount(ctx context.Context, arg LinkProductToDiscountParams) error
 	// Retrieves delivery services, optionally filtered by active status.
 	// Suitable for admin operations.
 	ListAllDeliveryServices(ctx context.Context, arg ListAllDeliveryServicesParams) ([]DeliveryService, error)
@@ -106,6 +148,8 @@ type Querier interface {
 	// If filter_status is an empty string (''), it retrieves orders of all statuses.
 	ListAllOrders(ctx context.Context, arg ListAllOrdersParams) ([]Order, error)
 	ListCategories(ctx context.Context) ([]Category, error)
+	// Fetches a list of discounts, potentially with filters and pagination.
+	ListDiscounts(ctx context.Context, arg ListDiscountsParams) ([]Discount, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	ListProductsByCategory(ctx context.Context, arg ListProductsByCategoryParams) ([]Product, error)
 	ListProductsWithCategory(ctx context.Context, arg ListProductsWithCategoryParams) ([]ListProductsWithCategoryRow, error)
@@ -134,9 +178,15 @@ type Querier interface {
 	SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error)
 	// Marks a user as soft-deleted by setting deleted_at to NOW().
 	SoftDeleteUser(ctx context.Context, userID uuid.UUID) error
+	// Removes association between a category and a discount.
+	UnlinkCategoryFromDiscount(ctx context.Context, arg UnlinkCategoryFromDiscountParams) error
+	// Removes association between a product and a discount.
+	UnlinkProductFromDiscount(ctx context.Context, arg UnlinkProductFromDiscountParams) error
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)
 	// Allow filtering by active status
 	UpdateDeliveryService(ctx context.Context, arg UpdateDeliveryServiceParams) (DeliveryService, error)
+	// Updates an existing discount record.
+	UpdateDiscount(ctx context.Context, arg UpdateDiscountParams) (Discount, error)
 	// Updates other details of an order (notes, addresses - if allowed).
 	// Example updating notes and timestamps
 	UpdateOrder(ctx context.Context, arg UpdateOrderParams) (Order, error)
