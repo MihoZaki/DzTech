@@ -246,6 +246,93 @@ func (q *Queries) GetProductWithDiscountInfo(ctx context.Context, id uuid.UUID) 
 	return i, err
 }
 
+const getProductWithDiscountInfoBySlug = `-- name: GetProductWithDiscountInfoBySlug :one
+SELECT
+    p.id,
+    p.category_id,
+    p.name,
+    p.slug,
+    p.description,
+    p.short_description,
+    p.price_cents AS original_price_cents,
+    p.stock_quantity,
+    p.status,
+    p.brand,
+    p.image_urls,
+    p.spec_highlights,
+    p.created_at,
+    p.updated_at,
+    p.deleted_at,
+    CASE
+        WHEN pd.discount_id IS NOT NULL THEN
+            CASE
+                WHEN d.discount_type = 'percentage' THEN (p.price_cents * (100 - d.discount_value) / 100)::BIGINT
+                ELSE (p.price_cents - d.discount_value)::BIGINT
+            END
+        ELSE p.price_cents
+    END::BIGINT AS discounted_price_cents,
+    d.code AS discount_code,
+    d.discount_type AS discount_type,
+    d.discount_value AS discount_value,
+    pd.discount_id IS NOT NULL::Boolean AS has_active_discount
+FROM products p
+LEFT JOIN product_discounts pd ON p.id = pd.product_id
+LEFT JOIN discounts d ON pd.discount_id = d.id AND d.is_active = TRUE AND NOW() BETWEEN d.valid_from AND d.valid_until
+WHERE p.slug = $1 AND p.deleted_at IS NULL
+`
+
+type GetProductWithDiscountInfoBySlugRow struct {
+	ID                   uuid.UUID          `json:"id"`
+	CategoryID           uuid.UUID          `json:"category_id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	Description          *string            `json:"description"`
+	ShortDescription     *string            `json:"short_description"`
+	OriginalPriceCents   int64              `json:"original_price_cents"`
+	StockQuantity        int32              `json:"stock_quantity"`
+	Status               string             `json:"status"`
+	Brand                string             `json:"brand"`
+	ImageUrls            []byte             `json:"image_urls"`
+	SpecHighlights       []byte             `json:"spec_highlights"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	DiscountedPriceCents int64              `json:"discounted_price_cents"`
+	DiscountCode         *string            `json:"discount_code"`
+	DiscountType         *string            `json:"discount_type"`
+	DiscountValue        *int64             `json:"discount_value"`
+	HasActiveDiscount    bool               `json:"has_active_discount"`
+}
+
+// Fetches a specific product by its slug with potential discount info.
+func (q *Queries) GetProductWithDiscountInfoBySlug(ctx context.Context, slug string) (GetProductWithDiscountInfoBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getProductWithDiscountInfoBySlug, slug)
+	var i GetProductWithDiscountInfoBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.CategoryID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.ShortDescription,
+		&i.OriginalPriceCents,
+		&i.StockQuantity,
+		&i.Status,
+		&i.Brand,
+		&i.ImageUrls,
+		&i.SpecHighlights,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DiscountedPriceCents,
+		&i.DiscountCode,
+		&i.DiscountType,
+		&i.DiscountValue,
+		&i.HasActiveDiscount,
+	)
+	return i, err
+}
+
 const getProductsWithDiscountInfo = `-- name: GetProductsWithDiscountInfo :many
 SELECT
     p.id,
@@ -281,7 +368,13 @@ LEFT JOIN
     product_discounts pd ON p.id = pd.product_id
 LEFT JOIN
     discounts d ON pd.discount_id = d.id AND d.is_active = TRUE AND NOW() BETWEEN d.valid_from AND d.valid_until
+LIMIT $2 OFFSET $1
 `
+
+type GetProductsWithDiscountInfoParams struct {
+	PageOffset int32 `json:"page_offset"`
+	PageLimit  int32 `json:"page_limit"`
+}
 
 type GetProductsWithDiscountInfoRow struct {
 	ID                   uuid.UUID          `json:"id"`
@@ -308,8 +401,8 @@ type GetProductsWithDiscountInfoRow struct {
 
 // Fetches products with their original price and potential discounted price and code if an active discount applies.
 // Includes full product details.
-func (q *Queries) GetProductsWithDiscountInfo(ctx context.Context) ([]GetProductsWithDiscountInfoRow, error) {
-	rows, err := q.db.Query(ctx, getProductsWithDiscountInfo)
+func (q *Queries) GetProductsWithDiscountInfo(ctx context.Context, arg GetProductsWithDiscountInfoParams) ([]GetProductsWithDiscountInfoRow, error) {
+	rows, err := q.db.Query(ctx, getProductsWithDiscountInfo, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}

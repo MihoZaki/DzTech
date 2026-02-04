@@ -73,7 +73,6 @@ type Querier interface {
 	// Suitable for user-facing contexts like checkout.
 	GetActiveDeliveryServices(ctx context.Context) ([]DeliveryService, error)
 	// Check usage limit
-	// --- Specific Use Case Queries ---
 	// Fetches all currently active discounts (within date range and usage limits).
 	GetActiveDiscounts(ctx context.Context) ([]Discount, error)
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
@@ -119,9 +118,15 @@ type Querier interface {
 	// Fetches a specific product with its original price and potential discounted price and code if an active discount applies.
 	// Includes full product details.
 	GetProductWithDiscountInfo(ctx context.Context, id uuid.UUID) (GetProductWithDiscountInfoRow, error)
+	// Fetches a specific product by its slug with potential discount info.
+	GetProductWithDiscountInfoBySlug(ctx context.Context, slug string) (GetProductWithDiscountInfoBySlugRow, error)
+	// Fetches a product and its active product-specific discounts.
+	// This might return multiple rows if there are multiple discounts.
+	// Aggregation into a list happens in Go.
+	GetProductWithMultiDiscountDetails(ctx context.Context, id uuid.UUID) (GetProductWithMultiDiscountDetailsRow, error)
 	// Fetches products with their original price and potential discounted price and code if an active discount applies.
 	// Includes full product details.
-	GetProductsWithDiscountInfo(ctx context.Context) ([]GetProductsWithDiscountInfoRow, error)
+	GetProductsWithDiscountInfo(ctx context.Context, arg GetProductsWithDiscountInfoParams) ([]GetProductsWithDiscountInfoRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Fetches a specific user by ID along with order count and last order date.

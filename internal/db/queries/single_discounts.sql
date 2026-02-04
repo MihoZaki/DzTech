@@ -34,7 +34,8 @@ FROM
 LEFT JOIN
     product_discounts pd ON p.id = pd.product_id
 LEFT JOIN
-    discounts d ON pd.discount_id = d.id AND d.is_active = TRUE AND NOW() BETWEEN d.valid_from AND d.valid_until;
+    discounts d ON pd.discount_id = d.id AND d.is_active = TRUE AND NOW() BETWEEN d.valid_from AND d.valid_until
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- name: GetProductWithDiscountInfo :one
 -- Fetches a specific product with its original price and potential discounted price and code if an active discount applies.
 -- Includes full product details.
@@ -128,3 +129,38 @@ WHERE c.id = $1 -- Use positional argument
     AND ci.deleted_at IS NULL
     AND (p.deleted_at IS NULL OR p.id IS NULL) -- Include cart items even if product was deleted
 ORDER BY ci.created_at DESC;
+ 
+-- name: GetProductWithDiscountInfoBySlug :one
+-- Fetches a specific product by its slug with potential discount info.
+SELECT
+    p.id,
+    p.category_id,
+    p.name,
+    p.slug,
+    p.description,
+    p.short_description,
+    p.price_cents AS original_price_cents,
+    p.stock_quantity,
+    p.status,
+    p.brand,
+    p.image_urls,
+    p.spec_highlights,
+    p.created_at,
+    p.updated_at,
+    p.deleted_at,
+    CASE
+        WHEN pd.discount_id IS NOT NULL THEN
+            CASE
+                WHEN d.discount_type = 'percentage' THEN (p.price_cents * (100 - d.discount_value) / 100)::BIGINT
+                ELSE (p.price_cents - d.discount_value)::BIGINT
+            END
+        ELSE p.price_cents
+    END::BIGINT AS discounted_price_cents,
+    d.code AS discount_code,
+    d.discount_type AS discount_type,
+    d.discount_value AS discount_value,
+    pd.discount_id IS NOT NULL::Boolean AS has_active_discount
+FROM products p
+LEFT JOIN product_discounts pd ON p.id = pd.product_id
+LEFT JOIN discounts d ON pd.discount_id = d.id AND d.is_active = TRUE AND NOW() BETWEEN d.valid_from AND d.valid_until
+WHERE p.slug = $1 AND p.deleted_at IS NULL;

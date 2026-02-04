@@ -104,7 +104,7 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 		if itemRow.ProductName != nil {
 			qty := int(*itemRow.CartItemQuantity)                  // Quantity is a pointer because of emit_pointers_for_null_types
 			finalPriceCents := itemRow.ProductDiscountedPriceCents // Use the final price calculated in the query
-
+			s.logger.Debug("product has the following discounts", "discount list", "")
 			itemSubtotalCents := finalPriceCents * int64(qty)
 			totalValueCents += itemSubtotalCents
 

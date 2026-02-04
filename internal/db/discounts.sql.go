@@ -65,7 +65,7 @@ type CreateDiscountParams struct {
 	MaxUses            *int32             `json:"max_uses"`
 	ValidFrom          pgtype.Timestamptz `json:"valid_from"`
 	ValidUntil         pgtype.Timestamptz `json:"valid_until"`
-	IsActive           *bool              `json:"is_active"`
+	IsActive           bool               `json:"is_active"`
 }
 
 // Inserts a new discount record.
@@ -134,7 +134,6 @@ WHERE
 `
 
 // Check usage limit
-// --- Specific Use Case Queries ---
 // Fetches all currently active discounts (within date range and usage limits).
 func (q *Queries) GetActiveDiscounts(ctx context.Context) ([]Discount, error) {
 	rows, err := q.db.Query(ctx, getActiveDiscounts)
@@ -477,7 +476,7 @@ type UpdateDiscountParams struct {
 	MaxUses            *int32             `json:"max_uses"`
 	ValidFrom          pgtype.Timestamptz `json:"valid_from"`
 	ValidUntil         pgtype.Timestamptz `json:"valid_until"`
-	IsActive           *bool              `json:"is_active"`
+	IsActive           bool               `json:"is_active"`
 }
 
 // Updates an existing discount record.

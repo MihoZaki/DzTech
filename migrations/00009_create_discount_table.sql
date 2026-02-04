@@ -11,7 +11,7 @@ CREATE TABLE discounts (
     current_uses INT DEFAULT 0,
     valid_from TIMESTAMPTZ NOT NULL,
     valid_until TIMESTAMPTZ NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

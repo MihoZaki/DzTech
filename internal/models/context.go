@@ -2,7 +2,6 @@ package models
 
 import (
 	"context" // Import context package
-	// ... other imports like validator ...
 )
 
 type ContextUserKey string

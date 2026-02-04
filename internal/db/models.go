@@ -72,7 +72,7 @@ type Discount struct {
 	CurrentUses        *int32             `json:"current_uses"`
 	ValidFrom          pgtype.Timestamptz `json:"valid_from"`
 	ValidUntil         pgtype.Timestamptz `json:"valid_until"`
-	IsActive           *bool              `json:"is_active"`
+	IsActive           bool               `json:"is_active"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }

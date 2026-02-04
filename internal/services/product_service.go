@@ -131,7 +131,7 @@ func (s *ProductService) CreateProductWithUpload(ctx context.Context, req models
 }
 
 func (s *ProductService) GetProduct(ctx context.Context, id uuid.UUID) (*models.Product, error) {
-	dbProduct, err := s.querier.GetProduct(ctx, id)
+	dbProductWithDiscount, err := s.querier.GetProductWithDiscountInfo(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
@@ -139,11 +139,10 @@ func (s *ProductService) GetProduct(ctx context.Context, id uuid.UUID) (*models.
 		return nil, err
 	}
 
-	return s.toProductModel(dbProduct), nil
+	return s.toProductModelWithDiscount(dbProductWithDiscount), nil
 }
-
 func (s *ProductService) GetProductBySlug(ctx context.Context, slug string) (*models.Product, error) {
-	dbProduct, err := s.querier.GetProductBySlug(ctx, slug)
+	dbProductWithDiscount, err := s.querier.GetProductWithDiscountInfoBySlug(ctx, slug) // Use new query if it exists
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
@@ -151,7 +150,7 @@ func (s *ProductService) GetProductBySlug(ctx context.Context, slug string) (*mo
 		return nil, err
 	}
 
-	return s.toProductModel(dbProduct), nil
+	return s.toProductModelWithDiscount(db.GetProductWithDiscountInfoRow(dbProductWithDiscount)), nil
 }
 
 // Add a method that uses the basic ListProducts function (without search)
@@ -163,8 +162,7 @@ func (s *ProductService) ListAllProducts(ctx context.Context, page, limit int) (
 		page = 1
 	}
 	offset := (page - 1) * limit
-
-	dbProducts, err := s.querier.ListProducts(ctx, db.ListProductsParams{
+	dbProducts, err := s.querier.GetProductsWithDiscountInfo(ctx, db.GetProductsWithDiscountInfoParams{
 		PageLimit:  int32(limit),
 		PageOffset: int32(offset),
 	})
@@ -180,7 +178,7 @@ func (s *ProductService) ListAllProducts(ctx context.Context, page, limit int) (
 	slog.Info("the total number of products is", "total", total)
 	result := make([]*models.Product, len(dbProducts))
 	for i, p := range dbProducts {
-		result[i] = s.toProductModel(p)
+		result[i] = s.toProductModelWithDiscount(db.GetProductWithDiscountInfoRow(p))
 	}
 
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
@@ -602,6 +600,77 @@ func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 	var specHighlights map[string]any
 	if err := json.Unmarshal(dbProduct.SpecHighlights, &specHighlights); err == nil {
 		product.SpecHighlights = specHighlights
+	}
+
+	return product
+}
+
+// toProductModelWithDiscount converts the SQLC-generated GetProductWithDiscountInfoRow to the application model Product.
+// This version includes discount information.
+func (s *ProductService) toProductModelWithDiscount(dbRow db.GetProductWithDiscountInfoRow) *models.Product {
+	product := &models.Product{
+		ID:         dbRow.ID,
+		CategoryID: dbRow.CategoryID,
+		Name:       dbRow.Name,
+		Slug:       dbRow.Slug,
+		// Use OriginalPriceCents from the query result for the base price in the model
+		PriceCents:    dbRow.OriginalPriceCents,
+		StockQuantity: int(dbRow.StockQuantity), // Convert int32 to int
+		Status:        dbRow.Status,
+		Brand:         dbRow.Brand,
+		CreatedAt:     dbRow.CreatedAt.Time, // Convert pgtype.Timestamptz to time.Time
+		UpdatedAt:     dbRow.UpdatedAt.Time, // Convert pgtype.Timestamptz to time.Time
+		// Initialize discount fields as nil/default
+		DiscountedPriceCents: nil,
+		DiscountCode:         nil,
+		DiscountType:         nil,
+		DiscountValue:        nil,
+		HasActiveDiscount:    dbRow.HasActiveDiscount, // Map boolean directly
+	}
+
+	// Handle optional fields from the base product info
+	if dbRow.Description != nil {
+		product.Description = dbRow.Description
+	}
+	if dbRow.ShortDescription != nil {
+		product.ShortDescription = dbRow.ShortDescription
+	}
+	if dbRow.DeletedAt.Valid {
+		deletedAt := dbRow.DeletedAt.Time // Convert pgtype.Timestamptz to time.Time
+		product.DeletedAt = &deletedAt
+	}
+
+	// Unmarshal JSON fields (ImageUrls, SpecHighlights are []byte from the query result)
+	var imageUrls []string
+	if err := json.Unmarshal(dbRow.ImageUrls, &imageUrls); err == nil {
+		product.ImageUrls = imageUrls
+	} else {
+		// Log error or handle failure to unmarshal
+		// slog.Warn("Failed to unmarshal ImageUrls", "product_id", dbRow.ID, "error", err)
+		product.ImageUrls = []string{} // Fallback to empty slice
+	}
+
+	var specHighlights map[string]any
+	if err := json.Unmarshal(dbRow.SpecHighlights, &specHighlights); err == nil {
+		product.SpecHighlights = specHighlights
+	} else {
+		// Log error or handle failure to unmarshal
+		// slog.Warn("Failed to unmarshal SpecHighlights", "product_id", dbRow.ID, "error", err)
+		product.SpecHighlights = map[string]any{} // Fallback to empty map
+	}
+
+	// --- Map NEW Discount Information ---
+	// Only populate specific discount details if an active discount was found (HasActiveDiscount is true)
+	if dbRow.HasActiveDiscount {
+		// Map the calculated discounted price
+		discountedPrice := dbRow.DiscountedPriceCents
+		product.DiscountedPriceCents = &discountedPrice // ASSIGN: *int64 (Model)
+
+		// Map optional discount details (these are already pointers from SQLC)
+		// Assign directly, they will be nil if the DB query returned NULL for the discount fields
+		product.DiscountCode = dbRow.DiscountCode   // *string (DB) -> *string (Model)
+		product.DiscountType = dbRow.DiscountType   // *string (DB) -> *string (Model)
+		product.DiscountValue = dbRow.DiscountValue // *int64 (DB) -> *int64 (Model)
 	}
 
 	return product

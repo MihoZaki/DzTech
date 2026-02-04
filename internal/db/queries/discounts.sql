@@ -90,7 +90,6 @@ WHERE cd.category_id = $1
   AND d.valid_until >= NOW()
   AND (d.max_uses IS NULL OR d.current_uses < d.max_uses); -- Check usage limit
 
--- --- Specific Use Case Queries ---
 -- name: GetActiveDiscounts :many
 -- Fetches all currently active discounts (within date range and usage limits).
 SELECT
