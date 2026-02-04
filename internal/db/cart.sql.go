@@ -13,28 +13,50 @@ import (
 )
 
 const addCartItemsBulk = `-- name: AddCartItemsBulk :exec
+
 INSERT INTO cart_items (cart_id, product_id, quantity, created_at, updated_at)
 SELECT 
-  $1,
+  $1, -- $1: The target cart ID
   input.product_id,
-  input.quantity,
+  input.quantity, -- Use the new requested quantity
   NOW(),
   NOW()
 FROM (
+  -- Prepare input data using UNNEST
   SELECT 
-    UNNEST($2::uuid[]) as product_id,
-    UNNEST($3::int[]) as quantity
+    UNNEST($2::uuid[]) as product_id, -- $2: Array of product IDs
+    UNNEST($3::int[]) as quantity      -- $3: Array of corresponding quantities
 ) as input
 INNER JOIN products p ON p.id = input.product_id
-  AND p.stock_quantity >= input.quantity
+  AND p.stock_quantity >= input.quantity -- Ensure sufficient stock for the NEW quantity during INSERT
   AND p.status = 'active'
   AND p.deleted_at IS NULL
 ON CONFLICT (cart_id, product_id)
 DO UPDATE SET
-  quantity = LEAST(
-    cart_items.quantity + EXCLUDED.quantity,
-    (SELECT stock_quantity FROM products WHERE id = EXCLUDED.product_id)
-  ),
+  quantity = CASE
+    -- If the existing row in cart_items was soft-deleted, check stock and set to NEW quantity
+    WHEN cart_items.deleted_at IS NOT NULL THEN
+      CASE
+        -- Re-check stock against the NEW quantity being added via EXCLUDED (the values that would have been inserted)
+        WHEN (SELECT stock_quantity FROM products WHERE id = EXCLUDED.product_id) >= EXCLUDED.quantity THEN
+          EXCLUDED.quantity -- Set to the NEW quantity from the INSERT attempt (overwrites old soft-deleted quantity)
+        ELSE
+          -- If stock check fails for the new quantity, keep the old soft-deleted quantity.
+          -- Alternatively, could raise an exception depending on desired behavior.
+          cart_items.quantity
+      END
+    -- If the existing row was NOT soft-deleted, add the new quantity and check total against stock
+    ELSE
+      LEAST(
+        cart_items.quantity + EXCLUDED.quantity, -- Add the new quantity
+        (SELECT stock_quantity FROM products WHERE id = EXCLUDED.product_id) -- Cap at product's stock
+      )
+  END,
+  -- Undelete the item if it was soft-deleted, otherwise leave its status unchanged
+  deleted_at = CASE
+    WHEN cart_items.deleted_at IS NOT NULL THEN NULL -- Undelete
+    ELSE cart_items.deleted_at -- Keep as is
+  END,
   updated_at = NOW()
 `
 
@@ -44,6 +66,10 @@ type AddCartItemsBulkParams struct {
 	Quantities []int32     `json:"quantities"`
 }
 
+// Include deleted_at to see if undeletion happened
+// Adds multiple items to a cart, handling upserts and soft deletes.
+// Checks stock availability for each item during the insert/update process.
+// Join with products table to validate existence, status, deletion, and stock for the INSERT
 func (q *Queries) AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) error {
 	_, err := q.db.Exec(ctx, addCartItemsBulk, arg.CartID, arg.ProductIds, arg.Quantities)
 	return err
@@ -63,22 +89,39 @@ func (q *Queries) ClearCart(ctx context.Context, cartID uuid.UUID) error {
 const createCartItem = `-- name: CreateCartItem :one
 INSERT INTO cart_items (cart_id, product_id, quantity, created_at, updated_at)
 SELECT
-    $1,
-    $2,
-    $3,
+    $1, -- $1
+    $2, -- $2
+    $3, -- $3
     NOW(),
     NOW()
 FROM products
-WHERE id = $2
-    AND stock_quantity >= $3  -- Ensure enough stock
+WHERE id = $2 -- Check product exists
+    AND stock_quantity >= $3 -- Ensure enough stock for the INSERT
     AND status = 'active'
     AND deleted_at IS NULL
 ON CONFLICT (cart_id, product_id)
 DO UPDATE SET
-    quantity = LEAST(
-        cart_items.quantity + EXCLUDED.quantity,
-        (SELECT stock_quantity FROM products WHERE id = $2)
-    ),
+    quantity = CASE
+        WHEN cart_items.deleted_at IS NOT NULL THEN
+            -- If the existing row was soft-deleted, check stock for the NEW requested quantity
+            CASE
+                WHEN (SELECT stock_quantity FROM products WHERE id = $2) >= $3 THEN
+                    $3 -- Set to the NEW requested quantity if stock allows
+                ELSE
+                    -- Keep old quantity if stock check fails here
+                    cart_items.quantity
+            END
+        ELSE
+            -- If the existing row was NOT soft-deleted, add the new quantity and check total against stock
+            LEAST(
+                cart_items.quantity + $3, -- Add new quantity
+                (SELECT stock_quantity FROM products WHERE id = $2) -- Cap at stock
+            )
+    END,
+    deleted_at = CASE
+        WHEN cart_items.deleted_at IS NOT NULL THEN NULL -- Undelete if it was soft-deleted
+        ELSE cart_items.deleted_at -- Keep deleted_at if it wasn't soft-deleted
+    END,
     updated_at = NOW()
 RETURNING
     id,
@@ -86,7 +129,8 @@ RETURNING
     product_id,
     quantity,
     created_at,
-    updated_at
+    updated_at,
+    deleted_at
 `
 
 type CreateCartItemParams struct {
@@ -95,19 +139,10 @@ type CreateCartItemParams struct {
 	Quantity  int32     `json:"quantity"`
 }
 
-type CreateCartItemRow struct {
-	ID        uuid.UUID          `json:"id"`
-	CartID    uuid.UUID          `json:"cart_id"`
-	ProductID uuid.UUID          `json:"product_id"`
-	Quantity  int32              `json:"quantity"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
 // Cart Item Management
-func (q *Queries) CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CreateCartItemRow, error) {
+func (q *Queries) CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CartItem, error) {
 	row := q.db.QueryRow(ctx, createCartItem, arg.CartID, arg.ProductID, arg.Quantity)
-	var i CreateCartItemRow
+	var i CartItem
 	err := row.Scan(
 		&i.ID,
 		&i.CartID,
@@ -115,6 +150,7 @@ func (q *Queries) CreateCartItem(ctx context.Context, arg CreateCartItemParams) 
 		&i.Quantity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

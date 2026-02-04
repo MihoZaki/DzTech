@@ -13,6 +13,10 @@ import (
 type Querier interface {
 	// Removes the soft-delete marker by setting deleted_at to NULL.
 	ActivateUser(ctx context.Context, userID uuid.UUID) error
+	// Include deleted_at to see if undeletion happened
+	// Adds multiple items to a cart, handling upserts and soft deletes.
+	// Checks stock availability for each item during the insert/update process.
+	// Join with products table to validate existence, status, deletion, and stock for the INSERT
 	AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) error
 	// Gets a specific user by ID, regardless of soft-delete status.
 	// Useful for admin to see any user, active or inactive.
@@ -37,7 +41,7 @@ type Querier interface {
 	// Useful for pagination metadata.
 	CountUsers(ctx context.Context, activeOnly bool) (int64, error)
 	// Cart Item Management
-	CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CreateCartItemRow, error)
+	CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CartItem, error)
 	CreateDeliveryService(ctx context.Context, arg CreateDeliveryServiceParams) (DeliveryService, error)
 	// Inserts a new discount record.
 	CreateDiscount(ctx context.Context, arg CreateDiscountParams) (Discount, error)

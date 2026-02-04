@@ -231,7 +231,7 @@ func (s *CartService) getOrCreateGuestCart(ctx context.Context, sessionID string
 
 // AddItemToCart adds an item to the specified user's or guest's cart.
 // If the item already exists in the cart, it updates the quantity.
-func (s *CartService) AddItemToCart(ctx context.Context, userID *uuid.UUID, sessionID string, productID uuid.UUID, quantity int) (*db.CreateCartItemRow, error) {
+func (s *CartService) AddItemToCart(ctx context.Context, userID *uuid.UUID, sessionID string, productID uuid.UUID, quantity int) (*db.CartItem, error) {
 	if quantity <= 0 {
 		return nil, fmt.Errorf("quantity must be greater than 0")
 	}
