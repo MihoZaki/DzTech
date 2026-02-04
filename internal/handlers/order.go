@@ -32,6 +32,7 @@ func (h *OrderHandler) RegisterUserRoutes(r chi.Router) {
 	r.Post("/", h.CreateOrder)   // POST /api/v1/orders (checkout)
 	r.Get("/{id}", h.GetOrder)   // GET /api/v1/orders/{id}
 	r.Get("/", h.ListUserOrders) // GET /api/v1/orders?page=&limit=&status=
+
 }
 
 // RegisterAdminRoutes registers the order-related routes accessible only to admins.
