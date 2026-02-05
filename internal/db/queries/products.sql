@@ -1,15 +1,18 @@
 -- name: GetProduct :one
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE id = sqlc.arg(product_id) AND deleted_at IS NULL;
 
 -- name: GetProductBySlug :one
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE slug = sqlc.arg(slug) AND deleted_at IS NULL;
 
 -- name: ListProducts :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
@@ -28,7 +31,8 @@ ORDER BY p.created_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: ListProductsByCategory :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE category_id = sqlc.arg(category_id) AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -45,7 +49,8 @@ ORDER BY p.created_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: SearchProducts :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE deleted_at IS NULL
   AND (sqlc.arg(query)::TEXT = '' OR name ILIKE '%' || sqlc.arg(query) || '%' OR COALESCE(short_description, '') ILIKE '%' || sqlc.arg(query) || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query)))
@@ -75,6 +80,7 @@ WHERE p.deleted_at IS NULL
 ORDER BY p.created_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
+
 -- name: CreateProduct :one
 INSERT INTO products (
     category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at
@@ -90,10 +96,11 @@ INSERT INTO products (
     sqlc.arg(brand), 
     sqlc.arg(image_urls), 
     sqlc.arg(spec_highlights), 
-    NOW(),
-    NOW()
+    NOW(), -- created_at
+    NOW()  -- updated_at
 ) 
-RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at;
+RETURNING  id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at;
 
 -- name: UpdateProduct :one
 UPDATE products
@@ -111,7 +118,8 @@ SET
     spec_highlights = COALESCE(sqlc.arg(spec_highlights), spec_highlights),
     updated_at = NOW()
 WHERE id = sqlc.arg(product_id) AND deleted_at IS NULL
-RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at;
+RETURNING  id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at;
 
 -- name: DeleteProduct :exec
 UPDATE products

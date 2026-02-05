@@ -616,6 +616,7 @@ func (s *ProductService) toProductModelWithDiscount(dbRow db.GetProductWithDisco
 		// Use OriginalPriceCents from the query result for the base price in the model
 		PriceCents:    dbRow.OriginalPriceCents,
 		StockQuantity: int(dbRow.StockQuantity), // Convert int32 to int
+		NumRatings:    dbRow.NumRatings,
 		Status:        dbRow.Status,
 		Brand:         dbRow.Brand,
 		CreatedAt:     dbRow.CreatedAt.Time, // Convert pgtype.Timestamptz to time.Time
@@ -628,6 +629,11 @@ func (s *ProductService) toProductModelWithDiscount(dbRow db.GetProductWithDisco
 		HasActiveDiscount:    dbRow.HasActiveDiscount, // Map boolean directly
 	}
 
+	avgRating, err := dbRow.AvgRating.Float64Value()
+	if err == nil {
+		product.AvgRating = avgRating.Float64
+	}
+	slog.Debug("the average rating for this product", "id", dbRow.ID, "average rating", avgRating.Float64)
 	// Handle optional fields from the base product info
 	if dbRow.Description != nil {
 		product.Description = dbRow.Description

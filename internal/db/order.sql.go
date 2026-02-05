@@ -133,15 +133,33 @@ type DecrementStockIfSufficientParams struct {
 	ProductID       uuid.UUID `json:"product_id"`
 }
 
+type DecrementStockIfSufficientRow struct {
+	ID               uuid.UUID          `json:"id"`
+	CategoryID       uuid.UUID          `json:"category_id"`
+	Name             string             `json:"name"`
+	Slug             string             `json:"slug"`
+	Description      *string            `json:"description"`
+	ShortDescription *string            `json:"short_description"`
+	PriceCents       int64              `json:"price_cents"`
+	StockQuantity    int32              `json:"stock_quantity"`
+	Status           string             `json:"status"`
+	Brand            string             `json:"brand"`
+	ImageUrls        []byte             `json:"image_urls"`
+	SpecHighlights   []byte             `json:"spec_highlights"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
 // Attempts to decrement the stock_quantity for a product by a given amount.
 // Succeeds only if the resulting stock_quantity would be >= 0.
 // Returns the updated product row if successful, or an error if insufficient stock.
 // Note: The RETURNING clause might not be strictly necessary if we only care about RowsAffected.
 // If RETURNING is omitted, the querier function will likely return sql.Result.
 // Let's include RETURNING to get the updated stock if needed for debugging/logging.
-func (q *Queries) DecrementStockIfSufficient(ctx context.Context, arg DecrementStockIfSufficientParams) (Product, error) {
+func (q *Queries) DecrementStockIfSufficient(ctx context.Context, arg DecrementStockIfSufficientParams) (DecrementStockIfSufficientRow, error) {
 	row := q.db.QueryRow(ctx, decrementStockIfSufficient, arg.DecrementAmount, arg.ProductID)
-	var i Product
+	var i DecrementStockIfSufficientRow
 	err := row.Scan(
 		&i.ID,
 		&i.CategoryID,
@@ -341,11 +359,29 @@ type IncrementStockParams struct {
 	ProductID       uuid.UUID `json:"product_id"`
 }
 
+type IncrementStockRow struct {
+	ID               uuid.UUID          `json:"id"`
+	CategoryID       uuid.UUID          `json:"category_id"`
+	Name             string             `json:"name"`
+	Slug             string             `json:"slug"`
+	Description      *string            `json:"description"`
+	ShortDescription *string            `json:"short_description"`
+	PriceCents       int64              `json:"price_cents"`
+	StockQuantity    int32              `json:"stock_quantity"`
+	Status           string             `json:"status"`
+	Brand            string             `json:"brand"`
+	ImageUrls        []byte             `json:"image_urls"`
+	SpecHighlights   []byte             `json:"spec_highlights"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
 // Increments the stock_quantity for a product by a given amount.
 // Suitable for releasing stock back when cancelling an order.
-func (q *Queries) IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error) {
+func (q *Queries) IncrementStock(ctx context.Context, arg IncrementStockParams) (IncrementStockRow, error) {
 	row := q.db.QueryRow(ctx, incrementStock, arg.IncrementAmount, arg.ProductID)
-	var i Product
+	var i IncrementStockRow
 	err := row.Scan(
 		&i.ID,
 		&i.CategoryID,

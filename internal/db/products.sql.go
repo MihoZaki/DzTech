@@ -70,10 +70,11 @@ INSERT INTO products (
     $9, 
     $10, 
     $11, 
-    NOW(),
-    NOW()
+    NOW(), -- created_at
+    NOW()  -- updated_at
 ) 
-RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+RETURNING  id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 `
 
 type CreateProductParams struct {
@@ -116,6 +117,8 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.StockQuantity,
 		&i.Status,
 		&i.Brand,
+		&i.AvgRating,
+		&i.NumRatings,
 		&i.ImageUrls,
 		&i.SpecHighlights,
 		&i.CreatedAt,
@@ -177,7 +180,8 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category,
 }
 
 const getProduct = `-- name: GetProduct :one
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -196,6 +200,8 @@ func (q *Queries) GetProduct(ctx context.Context, productID uuid.UUID) (Product,
 		&i.StockQuantity,
 		&i.Status,
 		&i.Brand,
+		&i.AvgRating,
+		&i.NumRatings,
 		&i.ImageUrls,
 		&i.SpecHighlights,
 		&i.CreatedAt,
@@ -206,7 +212,8 @@ func (q *Queries) GetProduct(ctx context.Context, productID uuid.UUID) (Product,
 }
 
 const getProductBySlug = `-- name: GetProductBySlug :one
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE slug = $1 AND deleted_at IS NULL
 `
@@ -225,6 +232,8 @@ func (q *Queries) GetProductBySlug(ctx context.Context, slug string) (Product, e
 		&i.StockQuantity,
 		&i.Status,
 		&i.Brand,
+		&i.AvgRating,
+		&i.NumRatings,
 		&i.ImageUrls,
 		&i.SpecHighlights,
 		&i.CreatedAt,
@@ -268,7 +277,8 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
@@ -300,6 +310,8 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 			&i.StockQuantity,
 			&i.Status,
 			&i.Brand,
+			&i.AvgRating,
+			&i.NumRatings,
 			&i.ImageUrls,
 			&i.SpecHighlights,
 			&i.CreatedAt,
@@ -317,7 +329,8 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 }
 
 const listProductsByCategory = `-- name: ListProductsByCategory :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE category_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -350,6 +363,8 @@ func (q *Queries) ListProductsByCategory(ctx context.Context, arg ListProductsBy
 			&i.StockQuantity,
 			&i.Status,
 			&i.Brand,
+			&i.AvgRating,
+			&i.NumRatings,
 			&i.ImageUrls,
 			&i.SpecHighlights,
 			&i.CreatedAt,
@@ -368,7 +383,7 @@ func (q *Queries) ListProductsByCategory(ctx context.Context, arg ListProductsBy
 
 const listProductsWithCategory = `-- name: ListProductsWithCategory :many
 SELECT 
-    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
+    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.avg_rating, p.num_ratings, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
     c.name as category_name,
     c.slug as category_slug,
     c.type as category_type
@@ -411,6 +426,8 @@ func (q *Queries) ListProductsWithCategory(ctx context.Context, arg ListProducts
 			&i.Product.StockQuantity,
 			&i.Product.Status,
 			&i.Product.Brand,
+			&i.Product.AvgRating,
+			&i.Product.NumRatings,
 			&i.Product.ImageUrls,
 			&i.Product.SpecHighlights,
 			&i.Product.CreatedAt,
@@ -432,7 +449,7 @@ func (q *Queries) ListProductsWithCategory(ctx context.Context, arg ListProducts
 
 const listProductsWithCategoryDetail = `-- name: ListProductsWithCategoryDetail :many
 SELECT 
-    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
+    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.avg_rating, p.num_ratings, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
     c.id, c.name, c.slug, c.type, c.parent_id, c.created_at
 FROM products p
 JOIN categories c ON p.category_id = c.id
@@ -472,6 +489,8 @@ func (q *Queries) ListProductsWithCategoryDetail(ctx context.Context, arg ListPr
 			&i.Product.StockQuantity,
 			&i.Product.Status,
 			&i.Product.Brand,
+			&i.Product.AvgRating,
+			&i.Product.NumRatings,
 			&i.Product.ImageUrls,
 			&i.Product.SpecHighlights,
 			&i.Product.CreatedAt,
@@ -495,7 +514,8 @@ func (q *Queries) ListProductsWithCategoryDetail(ctx context.Context, arg ListPr
 }
 
 const searchProducts = `-- name: SearchProducts :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 FROM products
 WHERE deleted_at IS NULL
   AND ($1::TEXT = '' OR name ILIKE '%' || $1 || '%' OR COALESCE(short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
@@ -548,6 +568,8 @@ func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) 
 			&i.StockQuantity,
 			&i.Status,
 			&i.Brand,
+			&i.AvgRating,
+			&i.NumRatings,
 			&i.ImageUrls,
 			&i.SpecHighlights,
 			&i.CreatedAt,
@@ -566,7 +588,7 @@ func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) 
 
 const searchProductsWithCategory = `-- name: SearchProductsWithCategory :many
 SELECT 
-    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
+    p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.avg_rating, p.num_ratings, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
     c.name as category_name,
     c.slug as category_slug,
     c.type as category_type
@@ -630,6 +652,8 @@ func (q *Queries) SearchProductsWithCategory(ctx context.Context, arg SearchProd
 			&i.Product.StockQuantity,
 			&i.Product.Status,
 			&i.Product.Brand,
+			&i.Product.AvgRating,
+			&i.Product.NumRatings,
 			&i.Product.ImageUrls,
 			&i.Product.SpecHighlights,
 			&i.Product.CreatedAt,
@@ -665,7 +689,8 @@ SET
     spec_highlights = COALESCE($11, spec_highlights),
     updated_at = NOW()
 WHERE id = $12 AND deleted_at IS NULL
-RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at
+RETURNING  id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
+    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
 `
 
 type UpdateProductParams struct {
@@ -710,6 +735,8 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.StockQuantity,
 		&i.Status,
 		&i.Brand,
+		&i.AvgRating,
+		&i.NumRatings,
 		&i.ImageUrls,
 		&i.SpecHighlights,
 		&i.CreatedAt,

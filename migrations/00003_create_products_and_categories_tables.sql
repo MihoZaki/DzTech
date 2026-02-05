@@ -21,6 +21,8 @@ CREATE TABLE products (
     stock_quantity INT NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
     status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'discontinued')),
     brand VARCHAR(100) NOT NULL,
+    avg_rating NUMERIC(3,2) DEFAULT NULL,
+    num_ratings INTEGER DEFAULT 0,
     image_urls JSONB NOT NULL DEFAULT '[]'::JSONB,
     spec_highlights JSONB NOT NULL DEFAULT '{}'::JSONB, -- { "cores": 16, "base_clock_ghz": 4.5 }
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

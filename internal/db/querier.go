@@ -26,6 +26,9 @@ type Querier interface {
 	// Include usage limit check
 	// Associates a discount with a specific product (simplified version, might need more checks).
 	ApplyDiscountToProduct(ctx context.Context, arg ApplyDiscountToProductParams) error
+	// Calculates the average rating and count of non-deleted reviews for a specific product.
+	// Used to update the products table.
+	CalculateReviewStatsForProduct(ctx context.Context, productID uuid.UUID) (CalculateReviewStatsForProductRow, error)
 	// Order items consistently
 	// Updates the status of an order to 'cancelled' and sets the cancelled_at and completed_at timestamps.
 	// This is a soft cancellation.
@@ -50,6 +53,9 @@ type Querier interface {
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
+	// Inserts a new review and returns its details.
+	// NOTE: This query alone does not update the product's avg_rating/num_ratings.
+	CreateReview(ctx context.Context, arg CreateReviewParams) (CreateReviewRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Cart Management
 	CreateUserCart(ctx context.Context, userID uuid.UUID) (Cart, error)
@@ -59,7 +65,7 @@ type Querier interface {
 	// Note: The RETURNING clause might not be strictly necessary if we only care about RowsAffected.
 	// If RETURNING is omitted, the querier function will likely return sql.Result.
 	// Let's include RETURNING to get the updated stock if needed for debugging/logging.
-	DecrementStockIfSufficient(ctx context.Context, arg DecrementStockIfSufficientParams) (Product, error)
+	DecrementStockIfSufficient(ctx context.Context, arg DecrementStockIfSufficientParams) (DecrementStockIfSufficientRow, error)
 	DeleteCart(ctx context.Context, cartID uuid.UUID) error
 	// Cart Cleanup
 	DeleteCartItem(ctx context.Context, itemID uuid.UUID) error
@@ -69,6 +75,9 @@ type Querier interface {
 	// Deletes a discount record (and associated links via CASCADE).
 	DeleteDiscount(ctx context.Context, id uuid.UUID) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
+	// Soft deletes a review by setting deleted_at.
+	// NOTE: This query alone does not update the product's avg_rating/num_ratings.
+	DeleteReview(ctx context.Context, arg DeleteReviewParams) (DeleteReviewRow, error)
 	// Retrieves all delivery services that are currently active.
 	// Suitable for user-facing contexts like checkout.
 	GetActiveDeliveryServices(ctx context.Context) ([]DeliveryService, error)
@@ -127,6 +136,14 @@ type Querier interface {
 	// Fetches products with their original price and potential discounted price and code if an active discount applies.
 	// Includes full product details.
 	GetProductsWithDiscountInfo(ctx context.Context, arg GetProductsWithDiscountInfoParams) ([]GetProductsWithDiscountInfoRow, error)
+	// Retrieves a specific review by its ID and verifies the user owns it.
+	GetReviewByIDAndUser(ctx context.Context, arg GetReviewByIDAndUserParams) (GetReviewByIDAndUserRow, error)
+	// Retrieves a review by a specific user for a specific product.
+	GetReviewByUserAndProduct(ctx context.Context, arg GetReviewByUserAndProductParams) (GetReviewByUserAndProductRow, error)
+	// Retrieves all reviews for a specific product, including the reviewer's name, potentially paginated.
+	GetReviewsByProductID(ctx context.Context, arg GetReviewsByProductIDParams) ([]GetReviewsByProductIDRow, error)
+	// Retrieves all reviews submitted by a specific user, including the product name, potentially paginated.
+	GetReviewsByUserID(ctx context.Context, arg GetReviewsByUserIDParams) ([]GetReviewsByUserIDRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Fetches a specific user by ID along with order count and last order date.
@@ -140,7 +157,7 @@ type Querier interface {
 	IncrementDiscountUsage(ctx context.Context, id uuid.UUID) error
 	// Increments the stock_quantity for a product by a given amount.
 	// Suitable for releasing stock back when cancelling an order.
-	IncrementStock(ctx context.Context, arg IncrementStockParams) (Product, error)
+	IncrementStock(ctx context.Context, arg IncrementStockParams) (IncrementStockRow, error)
 	// Inserts multiple order items efficiently in a single query.
 	// Requires arrays of equal length for product_ids, quantities, names, and prices_cents.
 	InsertOrderItemsBulk(ctx context.Context, arg InsertOrderItemsBulkParams) error
@@ -208,6 +225,11 @@ type Querier interface {
 	// Updates the status of an order and manages completion/cancellation timestamps.
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
+	// Updates the avg_rating and num_ratings fields in the products table for a specific product.
+	UpdateProductReviewStats(ctx context.Context, arg UpdateProductReviewStatsParams) error
+	// Updates the rating of an existing review.
+	// NOTE: This query alone does not update the product's avg_rating/num_ratings.
+	UpdateReview(ctx context.Context, arg UpdateReviewParams) (UpdateReviewRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

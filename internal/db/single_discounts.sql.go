@@ -164,6 +164,8 @@ SELECT
     p.short_description,
     p.price_cents AS original_price_cents,
     p.stock_quantity,
+    p.avg_rating,
+    p.num_ratings,
     p.status,
     p.brand,
     p.image_urls,
@@ -202,6 +204,8 @@ type GetProductWithDiscountInfoRow struct {
 	ShortDescription     *string            `json:"short_description"`
 	OriginalPriceCents   int64              `json:"original_price_cents"`
 	StockQuantity        int32              `json:"stock_quantity"`
+	AvgRating            pgtype.Numeric     `json:"avg_rating"`
+	NumRatings           *int32             `json:"num_ratings"`
 	Status               string             `json:"status"`
 	Brand                string             `json:"brand"`
 	ImageUrls            []byte             `json:"image_urls"`
@@ -230,6 +234,8 @@ func (q *Queries) GetProductWithDiscountInfo(ctx context.Context, id uuid.UUID) 
 		&i.ShortDescription,
 		&i.OriginalPriceCents,
 		&i.StockQuantity,
+		&i.AvgRating,
+		&i.NumRatings,
 		&i.Status,
 		&i.Brand,
 		&i.ImageUrls,
@@ -256,6 +262,8 @@ SELECT
     p.short_description,
     p.price_cents AS original_price_cents,
     p.stock_quantity,
+    p.avg_rating,
+    p.num_ratings,
     p.status,
     p.brand,
     p.image_urls,
@@ -290,6 +298,8 @@ type GetProductWithDiscountInfoBySlugRow struct {
 	ShortDescription     *string            `json:"short_description"`
 	OriginalPriceCents   int64              `json:"original_price_cents"`
 	StockQuantity        int32              `json:"stock_quantity"`
+	AvgRating            pgtype.Numeric     `json:"avg_rating"`
+	NumRatings           *int32             `json:"num_ratings"`
 	Status               string             `json:"status"`
 	Brand                string             `json:"brand"`
 	ImageUrls            []byte             `json:"image_urls"`
@@ -317,6 +327,8 @@ func (q *Queries) GetProductWithDiscountInfoBySlug(ctx context.Context, slug str
 		&i.ShortDescription,
 		&i.OriginalPriceCents,
 		&i.StockQuantity,
+		&i.AvgRating,
+		&i.NumRatings,
 		&i.Status,
 		&i.Brand,
 		&i.ImageUrls,
@@ -343,6 +355,8 @@ SELECT
     p.short_description,
     p.price_cents AS original_price_cents,
     p.stock_quantity,
+    p.avg_rating,
+    p.num_ratings,
     p.status,
     p.brand,
     p.image_urls,
@@ -385,6 +399,8 @@ type GetProductsWithDiscountInfoRow struct {
 	ShortDescription     *string            `json:"short_description"`
 	OriginalPriceCents   int64              `json:"original_price_cents"`
 	StockQuantity        int32              `json:"stock_quantity"`
+	AvgRating            pgtype.Numeric     `json:"avg_rating"`
+	NumRatings           *int32             `json:"num_ratings"`
 	Status               string             `json:"status"`
 	Brand                string             `json:"brand"`
 	ImageUrls            []byte             `json:"image_urls"`
@@ -419,6 +435,8 @@ func (q *Queries) GetProductsWithDiscountInfo(ctx context.Context, arg GetProduc
 			&i.ShortDescription,
 			&i.OriginalPriceCents,
 			&i.StockQuantity,
+			&i.AvgRating,
+			&i.NumRatings,
 			&i.Status,
 			&i.Brand,
 			&i.ImageUrls,

@@ -14,8 +14,10 @@ type Product struct {
 	Slug                 string         `json:"slug"`
 	Description          *string        `json:"description,omitempty"`
 	ShortDescription     *string        `json:"short_description,omitempty"`
-	PriceCents           int64          `json:"price_cents"`    // Represents OriginalPriceCents from the query
-	StockQuantity        int            `json:"stock_quantity"` // Different type
+	PriceCents           int64          `json:"price_cents"`           // Represents OriginalPriceCents from the query
+	StockQuantity        int            `json:"stock_quantity"`        // Different type
+	AvgRating            float64        `json:"avg_rating,omitempty"`  // Nullable, calculated from reviews
+	NumRatings           *int32         `json:"num_ratings,omitempty"` // Nullable, count of reviews
 	Status               string         `json:"status"`
 	Brand                string         `json:"brand"`
 	ImageUrls            []string       `json:"image_urls"`           // Different type

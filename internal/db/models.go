@@ -119,6 +119,8 @@ type Product struct {
 	StockQuantity    int32              `json:"stock_quantity"`
 	Status           string             `json:"status"`
 	Brand            string             `json:"brand"`
+	AvgRating        pgtype.Numeric     `json:"avg_rating"`
+	NumRatings       *int32             `json:"num_ratings"`
 	ImageUrls        []byte             `json:"image_urls"`
 	SpecHighlights   []byte             `json:"spec_highlights"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
@@ -142,6 +144,16 @@ type RefreshToken struct {
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Review struct {
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	ProductID uuid.UUID          `json:"product_id"`
+	Rating    int32              `json:"rating"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type SchemaMigration struct {
