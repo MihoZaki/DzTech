@@ -67,8 +67,6 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 		cartUpdatedAt = dbCart.UpdatedAt.Time
 	}
 
-	// --- CHANGE: Use the new query that includes discount calculations ---
-	// Fetch items for the cart with product details and discounts
 	dbItemsWithProductAndDiscounts, err := s.querier.GetCartWithItemsAndProductsWithDiscounts(ctx, cartID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		s.logger.Error("Error fetching cart items with product details and discounts", "error", err, "cart_id", cartID)
@@ -98,9 +96,6 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 	distinctProducts := make(map[uuid.UUID]bool)
 
 	for _, itemRow := range dbItemsWithProductAndDiscounts {
-		// Only process items where the product still exists and is active (ProductName is not nil)
-		// The GetCartWithItemsAndProductsWithDiscounts query includes products even if soft-deleted (p.deleted_at IS NULL OR p.id IS NULL)
-		// However, if p.name (ProductName) is nil, it means the product was deleted after the item was added.
 		if itemRow.ProductName != nil {
 			qty := int(*itemRow.CartItemQuantity)                  // Quantity is a pointer because of emit_pointers_for_null_types
 			finalPriceCents := itemRow.ProductDiscountedPriceCents // Use the final price calculated in the query
@@ -139,6 +134,7 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 				DiscountCode:       itemRow.DiscountCode,
 				DiscountType:       itemRow.DiscountType,
 				DiscountValue:      itemRow.DiscountValue,
+				HasActiveDiscount:  itemRow.ProductHasActiveDiscount,
 			}
 
 			itemSummary := models.CartItemSummary{
@@ -149,9 +145,6 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 			}
 			items = append(items, itemSummary)
 		} else {
-			// If the product was deleted after being added to the cart,
-			// log this and skip it in the summary.
-			// The item might still exist in the DB until explicitly removed by cleanup logic or user action.
 			s.logger.Debug("Skipping cart item with missing/deleted product", "item_id", itemRow.CartItemID, "product_id", itemRow.CartItemProductID)
 		}
 	}

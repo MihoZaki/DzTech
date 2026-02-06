@@ -136,6 +136,7 @@ type Querier interface {
 	// Fetches products with their original price and potential discounted price and code if an active discount applies.
 	// Includes full product details.
 	GetProductsWithDiscountInfo(ctx context.Context, arg GetProductsWithDiscountInfoParams) ([]GetProductsWithDiscountInfoRow, error)
+	GetProductsWithDiscountInfoView(ctx context.Context) ([]VProductsWithCurrentDiscount, error)
 	// Retrieves a specific review by its ID and verifies the user owns it.
 	GetReviewByIDAndUser(ctx context.Context, arg GetReviewByIDAndUserParams) (GetReviewByIDAndUserRow, error)
 	// Retrieves a review by a specific user for a specific product.

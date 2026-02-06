@@ -110,15 +110,18 @@ SELECT
     p.updated_at as product_updated_at,
     p.deleted_at as product_deleted_at,
     -- Calculate discounted price inline using JOIN and CASE
+COALESCE(
     CASE
         WHEN pd.discount_id IS NOT NULL THEN
             CASE
-                WHEN d.discount_type = 'percentage' THEN (p.price_cents * (100 - d.discount_value) / 100)::BIGINT
-                ELSE (p.price_cents - d.discount_value)::BIGINT
+                WHEN d.discount_type = 'percentage' THEN (COALESCE(p.price_cents, 0) * (100 - d.discount_value) / 100)::BIGINT -- Protect against p.price_cents being NULL
+                ELSE (COALESCE(p.price_cents, 0) - d.discount_value)::BIGINT -- Protect against p.price_cents being NULL
             END
-        ELSE p.price_cents -- No discount, use original price
-    END::BIGINT AS product_discounted_price_cents,
-    -- Include discount details if applicable (will be NULL if no discount)
+        ELSE COALESCE(p.price_cents, 0) -- Use original price if no discount applies, protect against NULL
+    END,
+    0 -- Ultimate fallback if the CASE somehow results in NULL (shouldn't happen now)
+)::BIGINT AS product_discounted_price_cents,
+   -- Include discount details if applicable (will be NULL if no discount)
     d.code AS discount_code,
     d.discount_type AS discount_type,
     d.discount_value AS discount_value,

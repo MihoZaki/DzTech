@@ -172,3 +172,14 @@ type User struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
+
+type VProductsWithCurrentDiscount struct {
+	ID                   uuid.UUID      `json:"id"`
+	CategoryID           uuid.UUID      `json:"category_id"`
+	Name                 string         `json:"name"`
+	OriginalPriceCents   int64          `json:"original_price_cents"`
+	DiscountedPriceCents int64          `json:"discounted_price_cents"`
+	DiscountCode         *string        `json:"discount_code"`
+	AvgRating            pgtype.Numeric `json:"avg_rating"`
+	NumRatings           *int32         `json:"num_ratings"`
+}

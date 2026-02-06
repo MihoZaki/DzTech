@@ -44,6 +44,7 @@ type ProductLite struct {
 	DiscountCode       *string   `json:"discount_code,omitempty"`
 	DiscountType       *string   `json:"discount_type,omitempty"`
 	DiscountValue      *int64    `json:"discount_value,omitempty"`
+	HasActiveDiscount  bool      `json:"has_active_discount"`
 }
 
 // CartSummary represents the complete state of a cart for display purposes.
