@@ -86,6 +86,12 @@ type Querier interface {
 	// Check usage limit
 	// Fetches all currently active discounts (within date range and usage limits).
 	GetActiveDiscounts(ctx context.Context) ([]Discount, error)
+	// Calculates the average time between order confirmation and shipment/delivery completion.
+	// Assumes 'confirmed' status is the start and 'shipped' or 'delivered' is the end.
+	GetAverageFulfillmentTime(ctx context.Context, arg GetAverageFulfillmentTimeParams) (float64, error)
+	// $1 = start_date, $2 = end_date
+	// Calculates the average order value (AOV) for delivered orders within a given time range.
+	GetAverageOrderValue(ctx context.Context, arg GetAverageOrderValueParams) (float64, error)
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
 	GetCartBySessionID(ctx context.Context, sessionID *string) (GetCartBySessionIDRow, error)
 	GetCartByUserID(ctx context.Context, userID uuid.UUID) (GetCartByUserIDRow, error)
@@ -111,21 +117,60 @@ type Querier interface {
 	GetDiscountByCode(ctx context.Context, code string) (Discount, error)
 	// Fetches a discount by its ID.
 	GetDiscountByID(ctx context.Context, id uuid.UUID) (Discount, error)
+	// --- Discount Effectiveness ---
+	// Retrieves usage count and revenue attributed to specific discount codes within a time range.
+	GetDiscountUsage(ctx context.Context, arg GetDiscountUsageParams) ([]GetDiscountUsageRow, error)
 	// Fetches active discounts applicable to a specific category.
 	GetDiscountsByCategoryID(ctx context.Context, categoryID uuid.UUID) ([]Discount, error)
 	// Fetches active discounts applicable to a specific product.
 	GetDiscountsByProductID(ctx context.Context, productID uuid.UUID) ([]Discount, error)
+	// $3 = number of top categories to return (N)
+	// --- Product Performance ---
+	// Retrieves products with stock quantity below a specified threshold.
+	GetLowStockProducts(ctx context.Context, stockQuantity int32) ([]GetLowStockProductsRow, error)
+	// --- Customer Insights ---
+	// Counts the number of new customers registered within a given time range.
+	GetNewCustomersCount(ctx context.Context, arg GetNewCustomersCountParams) (int64, error)
 	// Array of quantities
 	// Retrieves an order by its ID with denormalized address fields.
 	GetOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
 	// Retrieves all items for a specific order ID.
 	GetOrderItemsByOrderID(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error)
+	// Exclude soft-deleted users
+	// --- Order Metrics ---
+	// Counts the number of orders in each status (pending, confirmed, shipped, delivered, cancelled).
+	GetOrderStatusCounts(ctx context.Context, arg GetOrderStatusCountsParams) ([]GetOrderStatusCountsRow, error)
 	// Retrieves an order by its ID along with all its items, including denormalized address fields.
 	// This query uses a join and might return multiple rows if there are items.
 	// The service layer needs to aggregate these rows into a single Order object with a slice of OrderItems.
 	GetOrderWithItems(ctx context.Context, orderID uuid.UUID) ([]GetOrderWithItemsRow, error)
+	// $1 = start_date, $2 = end_date
+	// Note: This query is complex because order status updates modify the same row.
+	// A more robust approach might involve an order_status_history table or window functions.
+	// Simplified version assuming statuses are updated sequentially and we just compare timestamps.
+	// A better way might be to track status change events explicitly.
+	// For now, let's simplify the logic assuming we just want the difference between created_at and updated_at
+	// for 'shipped' or 'delivered' orders, IF created_at represents the time it became confirmed.
+	// This might not be accurate depending on how status transitions are handled.
+	// Let's revise:
+	// Assume 'confirmed' status sets confirmed_at, 'shipped' sets shipped_at, 'delivered' sets delivered_at.
+	// Add these timestamp fields to the orders table if they don't exist.
+	// ALTER TABLE orders ADD COLUMN confirmed_at TIMESTAMPTZ, shipped_at TIMESTAMPTZ, delivered_at TIMESTAMPTZ;
+	// Then update these timestamps in the service layer upon status changes.
+	// Query would then be:
+	// SELECT AVG(EXTRACT(EPOCH FROM (delivered_at - confirmed_at))) FROM orders WHERE status = 'delivered' AND ...;
+	// For now, acknowledging this complexity, we'll note it and move on, assuming status timestamps exist or are derivable.
+	// This query might need adjustment based on how status changes are tracked in the DB.
+	// Let's add a simpler one based on status counts for now.
+	// Counts orders by status within a time range.
+	// This is similar to GetOrderStatusCounts but with a time filter.
+	GetOrdersByStatusWithinTimeRange(ctx context.Context, arg GetOrdersByStatusWithinTimeRangeParams) ([]GetOrdersByStatusWithinTimeRangeRow, error)
 	GetProduct(ctx context.Context, productID uuid.UUID) (Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (Product, error)
+	// Retrieves average rating and number of ratings for a specific product.
+	// (This might already be covered by the existing product queries selecting avg_rating, num_ratings)
+	// But here's a dedicated query if needed:
+	GetProductReviewStats(ctx context.Context, id uuid.UUID) (GetProductReviewStatsRow, error)
 	// Fetches a specific product with its original price and potential discounted price and code if an active discount applies.
 	// Includes full product details.
 	GetProductWithDiscountInfo(ctx context.Context, id uuid.UUID) (GetProductWithDiscountInfoRow, error)
@@ -147,6 +192,18 @@ type Querier interface {
 	GetReviewsByProductID(ctx context.Context, arg GetReviewsByProductIDParams) ([]GetReviewsByProductIDRow, error)
 	// Retrieves all reviews submitted by a specific user, including the product name, potentially paginated.
 	GetReviewsByUserID(ctx context.Context, arg GetReviewsByUserIDParams) ([]GetReviewsByUserIDRow, error)
+	// $1 = start_date, $2 = end_date
+	// Counts the total number of delivered orders within a given time range.
+	GetSalesVolume(ctx context.Context, arg GetSalesVolumeParams) (int64, error)
+	// $3 = number of top products to return (N)
+	// Retrieves the top N selling categories (by quantity sold) within a given time range.
+	GetTopSellingCategories(ctx context.Context, arg GetTopSellingCategoriesParams) ([]GetTopSellingCategoriesRow, error)
+	// $1 = start_date, $2 = end_date
+	// Retrieves the top N selling products (by quantity sold) within a given time range.
+	GetTopSellingProducts(ctx context.Context, arg GetTopSellingProductsParams) ([]GetTopSellingProductsRow, error)
+	// --- Sales Performance ---
+	// Calculates the total revenue from all delivered orders within a given time range.
+	GetTotalRevenue(ctx context.Context, arg GetTotalRevenueParams) (int64, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Fetches a specific user by ID along with order count and last order date.

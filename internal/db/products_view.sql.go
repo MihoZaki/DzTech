@@ -10,7 +10,7 @@ import (
 )
 
 const getProductsWithDiscountInfoView = `-- name: GetProductsWithDiscountInfoView :many
-SELECT id, category_id, name, original_price_cents, discounted_price_cents, discount_code, avg_rating, num_ratings
+SELECT product_id, category_id, product_name, product_slug, product_description, product_short_description, original_price_cents, product_stock_quantity, product_status, product_brand, product_image_urls, product_spec_highlights, product_created_at, product_updated_at, product_deleted_at, avg_rating, num_ratings, discounted_price_cents, active_discount_code, active_discount_type, active_discount_value, has_active_discount
 FROM v_products_with_current_discounts
 `
 
@@ -24,14 +24,28 @@ func (q *Queries) GetProductsWithDiscountInfoView(ctx context.Context) ([]VProdu
 	for rows.Next() {
 		var i VProductsWithCurrentDiscount
 		if err := rows.Scan(
-			&i.ID,
+			&i.ProductID,
 			&i.CategoryID,
-			&i.Name,
+			&i.ProductName,
+			&i.ProductSlug,
+			&i.ProductDescription,
+			&i.ProductShortDescription,
 			&i.OriginalPriceCents,
-			&i.DiscountedPriceCents,
-			&i.DiscountCode,
+			&i.ProductStockQuantity,
+			&i.ProductStatus,
+			&i.ProductBrand,
+			&i.ProductImageUrls,
+			&i.ProductSpecHighlights,
+			&i.ProductCreatedAt,
+			&i.ProductUpdatedAt,
+			&i.ProductDeletedAt,
 			&i.AvgRating,
 			&i.NumRatings,
+			&i.DiscountedPriceCents,
+			&i.ActiveDiscountCode,
+			&i.ActiveDiscountType,
+			&i.ActiveDiscountValue,
+			&i.HasActiveDiscount,
 		); err != nil {
 			return nil, err
 		}

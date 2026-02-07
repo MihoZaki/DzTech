@@ -174,12 +174,26 @@ type User struct {
 }
 
 type VProductsWithCurrentDiscount struct {
-	ID                   uuid.UUID      `json:"id"`
-	CategoryID           uuid.UUID      `json:"category_id"`
-	Name                 string         `json:"name"`
-	OriginalPriceCents   int64          `json:"original_price_cents"`
-	DiscountedPriceCents int64          `json:"discounted_price_cents"`
-	DiscountCode         *string        `json:"discount_code"`
-	AvgRating            pgtype.Numeric `json:"avg_rating"`
-	NumRatings           *int32         `json:"num_ratings"`
+	ProductID               uuid.UUID          `json:"product_id"`
+	CategoryID              uuid.UUID          `json:"category_id"`
+	ProductName             string             `json:"product_name"`
+	ProductSlug             string             `json:"product_slug"`
+	ProductDescription      *string            `json:"product_description"`
+	ProductShortDescription *string            `json:"product_short_description"`
+	OriginalPriceCents      int64              `json:"original_price_cents"`
+	ProductStockQuantity    int32              `json:"product_stock_quantity"`
+	ProductStatus           string             `json:"product_status"`
+	ProductBrand            string             `json:"product_brand"`
+	ProductImageUrls        []byte             `json:"product_image_urls"`
+	ProductSpecHighlights   []byte             `json:"product_spec_highlights"`
+	ProductCreatedAt        pgtype.Timestamptz `json:"product_created_at"`
+	ProductUpdatedAt        pgtype.Timestamptz `json:"product_updated_at"`
+	ProductDeletedAt        pgtype.Timestamptz `json:"product_deleted_at"`
+	AvgRating               pgtype.Numeric     `json:"avg_rating"`
+	NumRatings              *int32             `json:"num_ratings"`
+	DiscountedPriceCents    int64              `json:"discounted_price_cents"`
+	ActiveDiscountCode      *string            `json:"active_discount_code"`
+	ActiveDiscountType      *string            `json:"active_discount_type"`
+	ActiveDiscountValue     *int64             `json:"active_discount_value"`
+	HasActiveDiscount       bool               `json:"has_active_discount"`
 }
