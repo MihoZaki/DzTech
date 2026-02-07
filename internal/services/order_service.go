@@ -43,7 +43,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 		return nil, fmt.Errorf("failed to fetch current cart state for user %s: %w", userID, err)
 	}
 
-	s.logger.Debug("successfully fetched cart summary", "summart cart id", cartSummary.ID)
+	s.logger.Debug("successfully fetched cart summary", "summary cart id", cartSummary.ID)
 	cartItemsMap := make(map[uuid.UUID]int) // product_id -> quantity
 	for _, item := range cartSummary.Items {
 		if item.Product != nil {
@@ -104,8 +104,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 		}
 
 		orderItemProductIDs[i] = reqItem.ProductID
-		orderItemProductNames[i] = cartItem.Product.Name           // Use name from summary for consistency
-		orderItemPricesCents[i] = cartItem.Product.FinalPriceCents // <--- CRITICAL: Use discounted price
+		orderItemProductNames[i] = cartItem.Product.Name // Use name from summary for consistency
+		orderItemPricesCents[i] = cartItem.Product.FinalPriceCents
 		orderItemQuantities[i] = int32(reqItem.Quantity)
 	}
 
@@ -169,11 +169,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 // GetOrder retrieves an order by its ID along with its associated items.
 // It aggregates the results from the GetOrderWithItems query which returns multiple rows.
 func (s *OrderService) GetOrder(ctx context.Context, orderID uuid.UUID) (*models.OrderWithItems, error) {
-	rows, err := s.querier.GetOrderWithItems(ctx, orderID) // Use the generated query that returns multiple rows
+	rows, err := s.querier.GetOrderWithItems(ctx, orderID)
 	errorOrderNotFound := errors.New("order not found")
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%w: order with id %s not found", errorOrderNotFound, orderID) // Assuming ErrOrderNotFound is defined
+			return nil, fmt.Errorf("%w: order with id %s not found", errorOrderNotFound, orderID)
 		}
 		return nil, fmt.Errorf("failed to fetch order with items from DB: %w", err)
 	}
@@ -258,16 +258,16 @@ func (s *OrderService) dbOrderToModelOrder(dbOrder db.Order) models.Order {
 	var order models.Order
 	order.ID = dbOrder.ID
 	order.UserID = dbOrder.UserID
-	order.UserFullName = dbOrder.UserFullName // <--- Add this mapping
+	order.UserFullName = dbOrder.UserFullName
 	order.Status = dbOrder.Status
 	order.TotalAmountCents = dbOrder.TotalAmountCents
 	order.PaymentMethod = dbOrder.PaymentMethod
-	order.Province = dbOrder.Province         // <--- Add this mapping
-	order.City = dbOrder.City                 // <--- Add this mapping
-	order.PhoneNumber1 = dbOrder.PhoneNumber1 // <--- Add this mapping
-	order.PhoneNumber2 = dbOrder.PhoneNumber2 // <--- Add this mapping (already a *string in db.Order)
+	order.Province = dbOrder.Province
+	order.City = dbOrder.City
+	order.PhoneNumber1 = dbOrder.PhoneNumber1
+	order.PhoneNumber2 = dbOrder.PhoneNumber2
 	order.DeliveryServiceID = dbOrder.DeliveryServiceID
-	order.Notes = dbOrder.Notes // <--- Add this mapping (already a *string in db.Order)
+	order.Notes = dbOrder.Notes
 	order.CreatedAt = dbOrder.CreatedAt.Time
 	order.UpdatedAt = dbOrder.UpdatedAt.Time
 	if dbOrder.CompletedAt.Valid {
@@ -303,11 +303,9 @@ func (s *OrderService) ListUserOrders(ctx context.Context, userID uuid.UUID, sta
 		return nil, fmt.Errorf("failed to list user orders from DB: %w", err)
 	}
 
-	// Convert DB models to API models ([]db.Order -> []models.Order)
-	// This includes unmarshalling JSONB address fields.
 	apiOrders := make([]models.Order, len(dbOrders))
 	for i, dbOrder := range dbOrders {
-		apiOrders[i] = s.dbOrderToModelOrder(dbOrder) // Use the helper function
+		apiOrders[i] = s.dbOrderToModelOrder(dbOrder)
 	}
 
 	return apiOrders, nil
@@ -315,10 +313,10 @@ func (s *OrderService) ListUserOrders(ctx context.Context, userID uuid.UUID, sta
 
 func (s *OrderService) ListAllOrders(ctx context.Context, userIDFilter uuid.UUID, statusFilter string, page, limit int) ([]models.Order, error) {
 	if limit <= 0 {
-		limit = 20 // Default limit
+		limit = 20
 	}
 	if page <= 0 {
-		page = 1 // Default page
+		page = 1
 	}
 	offset := (page - 1) * limit
 
@@ -336,7 +334,7 @@ func (s *OrderService) ListAllOrders(ctx context.Context, userIDFilter uuid.UUID
 	}
 	apiOrders := make([]models.Order, len(dbOrders))
 	for i, dbOrder := range dbOrders {
-		apiOrders[i] = s.dbOrderToModelOrder(dbOrder) // Use the helper function
+		apiOrders[i] = s.dbOrderToModelOrder(dbOrder)
 	}
 
 	return apiOrders, nil
@@ -414,11 +412,10 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, orderID uuid.UUID,
 
 		// 6. Perform stock deduction for each item within the transaction using the new query
 		for _, item := range orderItems {
-			// Call the new SQLC-generated query
-			// It will succeed only if the stock is sufficient
+
 			updatedProduct, err := txQuerier.DecrementStockIfSufficient(ctx, db.DecrementStockIfSufficientParams{
 				ProductID:       item.ProductID,
-				DecrementAmount: item.Quantity, // item.Quantity is int32
+				DecrementAmount: item.Quantity,
 			})
 
 			if err != nil {

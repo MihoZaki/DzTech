@@ -29,7 +29,7 @@ SELECT
     r.rating,
     r.created_at,
     r.updated_at,
-    u.full_name IS NOT NULL::TEXT AS reviewer_name 
+    u.full_name AS reviewer_name 
 FROM reviews r
 JOIN users u ON r.user_id = u.id -- INNER JOIN to link review to user
 WHERE r.product_id = sqlc.arg(product_id) AND r.deleted_at IS NULL

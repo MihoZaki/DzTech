@@ -62,3 +62,11 @@ type GetReviewsByUserResponse struct {
 	Limit   int                    `json:"limit,omitempty"`
 	Total   int64                  `json:"total,omitempty"`
 }
+
+func (cr *CreateReviewRequest) Validate() error {
+	return Validate.Struct(cr)
+}
+
+func (ur *UpdateReviewRequest) Validate() error {
+	return Validate.Struct(ur)
+}

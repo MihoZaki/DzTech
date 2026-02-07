@@ -189,7 +189,7 @@ SELECT
     r.rating,
     r.created_at,
     r.updated_at,
-    u.full_name IS NOT NULL::TEXT AS reviewer_name 
+    u.full_name AS reviewer_name 
 FROM reviews r
 JOIN users u ON r.user_id = u.id -- INNER JOIN to link review to user
 WHERE r.product_id = $1 AND r.deleted_at IS NULL
@@ -210,7 +210,7 @@ type GetReviewsByProductIDRow struct {
 	Rating       int32              `json:"rating"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	ReviewerName string             `json:"reviewer_name"`
+	ReviewerName *string            `json:"reviewer_name"`
 }
 
 // Retrieves all reviews for a specific product, including the reviewer's name, potentially paginated.

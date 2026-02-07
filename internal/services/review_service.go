@@ -1,5 +1,3 @@
-// internal/services/review_service.go
-
 package services
 
 import (
@@ -12,7 +10,7 @@ import (
 	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn" // Import pgconn for error handling
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -52,7 +50,7 @@ func (s *ReviewService) CreateReview(ctx context.Context, userID uuid.UUID, req 
 	dbReview, err := txQuerier.CreateReview(ctx, db.CreateReviewParams{
 		UserID:    userID,
 		ProductID: req.ProductID,
-		Rating:    int32(req.Rating), // Convert API int (1-5) to DB int32
+		Rating:    int32(req.Rating),
 	})
 	if err != nil {
 
@@ -72,22 +70,19 @@ func (s *ReviewService) CreateReview(ctx context.Context, userID uuid.UUID, req 
 		return nil, fmt.Errorf("failed to update product review stats in transaction: %w", err)
 	}
 
-	// Step 7: Commit the transaction if both steps (create review, update stats) succeeded
 	if err = tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit review creation transaction: %w", err)
 	}
 
-	// Step 8: Convert the database review model to the API review model
 	apiReview := &models.Review{
 		ID:        dbReview.ID,
 		UserID:    dbReview.UserID,
 		ProductID: dbReview.ProductID,
-		Rating:    int(dbReview.Rating), // Convert DB int32 back to API int
+		Rating:    int(dbReview.Rating),
 		CreatedAt: dbReview.CreatedAt.Time,
 		UpdatedAt: dbReview.UpdatedAt.Time,
 	}
 
-	// Step 9: Return the created review
 	return apiReview, nil
 }
 
@@ -119,7 +114,7 @@ func (s *ReviewService) updateProductReviewStats(ctx context.Context, querier db
 
 	s.logger.Debug("Updated review stats for product",
 		"product_id", productID,
-		"new_avg_rating", stats.AvgRating, // Only print value if Valid
+		"new_avg_rating", stats.AvgRating,
 		"new_avg_rating_valid", stats.AvgRating.Valid,
 		"new_num_ratings", stats.NumRatings)
 
@@ -157,15 +152,15 @@ func (s *ReviewService) UpdateReview(ctx context.Context, reviewID uuid.UUID, us
 	}
 
 	dbReview, err := txQuerier.UpdateReview(ctx, db.UpdateReviewParams{
-		Rating: int32(req.Rating), // Convert API int (1-5) to DB int32
-		ID:     reviewID,          // Use the review ID from the path
-		UserID: userID,            // Verify ownership again in the query
+		Rating: int32(req.Rating),
+		ID:     reviewID,
+		UserID: userID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update review in transaction: %w", err)
 	}
 
-	err = s.updateProductReviewStats(ctx, txQuerier, fetchedReview.ProductID) // Use ProductID from fetched review
+	err = s.updateProductReviewStats(ctx, txQuerier, fetchedReview.ProductID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update product review stats in transaction: %w", err)
 	}
@@ -177,7 +172,7 @@ func (s *ReviewService) UpdateReview(ctx context.Context, reviewID uuid.UUID, us
 		ID:        dbReview.ID,
 		UserID:    dbReview.UserID,
 		ProductID: dbReview.ProductID,
-		Rating:    int(dbReview.Rating), // Convert DB int32 back to API int
+		Rating:    int(dbReview.Rating),
 		CreatedAt: dbReview.CreatedAt.Time,
 		UpdatedAt: dbReview.UpdatedAt.Time,
 	}
@@ -262,10 +257,10 @@ func (s *ReviewService) GetReviewsByProductID(ctx context.Context, productID uui
 	for i, r := range dbReviews {
 		reviewListItems[i] = models.ReviewListItem{
 			ID:           r.ID,
-			UserID:       r.UserID,       // Include if needed, or omit
-			ReviewerName: r.ReviewerName, // Map the new field
-			ProductID:    r.ProductID,    // This will be the same as the input productID
-			Rating:       int(r.Rating),  // Cast DB int32 back to API int
+			UserID:       r.UserID,
+			ReviewerName: *r.ReviewerName,
+			ProductID:    r.ProductID,
+			Rating:       int(r.Rating),
 			CreatedAt:    r.CreatedAt.Time,
 			UpdatedAt:    r.UpdatedAt.Time,
 		}
@@ -282,10 +277,10 @@ func (s *ReviewService) GetReviewsByProductID(ctx context.Context, productID uui
 // This method does not update product stats, just reads reviews.
 func (s *ReviewService) GetReviewsByUserID(ctx context.Context, userID uuid.UUID, page, limit int) (*models.GetReviewsByUserResponse, error) {
 	if limit <= 0 {
-		limit = 20 // Default limit
+		limit = 20
 	}
 	if page <= 0 {
-		page = 1 // Default page
+		page = 1
 	}
 	offset := (page - 1) * limit
 
@@ -302,10 +297,10 @@ func (s *ReviewService) GetReviewsByUserID(ctx context.Context, userID uuid.UUID
 	for i, r := range dbReviews {
 		reviewByUserListItems[i] = models.ReviewByUserListItem{
 			ID:          r.ID,
-			UserID:      r.UserID, // Include if needed, or omit
+			UserID:      r.UserID,
 			ProductID:   r.ProductID,
-			ProductName: r.ProductName, // Map the new field
-			Rating:      int(r.Rating), // Cast DB int32 back to API int
+			ProductName: r.ProductName,
+			Rating:      int(r.Rating),
 			CreatedAt:   r.CreatedAt.Time,
 			UpdatedAt:   r.UpdatedAt.Time,
 		}

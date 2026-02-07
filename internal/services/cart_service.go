@@ -158,7 +158,7 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 		Items:      items,
 		TotalItems: totalItems,
 		TotalQty:   totalQuantity,
-		TotalValue: totalValueCents, // <--- CRITICAL: Use total calculated with FinalPriceCents
+		TotalValue: totalValueCents,
 	}, nil
 }
 
@@ -179,11 +179,7 @@ func (s *CartService) getOrCreateUserCart(ctx context.Context, userID uuid.UUID)
 		return db.Cart{}, fmt.Errorf("failed to get cart for user %s: %w", userID, err)
 	}
 	// Return the existing cart row, cast appropriately if necessary
-	// Assuming GetCartByUserIDRow fields can be mapped to db.Cart if needed, or return the GetCartByUserIDRow directly if that's what GetCartByUserID returns.
-	// However, GetCartByUserID returns GetCartByUserIDRow. We need to convert this potentially.
-	// Let's assume the return type of CreateUserCart (db.Cart) is the canonical representation for a single cart row.
-	// The GetCartByUserIDRow has the same fields essentially.
-	// For consistency with the creation function's return, let's map GetCartByUserIDRow -> db.Cart
+
 	return db.Cart{
 		ID:        cart.ID,
 		UserID:    cart.UserID,    // Should be the userID passed in
@@ -229,8 +225,6 @@ func (s *CartService) AddItemToCart(ctx context.Context, userID *uuid.UUID, sess
 		return nil, fmt.Errorf("quantity must be greater than 0")
 	}
 	// Validate product exists and get its details (including stock)
-	// Note: We might not need the full product details here if the DB query handles stock checks,
-	// but validating existence is good.
 	product, err := s.productSvc.GetProduct(ctx, productID) // We don't strictly need the returned product struct here for existence check if the DB query handles it robustly
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate product %s: %w", productID, err)
@@ -309,16 +303,14 @@ func (s *CartService) AddBulkItems(ctx context.Context, userID *uuid.UUID, sessi
 		}
 	}
 
-	// Prepare slices for the SQLC query parameters (AddCartItemsBulkParams)
 	productIDs := make([]uuid.UUID, len(items))
 	quantities := make([]int32, len(items))
 
 	for i, item := range items {
 		productIDs[i] = item.ProductID
-		quantities[i] = int32(item.Quantity) // Cast int to int32 as required by AddCartItemsBulkParams
+		quantities[i] = int32(item.Quantity)
 	}
 
-	// Call the generated SQLC query which handles upserts and stock checks atomically
 	params := db.AddCartItemsBulkParams{
 		CartID:     cartID, // Use the fetched or created cart ID
 		ProductIds: productIDs,
@@ -391,7 +383,7 @@ func (s *CartService) UpdateItemQuantityInCart(ctx context.Context, userID *uuid
 
 // RemoveItemFromCart removes a specific item from the user's or guest's cart.
 func (s *CartService) RemoveItemFromCart(ctx context.Context, userID *uuid.UUID, sessionID string, itemID uuid.UUID) error {
-	// Fetch the existing cart item to get its CartID (for the future make it into a func DRY style)
+
 	existingItem, err := s.querier.GetCartItemByID(ctx, itemID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

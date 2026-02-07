@@ -53,6 +53,7 @@ func New(cfg *config.Config) http.Handler {
 	authService := services.NewAuthService(querier, userService, cfg.JWTSecret, slog.Default())
 	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
 	adminUserService := services.NewAdminUserService(querier, slog.Default())
+	reviewService := services.NewReviewService(querier, pool, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -64,6 +65,7 @@ func New(cfg *config.Config) http.Handler {
 	orderHandler := handlers.NewOrderHandler(orderService, slog.Default())
 	deliveryOptionsHandler := handlers.NewDeliveryOptionsHandler(deliveryService, slog.Default())
 	adminUserHandler := handlers.NewAdminUserHandler(adminUserService, slog.Default())
+	reviewHandler := handlers.NewReviewHandler(reviewService, slog.Default())
 
 	// Create sub-routers
 	authRouter := chi.NewRouter()
@@ -104,6 +106,10 @@ func New(cfg *config.Config) http.Handler {
 	deliveryOptionsRouter.Use(middleware.JWTMiddleware(cfg))
 	deliveryOptionsHandler.RegisterRoutes(deliveryOptionsRouter)
 
+	reviewRouter := chi.NewRouter()
+	reviewRouter.Use(middleware.JWTMiddleware(cfg))
+	reviewHandler.RegisterRoutes(reviewRouter)
+
 	// Mount sub-routers
 	r.Mount("/api/v1/auth", authRouter)
 	r.Mount("/api/v1/products", productRouter)
@@ -111,6 +117,7 @@ func New(cfg *config.Config) http.Handler {
 	r.Mount("/api/v1/cart", cartRouter)
 	r.Mount("/api/v1/orders", orderRouter)
 	r.Mount("/api/v1/delivery-options", deliveryOptionsRouter)
+	r.Mount("/api/v1/reviews", reviewRouter)
 
 	slog.Info("Router initialized")
 	return r
