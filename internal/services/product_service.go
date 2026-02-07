@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"mime/multipart"
+	"slices"
 	"strings"
 
 	"github.com/MihoZaki/DzTech/internal/db"
@@ -328,8 +329,11 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req mo
 	return s.toProductModel(updatedDbProduct), nil
 }
 
+// UpdateProductWithUpload updates a product, replacing its images if new ones are provided.
+// It also cleans up the old images from storage after the update succeeds.
 func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID uuid.UUID, req models.UpdateProductRequest, imageFileHeaders []*multipart.FileHeader,
 ) (*models.Product, error) {
+	// Step 1: Fetch the existing product to get its current image URLs for potential cleanup
 	existingDbProduct, err := s.querier.GetProduct(ctx, productID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -338,7 +342,10 @@ func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID 
 		return nil, fmt.Errorf("failed to get existing product: %w", err)
 	}
 
+	// Step 2: Determine the final image URLs based on input
 	var finalImageUrls []string
+	var uploadedUrlsForCleanup []string // Track newly uploaded URLs in case DB update fails
+
 	if len(imageFileHeaders) > 0 {
 		// If new files are provided, REPLACE ALL existing images with the new ones ("Replace All" strategy).
 		for _, fileHeader := range imageFileHeaders {
@@ -353,18 +360,25 @@ func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID 
 				return nil, fmt.Errorf("failed to upload image %s: %w", fileHeader.Filename, err)
 			}
 			finalImageUrls = append(finalImageUrls, url)
+			uploadedUrlsForCleanup = append(uploadedUrlsForCleanup, url) // Track for potential cleanup if DB fails
 		}
 	} else {
+		// If no new files, keep the existing ones
 		if err := json.Unmarshal(existingDbProduct.ImageUrls, &finalImageUrls); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal existing image URLs: %w", err)
 		}
 	}
 
+	// Step 3: Prepare parameters for the database update
 	params, err := prepareUpdateProductParams(existingDbProduct, req, finalImageUrls)
 	if err != nil {
+		// If parameters preparation failed, and we uploaded files, consider cleaning them up
+		// (though unlikely unless spec highlight marshalling fails)
+		// For now, let's assume prepareUpdateProductParams doesn't fail due to file issues.
 		return nil, fmt.Errorf("failed to prepare update parameters: %w", err)
 	}
 
+	// Handle category validation if needed
 	if req.CategoryID != nil {
 		_, err := s.querier.GetCategory(ctx, *req.CategoryID)
 		if err != nil {
@@ -374,29 +388,60 @@ func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID 
 			return nil, err
 		}
 	}
-	// If Name is being updated
-	if req.Name != nil && *req.Name != existingDbProduct.Name { // Check if name actually changed
+
+	// Handle slug generation if name changed
+	if req.Name != nil && *req.Name != existingDbProduct.Name {
 		newBaseSlug := utils.GenerateSlug(*req.Name)
-		newFinalSlug := s.ensureUniqueSlug(ctx, newBaseSlug) // Use the helper again
-		params.Slug = newFinalSlug                           // Update the slug in params
+		newFinalSlug := s.ensureUniqueSlug(ctx, newBaseSlug)
+		params.Slug = newFinalSlug
 	} else {
-		// If name didn't change, keep the existing slug
 		params.Slug = existingDbProduct.Slug
 	}
 
-	// --- Call Querier ---
+	// Step 4: Perform the database update
 	updatedDbProduct, err := s.querier.UpdateProduct(ctx, params)
 	if err != nil {
+		// DB update failed. Clean up any newly uploaded files.
+		if len(uploadedUrlsForCleanup) > 0 {
+			slog.Warn("Cleaning up uploaded files after DB update failure", "product_id", productID, "urls", uploadedUrlsForCleanup)
+			for _, url := range uploadedUrlsForCleanup {
+				if delErr := s.storer.DeleteFile(url); delErr != nil {
+					slog.Error("Failed to clean up uploaded file after DB failure", "url", url, "error", delErr)
+					// Log error but don't return it, as the original DB error is more important
+				}
+			}
+		}
 		// Handle potential DB constraint errors (e.g., unique slug violation)
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") && strings.Contains(err.Error(), "slug") {
 			return nil, errors.New("product slug already exists")
 		}
-		// If DB update fails after upload, consider cleaning up uploaded files
-		// by calling s.storer.DeleteFile on the successfully uploaded URLs.
-		// This is complex and might be handled by a cleanup job later.
 		return nil, fmt.Errorf("failed to update product in database: %w", err)
 	}
 
+	// Step 5: DB update succeeded. Now, delete the OLD images that are no longer referenced.
+	// Unmarshal the old image URLs from the existing product record.
+	var oldImageUrls []string
+	if err := json.Unmarshal(existingDbProduct.ImageUrls, &oldImageUrls); err != nil {
+		// Log the error but continue, as the product update itself was successful.
+		slog.Error("Failed to unmarshal old image URLs for cleanup after successful update", "product_id", productID, "error", err)
+		// Do NOT return here, the product update is complete.
+	} else {
+		// Iterate through old URLs and delete them using the storer, skipping those still in the new list.
+		for _, oldUrl := range oldImageUrls {
+			// Use slices.Contains to check if the old URL is in the new list.
+			if !slices.Contains(finalImageUrls, oldUrl) {
+				if err := s.storer.DeleteFile(oldUrl); err != nil {
+					slog.Error("Failed to delete old image file during update", "url", oldUrl, "product_id", productID, "error", err)
+				} else {
+					slog.Debug("Deleted old image file during product update", "url", oldUrl, "product_id", productID)
+				}
+			} else {
+				slog.Debug("Keeping image file during product update (still referenced)", "url", oldUrl, "product_id", productID)
+			}
+		}
+	}
+
+	// Step 6: Return the updated product model
 	return s.toProductModel(updatedDbProduct), nil
 }
 
@@ -434,10 +479,39 @@ func coalesceInt32(newVal *int, existingVal int32) int32 {
 	return existingVal
 }
 
+// DeleteProduct soft-deletes a product and cleans up its associated image files.
 func (s *ProductService) DeleteProduct(ctx context.Context, id uuid.UUID) error {
-	err := s.querier.DeleteProduct(ctx, id)
+	// Step 1: Fetch the existing product *before* deletion to get its image URLs.
+	existingDbProduct, err := s.querier.GetProduct(ctx, id)
 	if err != nil {
-		return err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("product not found")
+		}
+		return fmt.Errorf("failed to get product for deletion/cleanup: %w", err)
+	}
+
+	// Step 2: Perform the soft-delete in the database.
+	err = s.querier.DeleteProduct(ctx, id)
+	if err != nil {
+		return err // Return DB error directly if deletion fails
+	}
+
+	// Step 3: DB deletion succeeded. Now, delete the associated image files.
+	var imageUrlsToDelete []string
+	if err := json.Unmarshal(existingDbProduct.ImageUrls, &imageUrlsToDelete); err != nil {
+		// Log the error but continue, as the product deletion itself was successful.
+		slog.Error("Failed to unmarshal image URLs for cleanup after successful deletion", "product_id", id, "error", err)
+		// Do NOT return here, the product deletion is complete.
+	} else {
+		// Iterate through the URLs and delete them using the storer.
+		for _, url := range imageUrlsToDelete {
+			if err := s.storer.DeleteFile(url); err != nil {
+				slog.Error("Failed to delete image file during product deletion", "url", url, "product_id", id, "error", err)
+				// Log error but don't return it, as the product deletion itself was successful.
+			} else {
+				slog.Debug("Deleted image file during product deletion", "url", url, "product_id", id)
+			}
+		}
 	}
 
 	return nil
