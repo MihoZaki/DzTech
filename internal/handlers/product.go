@@ -89,7 +89,6 @@ func (h *ProductHandler) createProductFromMultipart(r *http.Request) (*models.Pr
 	if err != nil {
 		return nil, fmt.Errorf("invalid category_id format: %v", err)
 	}
-	slug := r.FormValue("slug")
 
 	specHighlightsJSONStr := r.FormValue("spec_highlights")
 	var specHighlights map[string]any
@@ -105,7 +104,6 @@ func (h *ProductHandler) createProductFromMultipart(r *http.Request) (*models.Pr
 	req := models.CreateProductRequest{
 		CategoryID:       categoryID,
 		Name:             name,
-		Slug:             slug,
 		Description:      description,
 		ShortDescription: shortDescription,
 		PriceCents:       priceCents,
@@ -356,9 +354,6 @@ func (h *ProductHandler) updateProductFromMultipart(r *http.Request, productID u
 	}
 	if val := r.FormValue("brand"); val != "" {
 		req.Brand = &val
-	}
-	if val := r.FormValue("slug"); val != "" {
-		req.Slug = &val
 	}
 	if val := r.FormValue("category_id"); val != "" {
 		if parsedUUID, err := uuid.Parse(val); err == nil {

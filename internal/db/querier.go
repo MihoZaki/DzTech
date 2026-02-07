@@ -33,6 +33,8 @@ type Querier interface {
 	// Updates the status of an order to 'cancelled' and sets the cancelled_at and completed_at timestamps.
 	// This is a soft cancellation.
 	CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
+	// Checks if a product slug already exists (excluding soft-deleted products).
+	CheckSlugExists(ctx context.Context, slug string) (bool, error)
 	CleanupExpiredRefreshTokens(ctx context.Context) error
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
 	CountAllProducts(ctx context.Context) (int64, error)

@@ -13,6 +13,7 @@ import (
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/MihoZaki/DzTech/internal/storage"
+	"github.com/MihoZaki/DzTech/internal/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -48,10 +49,14 @@ func (s *ProductService) CreateProduct(ctx context.Context, req models.CreatePro
 	if err != nil {
 		return nil, errors.New("invalid image urls format")
 	}
+	// --- Generate Slug ---
+	baseSlug := utils.GenerateSlug(req.Name)
+	finalSlug := s.ensureUniqueSlug(ctx, baseSlug)
+
 	params := prepareCreateProductParams(
 		req.CategoryID,
 		req.Name,
-		req.Slug,
+		finalSlug,
 		req.Description,      // Pass *string directly
 		req.ShortDescription, // Pass *string directly
 		req.PriceCents,
@@ -108,10 +113,14 @@ func (s *ProductService) CreateProductWithUpload(ctx context.Context, req models
 	if err != nil {
 		return nil, errors.New("invalid image urls format")
 	}
+
+	// --- Generate Slug ---
+	baseSlug := utils.GenerateSlug(req.Name)
+	finalSlug := s.ensureUniqueSlug(ctx, baseSlug)
 	params := prepareCreateProductParams(
 		req.CategoryID,
 		req.Name,
-		req.Slug,
+		finalSlug,
 		req.Description,      // Pass *string directly
 		req.ShortDescription, // Pass *string directly
 		req.PriceCents,
@@ -294,6 +303,15 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req mo
 		}
 	}
 
+	// If Name is being updated
+	if req.Name != nil && *req.Name != existingDbProduct.Name { // Check if name actually changed
+		newBaseSlug := utils.GenerateSlug(*req.Name)
+		newFinalSlug := s.ensureUniqueSlug(ctx, newBaseSlug) // Use the helper again
+		params.Slug = newFinalSlug                           // Update the slug in params
+	} else {
+		// If name didn't change, keep the existing slug
+		params.Slug = existingDbProduct.Slug
+	}
 	updatedDbProduct, err := s.querier.UpdateProduct(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -355,6 +373,15 @@ func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID 
 			}
 			return nil, err
 		}
+	}
+	// If Name is being updated
+	if req.Name != nil && *req.Name != existingDbProduct.Name { // Check if name actually changed
+		newBaseSlug := utils.GenerateSlug(*req.Name)
+		newFinalSlug := s.ensureUniqueSlug(ctx, newBaseSlug) // Use the helper again
+		params.Slug = newFinalSlug                           // Update the slug in params
+	} else {
+		// If name didn't change, keep the existing slug
+		params.Slug = existingDbProduct.Slug
 	}
 
 	// --- Call Querier ---
@@ -721,7 +748,6 @@ func prepareUpdateProductParams(
 		ProductID:        existingDbProduct.ID,
 		CategoryID:       coalesceUUIDPtr(updates.CategoryID, existingDbProduct.CategoryID),
 		Name:             coalesceString(updates.Name, existingDbProduct.Name),
-		Slug:             coalesceString(updates.Slug, existingDbProduct.Slug),
 		Description:      coalesceStringPtr(updates.Description, existingDbProduct.Description),
 		ShortDescription: coalesceStringPtr(updates.ShortDescription, existingDbProduct.ShortDescription),
 		PriceCents:       coalesceInt64(updates.PriceCents, existingDbProduct.PriceCents),
@@ -741,4 +767,36 @@ func prepareUpdateProductParams(
 	}
 
 	return params, nil
+}
+
+// ensureUniqueSlug generates a unique slug based on the base slug.
+// It checks the database and appends a suffix if necessary.
+func (s *ProductService) ensureUniqueSlug(ctx context.Context, baseSlug string) string {
+	slugToTry := baseSlug
+	counter := 0
+
+	for {
+		// Check if the slug already exists
+		exists, err := s.checkSlugExists(ctx, slugToTry)
+		if err != nil {
+			slog.Error("Error checking slug existence", "slug", slugToTry, "error", err)
+			panic(err) // Or return "", err if you want to handle it upstream
+		}
+
+		if !exists {
+			return slugToTry // Found a unique slug
+		}
+
+		// Slug exists, increment counter and try again
+		counter++
+		slugToTry = fmt.Sprintf("%s-%d", baseSlug, counter)
+	}
+}
+
+func (s *ProductService) checkSlugExists(ctx context.Context, slug string) (bool, error) {
+	exists, err := s.querier.CheckSlugExists(ctx, slug) // Assumes CheckSlugExists is generated
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
 }

@@ -10,8 +10,11 @@ import (
 
 func main() {
 	// Configure structured logging
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
+handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug, // Or get from config/env var
+	})
+	logger := slog.New(handler)
+	slog.SetDefault(logger) // Set the global logger
 
 	// Load configuration
 	cfg := config.LoadConfig()

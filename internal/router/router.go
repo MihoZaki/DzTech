@@ -3,7 +3,6 @@ package router
 import (
 	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/MihoZaki/DzTech/db"
 	"github.com/MihoZaki/DzTech/internal/config"
@@ -16,15 +15,7 @@ import (
 )
 
 func New(cfg *config.Config) http.Handler {
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})
 
-	// Create a new logger with the handler
-	logger := slog.New(handler)
-
-	// Set it as the default logger (optional)
-	slog.SetDefault(logger)
 	r := chi.NewRouter()
 
 	// Apply middleware
@@ -44,20 +35,20 @@ func New(cfg *config.Config) http.Handler {
 	}
 
 	// --- Initialize Storage Client ---
-	// Example for LocalStorage
-	localStoragePath := "./uploads"                                                // Define this in config or elsewhere
-	localPublicPath := "/uploads"                                                  // Define this in config or elsewhere
-	allowedTypes := []string{"image/jpeg", "image/png", "image/gif", "image/webp"} // Define in config
-	maxFileSize := int64(10 * 1024 * 1024)                                         // 10MB, define in config
+	localStoragePath := "./uploads"
+	localPublicPath := "/uploads"
+	allowedTypes := []string{"image/jpeg", "image/png", "image/gif", "image/webp"}
+	maxFileSize := int64(10 * 1024 * 1024) // 10MB
 
 	storer := storage.NewLocalStorage(localStoragePath, localPublicPath, allowedTypes, maxFileSize)
 
-	// Initialize database querier (using SQLC generated code)
+	// Initialize database querier
 	querier := db_queries.New(pool)
+
 	// Initialize services
 	userService := services.NewUserService(querier)
 	productService := services.NewProductService(querier, storer)
-	cartService := services.NewCartService(querier, productService, slog.Default()) // Inject dependencies
+	cartService := services.NewCartService(querier, productService, slog.Default())
 	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
 	authService := services.NewAuthService(querier, userService, cfg.JWTSecret, slog.Default())
 	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
@@ -65,64 +56,61 @@ func New(cfg *config.Config) http.Handler {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
-	r.Route("/api/v1/auth", func(r chi.Router) {
-		authHandler.RegisterRoutes(r)
-	})
-
-	// Customer-facing Product routes (Public or Authenticated, depending on requirements)
-	// These routes do NOT require admin privileges.
 	productHandler := handlers.NewProductHandler(productService)
-	r.Route("/api/v1/products", func(r chi.Router) {
-		// These endpoints are for general use
-		r.Get("/", productHandler.ListAllProducts)            // List products (public)
-		r.Get("/{id}", productHandler.GetProduct)             // Get specific product (public)
-		r.Get("/search", productHandler.SearchProducts)       // Search products (public)
-		r.Get("/categories", productHandler.ListCategories)   // List categories (public)
-		r.Get("/categories/{id}", productHandler.GetCategory) // Get category (public)
+	adminProductHandler := handlers.NewProductHandler(productService)
+	adminOrderHandler := handlers.NewOrderHandler(orderService, slog.Default())
+	adminDeliveryHandler := handlers.NewDeliveryServiceHandler(deliveryService, slog.Default())
+	cartHandler := handlers.NewCartHandler(cartService, productService, slog.Default())
+	orderHandler := handlers.NewOrderHandler(orderService, slog.Default())
+	deliveryOptionsHandler := handlers.NewDeliveryOptionsHandler(deliveryService, slog.Default())
+	adminUserHandler := handlers.NewAdminUserHandler(adminUserService, slog.Default())
+
+	// Create sub-routers
+	authRouter := chi.NewRouter()
+	authHandler.RegisterRoutes(authRouter)
+
+	productRouter := chi.NewRouter()
+	productRouter.Get("/", productHandler.ListAllProducts)
+	productRouter.Get("/{id}", productHandler.GetProduct)
+	productRouter.Get("/search", productHandler.SearchProducts)
+	productRouter.Get("/categories", productHandler.ListCategories)
+	productRouter.Get("/categories/{id}", productHandler.GetCategory)
+
+	adminRouter := chi.NewRouter()
+	adminRouter.Use(middleware.JWTMiddleware(cfg))
+	adminRouter.Use(middleware.RequireAdmin)
+	adminRouter.Route("/products", func(r chi.Router) {
+		adminProductHandler.RegisterRoutes(r)
+	})
+	adminRouter.Route("/orders", func(r chi.Router) {
+		adminOrderHandler.RegisterAdminRoutes(r)
+	})
+	adminRouter.Route("/delivery-services", func(r chi.Router) {
+		adminDeliveryHandler.RegisterRoutes(r)
+	})
+	adminRouter.Route("/users", func(r chi.Router) {
+		adminUserHandler.RegisterRoutes(r)
 	})
 
-	// Admin-specific Product routes (require admin privileges)
-	// These routes use the SAME handlers but apply admin middleware.
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.JWTMiddleware(cfg))
-		r.Use(middleware.RequireAdmin)
-		adminProductHandler := handlers.NewProductHandler(productService) // Reuse handler
-		r.Route("/api/v1/admin/products", func(r chi.Router) {
-			adminProductHandler.RegisterRoutes(r) // Register ALL routes under /admin/products
-		})
-		adminOrderHandler := handlers.NewOrderHandler(orderService, slog.Default())
-		r.Route("/api/v1/admin/orders", func(r chi.Router) {
-			adminOrderHandler.RegisterAdminRoutes(r)
-		})
-		adminDeliveryHandler := handlers.NewDeliveryServiceHandler(deliveryService, slog.Default())
-		r.Route("/api/v1/admin/delivery-services", func(r chi.Router) {
-			adminDeliveryHandler.RegisterRoutes(r)
-		})
-		r.Route("/api/v1/admin/users", func(r chi.Router) {
-			adminUserHandler := handlers.NewAdminUserHandler(adminUserService, slog.Default())
-			adminUserHandler.RegisterRoutes(r)
-		})
-	})
+	cartRouter := chi.NewRouter()
+	cartRouter.Use(middleware.JWTMiddleware(cfg))
+	cartHandler.RegisterRoutes(cartRouter)
 
-	// Cart routes - PROTECTED route group to enable user context and allow guest fallback
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.JWTMiddleware(cfg))
+	orderRouter := chi.NewRouter()
+	orderRouter.Use(middleware.JWTMiddleware(cfg))
+	orderHandler.RegisterUserRoutes(orderRouter)
 
-		r.Route("/api/v1/cart", func(r chi.Router) {
-			cartHandler := handlers.NewCartHandler(cartService, productService, slog.Default())
-			cartHandler.RegisterRoutes(r) // Register routes within the protected group
-		})
+	deliveryOptionsRouter := chi.NewRouter()
+	deliveryOptionsRouter.Use(middleware.JWTMiddleware(cfg))
+	deliveryOptionsHandler.RegisterRoutes(deliveryOptionsRouter)
 
-		r.Route("/api/v1/orders", func(r chi.Router) {
-			orderHandler := handlers.NewOrderHandler(orderService, slog.Default())
-			orderHandler.RegisterUserRoutes(r)
-		})
-		r.Route("/api/v1/delivery-options", func(r chi.Router) {
-			// Inject the DeliveryServiceService into the new handler
-			deliveryOptionsHandler := handlers.NewDeliveryOptionsHandler(deliveryService, slog.Default())
-			deliveryOptionsHandler.RegisterRoutes(r)
-		})
-	})
+	// Mount sub-routers
+	r.Mount("/api/v1/auth", authRouter)
+	r.Mount("/api/v1/products", productRouter)
+	r.Mount("/api/v1/admin", adminRouter)
+	r.Mount("/api/v1/cart", cartRouter)
+	r.Mount("/api/v1/orders", orderRouter)
+	r.Mount("/api/v1/delivery-options", deliveryOptionsRouter)
 
 	slog.Info("Router initialized")
 	return r

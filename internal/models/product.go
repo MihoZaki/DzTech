@@ -44,7 +44,6 @@ type Category struct {
 type CreateProductRequest struct {
 	CategoryID       uuid.UUID      `json:"category_id" validate:"required,uuid"`
 	Name             string         `json:"name" validate:"required,max=255"`
-	Slug             string         `json:"slug" validate:"required,max=255"`
 	Description      *string        `json:"description,omitempty"`
 	ShortDescription *string        `json:"short_description,omitempty"`
 	PriceCents       int64          `json:"price_cents" validate:"required,min=0"`
@@ -77,7 +76,6 @@ type PaginatedResponse struct {
 type UpdateProductRequest struct {
 	CategoryID       *uuid.UUID      `json:"category_id,omitempty" validate:"omitempty,uuid"`
 	Name             *string         `json:"name,omitempty" validate:"omitempty,max=255"`
-	Slug             *string         `json:"slug,omitempty" validate:"omitempty,max=255"`
 	Description      *string         `json:"description,omitempty"`
 	ShortDescription *string         `json:"short_description,omitempty"`
 	PriceCents       *int64          `json:"price_cents,omitempty" validate:"omitempty,min=0"`

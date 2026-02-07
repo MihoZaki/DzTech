@@ -11,6 +11,18 @@ import (
 	"github.com/google/uuid"
 )
 
+const checkSlugExists = `-- name: CheckSlugExists :one
+SELECT EXISTS(SELECT 1 FROM products WHERE slug = $1 AND deleted_at IS NULL) AS exists
+`
+
+// Checks if a product slug already exists (excluding soft-deleted products).
+func (q *Queries) CheckSlugExists(ctx context.Context, slug string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkSlugExists, slug)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countAllProducts = `-- name: CountAllProducts :one
 SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
 `

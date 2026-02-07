@@ -10,6 +10,10 @@ SELECT id, category_id, name, slug, description, short_description, price_cents,
 FROM products
 WHERE slug = sqlc.arg(slug) AND deleted_at IS NULL;
 
+-- name: CheckSlugExists :one
+-- Checks if a product slug already exists (excluding soft-deleted products).
+SELECT EXISTS(SELECT 1 FROM products WHERE slug = $1 AND deleted_at IS NULL) AS exists;
+
 -- name: ListProducts :many
 SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
     avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
