@@ -121,12 +121,12 @@ SELECT
     p.image_urls AS product_image_urls,
     p.brand AS product_brand,
     -- Use the pre-calculated discounted price from the view
-    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents)::BIGINT AS final_price_cents, -- This is the price *per unit* after discount
+    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents, 0)::BIGINT AS final_price_cents, -- This is the price *per unit* after discount
     -- Use the has_active_discount boolean directly from the view
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount,
     -- Include the breakdown fields for potential use in the cart context
-    vpcd.total_fixed_discount_cents::BIGINT,
-    vpcd.combined_percentage_factor::FLOAT
+ COALESCE(vpcd.total_fixed_discount_cents, 0)::BIGINT AS vpcd_total_fixed_discount_cents, -- Fallback to 0
+    COALESCE(vpcd.combined_percentage_factor, 1.0)::FLOAT AS vpcd_combined_percentage_factor -- Fallback to 1.0 (no discount factor)
 FROM
     carts c
 LEFT JOIN
