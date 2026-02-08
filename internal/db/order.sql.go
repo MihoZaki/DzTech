@@ -433,6 +433,39 @@ func (q *Queries) InsertOrderItemsBulk(ctx context.Context, arg InsertOrderItems
 	return err
 }
 
+const insertOrderItemsFromCart = `-- name: InsertOrderItemsFromCart :exec
+INSERT INTO order_items (order_id, product_id, product_name, price_cents, quantity, created_at)
+SELECT
+    $1 AS order_id, -- The single order ID for all items
+    ci.product_id,
+    p.name AS product_name, -- Get the name from the products table
+    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS price_cents, -- Use the final price from the cart or fallback to original
+    ci.quantity,
+    NOW() -- Set the created_at timestamp for the order item
+FROM
+    cart_items ci
+JOIN
+    products p ON ci.product_id = p.id -- Join to get product name
+LEFT JOIN
+    v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id -- Join with the discount view to get final price
+WHERE
+    ci.cart_id = $2 -- Fetch items from the specific cart
+    AND ci.deleted_at IS NULL
+`
+
+type InsertOrderItemsFromCartParams struct {
+	OrderID uuid.UUID `json:"order_id"`
+	CartID  uuid.UUID `json:"cart_id"`
+}
+
+// Inserts order items into the order_items table by copying them from the user's current cart.
+// This ensures the item details (product, name, price, quantity) reflect the exact state of the cart at order creation time.
+// It fetches the final price (including discounts) from the cart_items joined with the calculated discount view.
+func (q *Queries) InsertOrderItemsFromCart(ctx context.Context, arg InsertOrderItemsFromCartParams) error {
+	_, err := q.db.Exec(ctx, insertOrderItemsFromCart, arg.OrderID, arg.CartID)
+	return err
+}
+
 const listAllOrders = `-- name: ListAllOrders :many
 
 SELECT 

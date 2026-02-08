@@ -153,3 +153,25 @@ UPDATE products
 SET stock_quantity = stock_quantity + sqlc.arg(increment_amount)
 WHERE id = sqlc.arg(product_id)
 RETURNING id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, image_urls, spec_highlights, created_at, updated_at, deleted_at;
+
+-- name: InsertOrderItemsFromCart :exec
+-- Inserts order items into the order_items table by copying them from the user's current cart.
+-- This ensures the item details (product, name, price, quantity) reflect the exact state of the cart at order creation time.
+-- It fetches the final price (including discounts) from the cart_items joined with the calculated discount view.
+INSERT INTO order_items (order_id, product_id, product_name, price_cents, quantity, created_at)
+SELECT
+    sqlc.arg(order_id) AS order_id, -- The single order ID for all items
+    ci.product_id,
+    p.name AS product_name, -- Get the name from the products table
+    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS price_cents, -- Use the final price from the cart or fallback to original
+    ci.quantity,
+    NOW() -- Set the created_at timestamp for the order item
+FROM
+    cart_items ci
+JOIN
+    products p ON ci.product_id = p.id -- Join to get product name
+LEFT JOIN
+    v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id -- Join with the discount view to get final price
+WHERE
+    ci.cart_id = sqlc.arg(cart_id) -- Fetch items from the specific cart
+    AND ci.deleted_at IS NULL; -- Only include items not marked as deleted in the cart

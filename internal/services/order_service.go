@@ -36,43 +36,42 @@ func NewOrderService(querier db.Querier, pool *pgxpool.Pool, cartService *CartSe
 	}
 }
 
-// CreateOrder creates a new order from the items in the user's cart.
+// CreateOrder creates a new order from the user's current cart state.
+// It fetches the cart internally, validates state (implicitly through cart fetch),
+// calculates the total, creates the order and its items transactionally,
+// and clears the cart afterwards.
 func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFromCartRequest, userID uuid.UUID) (*models.OrderWithItems, error) {
+	// --- STEP 1: Fetch the current cart state for the user ---
+	// This implicitly validates the user has a cart and items in it.
+	// The cart summary includes TotalDiscountedValueCents.
 	cartSummary, err := s.cartService.GetCartForContext(ctx, &userID, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch current cart state for user %s: %w", userID, err)
 	}
 
-	s.logger.Debug("successfully fetched cart summary", "summary cart id", cartSummary.ID)
-	cartItemsMap := make(map[uuid.UUID]int) // product_id -> quantity
-	for _, item := range cartSummary.Items {
-		if item.Product != nil {
-			cartItemsMap[item.Product.ID] = item.Quantity
-		}
-	}
-	for _, reqItem := range req.Items {
-		cartQty, exists := cartItemsMap[reqItem.ProductID]
-		if !exists {
-			return nil, fmt.Errorf("product %s in request is not present in the current cart", reqItem.ProductID)
-		}
-		if cartQty != reqItem.Quantity {
-			return nil, fmt.Errorf("quantity mismatch for product %s: requested %d, cart has %d", reqItem.ProductID, reqItem.Quantity, cartQty)
-		}
+	if len(cartSummary.Items) == 0 {
+		return nil, fmt.Errorf("cannot create order from an empty cart")
 	}
 
-	deliveryFrees, err := s.querier.GetDeliveryServiceByID(ctx, req.DeliveryServiceID)
+	s.logger.Debug("successfully fetched cart summary for order creation", "summary cart id", cartSummary.ID, "user_id", userID)
 
+	// --- STEP 2: Fetch delivery service details ---
+	deliveryService, err := s.querier.GetDeliveryServiceByID(ctx, req.DeliveryServiceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch current delivery service for user %s: %w", userID, err)
+		return nil, fmt.Errorf("failed to fetch delivery service with ID %s: %w", req.DeliveryServiceID, err)
 	}
-	totalAmountCents := cartSummary.TotalDiscountedValueCents + deliveryFrees.BaseCostCents
 
+	// --- STEP 3: Calculate total amount ---
+	// Use the validated total from the cart summary (sum of final discounted prices) + delivery fee
+	totalAmountCents := cartSummary.TotalDiscountedValueCents + deliveryService.BaseCostCents
+
+	// --- STEP 4: Prepare order creation parameters ---
 	createOrderParams := db.CreateOrderParams{
 		UserID:            userID,
 		UserFullName:      req.ShippingAddress.FullName,
 		Status:            "pending",
 		TotalAmountCents:  totalAmountCents,
-		PaymentMethod:     "Cash on Delivery",
+		PaymentMethod:     "Cash on Delivery", // Or get from req if variable
 		Province:          req.ShippingAddress.Province,
 		City:              req.ShippingAddress.City,
 		PhoneNumber1:      req.ShippingAddress.PhoneNumber1,
@@ -81,43 +80,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 		DeliveryServiceID: req.DeliveryServiceID,
 	}
 
-	numItems := len(req.Items)
-	if numItems == 0 {
-		return nil, fmt.Errorf("cannot create order from an empty cart/request")
-	}
-
-	orderItemProductIDs := make([]uuid.UUID, numItems)
-	orderItemProductNames := make([]string, numItems)
-	orderItemPricesCents := make([]int64, numItems)
-	orderItemQuantities := make([]int32, numItems)
-
-	for i, reqItem := range req.Items {
-		var cartItem *models.CartItemSummary
-		for _, item := range cartSummary.Items {
-			if item.Product != nil && item.Product.ID == reqItem.ProductID {
-				cartItem = &item
-				break
-			}
-		}
-		if cartItem == nil {
-			return nil, fmt.Errorf("validated cart item for product %s not found in summary", reqItem.ProductID)
-		}
-
-		orderItemProductIDs[i] = reqItem.ProductID
-		orderItemProductNames[i] = cartItem.Product.Name // Use name from summary for consistency
-		orderItemPricesCents[i] = cartItem.Product.FinalPriceCents
-		orderItemQuantities[i] = int32(reqItem.Quantity)
-	}
-
-	bulkOrderItemsParams := db.InsertOrderItemsBulkParams{
-		OrderID:      uuid.Nil, // Will be set after the order is created
-		ProductIds:   orderItemProductIDs,
-		ProductNames: orderItemProductNames,
-		PricesCents:  orderItemPricesCents, // Use the discounted prices
-		Quantities:   orderItemQuantities,
-	}
-
-	queries, ok := s.querier.(*db.Queries)
+	// --- STEP 5: TRANSACTION BEGINS ---
+	queries, ok := s.querier.(*db.Queries) // Get the concrete type to enable WithTx
 	if !ok {
 		return nil, errors.New("querier type assertion to *db.Queries failed, cannot create transactional querier")
 	}
@@ -125,14 +89,16 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction for order creation: %w", err)
 	}
+	// Defer rollback to ensure cleanup on error or panic
 	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			s.logger.Error("Error during transaction rollback", "error", err)
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			s.logger.Error("Error during transaction rollback", "error", rbErr)
 		}
 	}()
 
 	txQuerier := queries.WithTx(tx)
 
+	// 5a. Create the main order record
 	dbOrder, err := txQuerier.CreateOrder(ctx, createOrderParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order record in transaction: %w", err)
@@ -140,26 +106,38 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 
 	orderID := dbOrder.ID
 
-	bulkOrderItemsParams.OrderID = orderID
-
-	err = txQuerier.InsertOrderItemsBulk(ctx, bulkOrderItemsParams)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create order items in transaction: %w", err)
+	// 5b. Insert order items directly from the user's current cart (using the cart ID fetched earlier)
+	// This ensures the items are captured exactly as they were in the validated cart state.
+	insertOrderItemsFromCartParams := db.InsertOrderItemsFromCartParams{
+		OrderID: orderID,
+		CartID:  cartSummary.ID, // Use the validated cart ID from the summary
 	}
+	err = txQuerier.InsertOrderItemsFromCart(ctx, insertOrderItemsFromCartParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert order items from cart in transaction: %w", err)
+	}
+
+	// 5c. Commit the transaction
 	err = tx.Commit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to commit order creation transaction: %w", err)
 	}
 
-	err = s.cartService.ClearCart(ctx, &userID, "")
+	// --- STEP 6: Post-Creation Actions (Outside Transaction for Resilience) ---
+	// Clear the user's cart after successful order creation
+	err = s.cartService.ClearCart(ctx, &userID, "") // Use the userID that placed the order
 	if err != nil {
+		// Log as a critical error, but don't fail the order creation itself
 		s.logger.Error("CRITICAL: Failed to clear user's cart after successful order creation",
 			"cart_id", cartSummary.ID, "user_id", userID, "order_id", orderID, "error", err)
 	}
 
-	createdOrderWithItems, err := s.GetOrder(ctx, orderID) // Use the existing GetOrder method
+	// Fetch and return the newly created order with its items
+	createdOrderWithItems, err := s.GetOrder(ctx, orderID)
 	if err != nil {
 		s.logger.Error("CRITICAL: Failed to fetch newly created order", "order_id", orderID, "error", err)
+		// This is critical, as the order exists but couldn't be fetched.
+		// Return an error to indicate the inconsistency.
 		return nil, fmt.Errorf("order created successfully, but failed to fetch details: %w", err)
 	}
 

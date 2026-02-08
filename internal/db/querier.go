@@ -217,6 +217,10 @@ type Querier interface {
 	// Inserts multiple order items efficiently in a single query.
 	// Requires arrays of equal length for product_ids, quantities, names, and prices_cents.
 	InsertOrderItemsBulk(ctx context.Context, arg InsertOrderItemsBulkParams) error
+	// Inserts order items into the order_items table by copying them from the user's current cart.
+	// This ensures the item details (product, name, price, quantity) reflect the exact state of the cart at order creation time.
+	// It fetches the final price (including discounts) from the cart_items joined with the calculated discount view.
+	InsertOrderItemsFromCart(ctx context.Context, arg InsertOrderItemsFromCartParams) error
 	// Check usage limit
 	// Associates a category with a discount.
 	LinkCategoryToDiscount(ctx context.Context, arg LinkCategoryToDiscountParams) error

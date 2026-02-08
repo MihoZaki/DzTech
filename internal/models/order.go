@@ -28,11 +28,10 @@ func (i *BulkAddItemRequest_Item) Validate() error {
 
 // CreateOrderFromCartRequest represents the request body for creating an order from the current cart state.
 type CreateOrderFromCartRequest struct {
-	Items             []BulkAddItemRequest_Item `json:"items"` // Explicitly specify diving into struct elements
-	ShippingAddress   Address                   `json:"shipping_address"`
-	BillingAddress    Address                   `json:"billing_address"`
-	Notes             *string                   `json:"notes,omitempty"`     // Optional notes for the order
-	DeliveryServiceID uuid.UUID                 `json:"delivery_service_id"` // Required delivery service ID
+	ShippingAddress   Address   `json:"shipping_address"`
+	BillingAddress    Address   `json:"billing_address"`
+	Notes             *string   `json:"notes,omitempty"`     // Optional notes for the order
+	DeliveryServiceID uuid.UUID `json:"delivery_service_id"` // Required delivery service ID
 }
 
 func (r *CreateOrderFromCartRequest) Validate() error {

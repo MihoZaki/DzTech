@@ -60,19 +60,19 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	userID := *userIDVal // Dereference for easier use
 
 	// 2. Decode Request Body into CreateOrderFromCartRequest
-	var req models.CreateOrderFromCartRequest // Use the NEW request model
+	var req models.CreateOrderFromCartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON in request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// 3. Validate the NEW request struct
+	// 3. Validate the request struct
 	if err := req.Validate(); err != nil {
 		http.Error(w, "Validation error: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// 4. Call the REFACTORED Service Method
+	// 4. Call the Service Method
 	orderSummary, err := h.service.CreateOrder(r.Context(), req, userID) // Pass the NEW req and userID
 	if err != nil {
 		// Log the error server-side
