@@ -32,7 +32,6 @@ type CartItemSummary struct {
 }
 
 // ProductLite holds essential product info for display in cart/order summaries.
-// This mirrors the structure needed from the database join results.
 type ProductLite struct {
 	ID                 uuid.UUID `json:"id"`
 	Name               string    `json:"name"`
@@ -55,11 +54,13 @@ type CartSummary struct {
 	CreatedAt  time.Time         `json:"created_at"`
 	UpdatedAt  time.Time         `json:"updated_at"`
 	Items      []CartItemSummary `json:"items"`
-	TotalItems int               `json:"total_items"`       // Number of distinct items in the cart
-	TotalQty   int               `json:"total_quantity"`    // Total quantity of all items
-	TotalValue int64             `json:"total_value_cents"` // Total monetary value in cents
+	TotalItems int               `json:"total_items"`    // Number of distinct items in the cart
+	TotalQty   int               `json:"total_quantity"` // Total quantity of all items
+	// --- New Enhanced Total Fields ---
+	TotalOriginalValueCents   int64 `json:"total_original_value_cents"`   // Sum of (original_price * quantity) for all items
+	TotalDiscountedValueCents int64 `json:"total_discounted_value_cents"` // Sum of (final_price * quantity) for all items (what the user pays)
+	TotalSavingsCents         int64 `json:"total_savings_cents"`          // TotalOriginal - TotalDiscounted
 }
-
 type AddItemRequest struct {
 	ProductID string `json:"product_id" validate:"required,uuid"` // Expecting UUID string
 	Quantity  int    `json:"quantity" validate:"required,min=1"`  // Minimum quantity is 1

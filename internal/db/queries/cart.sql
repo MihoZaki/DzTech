@@ -86,7 +86,7 @@ RETURNING
     updated_at,
     deleted_at; -- Include deleted_at to see if undeletion happened
 
--- name: AddCartItemsBulk :exec
+-- name: AddCartItemsBulk :execrows
 -- Adds multiple items to a cart, handling upserts and soft deletes.
 -- Checks stock availability for each item during the insert/update process.
 INSERT INTO cart_items (cart_id, product_id, quantity, created_at, updated_at)

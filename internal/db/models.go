@@ -173,6 +173,14 @@ type User struct {
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type VProductsWithCalculatedDiscount struct {
+	ProductID                      uuid.UUID   `json:"product_id"`
+	TotalFixedDiscountCents        interface{} `json:"total_fixed_discount_cents"`
+	CombinedPercentageFactor       interface{} `json:"combined_percentage_factor"`
+	CalculatedDiscountedPriceCents int64       `json:"calculated_discounted_price_cents"`
+	HasActiveDiscount              bool        `json:"has_active_discount"`
+}
+
 type VProductsWithCurrentDiscount struct {
 	ProductID               uuid.UUID          `json:"product_id"`
 	CategoryID              uuid.UUID          `json:"category_id"`

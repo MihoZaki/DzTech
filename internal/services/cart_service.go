@@ -32,6 +32,7 @@ func NewCartService(querier db.Querier, productSvc *ProductService, logger *slog
 
 // GetCartForContext retrieves the cart for the given user ID or session ID.
 // It ensures the cart exists, fetching or creating it as necessary.
+// It calculates enhanced totals: original value, discounted value, and savings.
 func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, sessionID string) (*models.CartSummary, error) {
 	if userID == nil && sessionID == "" {
 		return nil, fmt.Errorf("either userID or sessionID must be provided")
@@ -82,14 +83,21 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 			CreatedAt:  cartCreatedAt,
 			UpdatedAt:  cartUpdatedAt,
 			Items:      []models.CartItemSummary{},
-			TotalItems: 0, TotalQty: 0,
-			TotalValue: 0,
+			TotalItems: 0,
+			TotalQty:   0,
+			// --- Initialize New Totals for Empty Cart ---
+			TotalOriginalValueCents:   0,
+			TotalDiscountedValueCents: 0,
+			TotalSavingsCents:         0,
+			// ---
 		}, nil
 	}
 
 	// Calculate totals and build the summary model
 	var totalItems, totalQuantity int
-	var totalValueCents int64
+	var totalOriginalValueCents int64   // New field: Sum of (original_price * quantity)
+	var totalDiscountedValueCents int64 // New field: Sum of (final_price * quantity)
+	// var totalValueCents int64 // Old field, now represented by totalDiscountedValueCents
 	items := make([]models.CartItemSummary, 0, len(dbItemsWithProductAndDiscounts)) // Pre-allocate slice
 
 	// Use a map to track distinct product IDs for TotalItems count
@@ -97,13 +105,22 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 
 	for _, itemRow := range dbItemsWithProductAndDiscounts {
 		if itemRow.ProductName != nil {
-			qty := int(*itemRow.CartItemQuantity)                  // Quantity is a pointer because of emit_pointers_for_null_types
-			finalPriceCents := itemRow.ProductDiscountedPriceCents // Use the final price calculated in the query
-			s.logger.Debug("product has the following discounts", "discount list", "")
-			itemSubtotalCents := finalPriceCents * int64(qty)
-			totalValueCents += itemSubtotalCents
+			qty := int(*itemRow.ItemQuantity)                 // Quantity is a pointer because of emit_pointers_for_null_types
+			originalPriceCents := *itemRow.OriginalPriceCents // Original price from the query (p.price_cents)
+			finalPriceCents := itemRow.FinalPriceCents        // Final price from the query (vpcd.calculated_discounted_price_cents or fallback)
 
-			productID := itemRow.CartItemProductID
+			// --- Calculate Item Subtotals ---
+			itemOriginalSubtotalCents := originalPriceCents * int64(qty)
+			itemFinalSubtotalCents := finalPriceCents * int64(qty)
+			// ---
+
+			// --- Accumulate Totals ---
+			totalOriginalValueCents += itemOriginalSubtotalCents
+			totalDiscountedValueCents += itemFinalSubtotalCents
+			// totalValueCents += itemFinalSubtotalCents // Old calculation, now redundant
+			// ---
+
+			productID := itemRow.ItemProductID
 			if !distinctProducts[productID] {
 				totalItems++
 				distinctProducts[productID] = true
@@ -115,7 +132,7 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 			if itemRow.ProductImageUrls != nil { // Check if JSONB column is not NULL
 				err := json.Unmarshal(itemRow.ProductImageUrls, &imageUrls)
 				if err != nil {
-					s.logger.Warn("Failed to decode image URLs for product in cart", "product_id", itemRow.CartItemProductID, "error", err)
+					s.logger.Warn("Failed to decode image URLs for product in cart", "product_id", itemRow.ItemProductID, "error", err)
 					// Set an empty slice on error
 					imageUrls = []string{}
 				}
@@ -124,41 +141,47 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 			}
 
 			productLite := &models.ProductLite{
-				ID:                 itemRow.CartItemProductID,          // Use ID from the joined query result
-				Name:               *itemRow.ProductName,               // Use Name from the joined query result
-				OriginalPriceCents: *itemRow.ProductOriginalPriceCents, // Include original price
-				FinalPriceCents:    finalPriceCents,                    // Use the final discounted price
-				StockQuantity:      *itemRow.ProductStockQuantity,      // Use Stock from the joined query result
-				ImageUrls:          imageUrls,                          // Now properly decoded
-				Brand:              *itemRow.ProductBrand,              // Use Brand from the joined query result
-				DiscountCode:       itemRow.DiscountCode,
-				DiscountType:       itemRow.DiscountType,
-				DiscountValue:      itemRow.DiscountValue,
-				HasActiveDiscount:  itemRow.ProductHasActiveDiscount,
+				ID:                 itemRow.ItemProductID,         // Use ID from the joined query result
+				Name:               *itemRow.ProductName,          // Use Name from the joined query result
+				OriginalPriceCents: *itemRow.OriginalPriceCents,   // Include original price
+				FinalPriceCents:    finalPriceCents,               // Use the final discounted price
+				StockQuantity:      *itemRow.ProductStockQuantity, // Use Stock from the joined query result
+				ImageUrls:          imageUrls,                     // Now properly decoded
+				Brand:              *itemRow.ProductBrand,         // Use Brand from the joined query result
+				HasActiveDiscount:  itemRow.HasActiveDiscount,     // Use the flag from the view
 			}
 
 			itemSummary := models.CartItemSummary{
-				ID:       itemRow.CartItemID,     // Use ID from the joined query result
-				CartID:   itemRow.CartItemCartID, // Use CartID from the joined query result
-				Product:  productLite,            // Use the updated ProductLite
-				Quantity: qty,                    // Use quantity from the joined query result
+				ID:       itemRow.ItemID,     // Use ID from the joined query result
+				CartID:   itemRow.ItemCartID, // Use CartID from the joined query result
+				Product:  productLite,        // Use the updated ProductLite
+				Quantity: qty,                // Use quantity from the joined query result
 			}
 			items = append(items, itemSummary)
 		} else {
-			s.logger.Debug("Skipping cart item with missing/deleted product", "item_id", itemRow.CartItemID, "product_id", itemRow.CartItemProductID)
+			s.logger.Debug("Skipping cart item with missing/deleted product", "item_id", itemRow.ItemID, "product_id", itemRow.ItemProductID)
 		}
 	}
 
+	// --- Calculate Final Savings ---
+	totalSavingsCents := totalOriginalValueCents - totalDiscountedValueCents
+	// ---
+
 	return &models.CartSummary{
-		ID:         cartID,
-		UserID:     cartUserID,
-		SessionID:  cartSessionID,
-		CreatedAt:  cartCreatedAt,
-		UpdatedAt:  cartUpdatedAt,
-		Items:      items,
-		TotalItems: totalItems,
-		TotalQty:   totalQuantity,
-		TotalValue: totalValueCents,
+		ID:                        cartID,
+		UserID:                    cartUserID,
+		SessionID:                 cartSessionID,
+		CreatedAt:                 cartCreatedAt,
+		UpdatedAt:                 cartUpdatedAt,
+		Items:                     items,
+		TotalItems:                totalItems,
+		TotalQty:                  totalQuantity,
+		TotalOriginalValueCents:   totalOriginalValueCents,
+		TotalDiscountedValueCents: totalDiscountedValueCents,
+		TotalSavingsCents:         totalSavingsCents,
+		// ---
+		// Optionally, remove TotalValue or set it to the discounted value for backward compatibility if needed elsewhere.
+		// TotalValue: totalDiscountedValueCents, // If TotalValue field is kept in the model
 	}, nil
 }
 
@@ -316,12 +339,17 @@ func (s *CartService) AddBulkItems(ctx context.Context, userID *uuid.UUID, sessi
 		ProductIds: productIDs,
 		Quantities: quantities,
 	}
-	err := s.querier.AddCartItemsBulk(ctx, params)
+	rowsAffected, err := s.querier.AddCartItemsBulk(ctx, params)
+	requestedItemsCount := int64(len(items))
 	if err != nil {
 		s.logger.Error("Failed to add bulk items to cart in DB", "error", err, "user_id", userID, "session_id", sessionID, "items", items)
 		return fmt.Errorf("failed to add items to cart: %w", err)
 	}
 
+	if rowsAffected != requestedItemsCount {
+		s.logger.Warn("Bulk add: not all items were added to cart", "user_id", userID, "session_id", sessionID, "requested", requestedItemsCount, "added", rowsAffected)
+		return fmt.Errorf("some items could not be added to the cart (e.g., invalid product ID, insufficient stock, inactive product)")
+	}
 	s.logger.Debug("Successfully added bulk items to cart", "user_id", userID, "session_id", sessionID, "num_items", len(items))
 	return nil
 }

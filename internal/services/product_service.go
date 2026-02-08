@@ -173,8 +173,8 @@ func (s *ProductService) ListAllProducts(ctx context.Context, page, limit int) (
 	}
 	offset := (page - 1) * limit
 	dbProducts, err := s.querier.GetProductsWithDiscountInfo(ctx, db.GetProductsWithDiscountInfoParams{
-		PageLimit:  int32(limit),
-		PageOffset: int32(offset),
+		Limit:  int32(limit),
+		Offset: int32(offset),
 	})
 	if err != nil {
 		return nil, err
@@ -695,7 +695,7 @@ func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 	// Unmarshal JSON fields
 	var imageUrls []string
 	if err := json.Unmarshal(dbProduct.ImageUrls, &imageUrls); err == nil {
-		product.ImageUrls = imageUrls
+		product.ImageURLs = imageUrls
 	}
 
 	var specHighlights map[string]any
@@ -707,7 +707,7 @@ func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 }
 
 // toProductModelWithDiscount converts the SQLC-generated GetProductWithDiscountInfoRow to the application model Product.
-// This version includes discount information.
+// This version includes discount information calculated by the view.
 func (s *ProductService) toProductModelWithDiscount(dbRow db.GetProductWithDiscountInfoRow) *models.Product {
 	product := &models.Product{
 		ID:         dbRow.ID,
@@ -722,19 +722,34 @@ func (s *ProductService) toProductModelWithDiscount(dbRow db.GetProductWithDisco
 		Brand:         dbRow.Brand,
 		CreatedAt:     dbRow.CreatedAt.Time, // Convert pgtype.Timestamptz to time.Time
 		UpdatedAt:     dbRow.UpdatedAt.Time, // Convert pgtype.Timestamptz to time.Time
-		// Initialize discount fields as nil/default
-		DiscountedPriceCents: nil,
-		DiscountCode:         nil,
-		DiscountType:         nil,
-		DiscountValue:        nil,
+		// Initialize discount fields
+		DiscountedPriceCents: &dbRow.DiscountedPriceCents,
 		HasActiveDiscount:    dbRow.HasActiveDiscount, // Map boolean directly
+		// Map the new breakdown fields from the view
+		TotalCalculatedFixedDiscountCents:  &dbRow.VpcdTotalFixedDiscountCents,
+		CalculatedCombinedPercentageFactor: &dbRow.VpcdCombinedPercentageFactor,
+		// Set single discount details to nil as they are less meaningful with stacking
+		DiscountCode:  nil,
+		DiscountType:  nil,
+		DiscountValue: nil,
+	}
+
+	// Calculate EffectiveDiscountPercentage based on Original and Discounted prices
+	// Formula: ((OriginalPrice - DiscountedPrice) / OriginalPrice) * 100
+	if dbRow.OriginalPriceCents > 0 && dbRow.DiscountedPriceCents < dbRow.OriginalPriceCents {
+		original := float64(dbRow.OriginalPriceCents)
+		discounted := float64(dbRow.DiscountedPriceCents)
+		effectivePct := ((original - discounted) / original) * 100.0
+		// Round to a reasonable number of decimal places (e.g., 2)
+		effectivePct = math.Round(effectivePct*100) / 100
+		product.EffectiveDiscountPercentage = &effectivePct
 	}
 
 	avgRating, err := dbRow.AvgRating.Float64Value()
 	if err == nil {
 		product.AvgRating = avgRating.Float64
 	}
-	slog.Debug("the average rating for this product", "id", dbRow.ID, "average rating", avgRating.Float64)
+
 	// Handle optional fields from the base product info
 	if dbRow.Description != nil {
 		product.Description = dbRow.Description
@@ -750,34 +765,20 @@ func (s *ProductService) toProductModelWithDiscount(dbRow db.GetProductWithDisco
 	// Unmarshal JSON fields (ImageUrls, SpecHighlights are []byte from the query result)
 	var imageUrls []string
 	if err := json.Unmarshal(dbRow.ImageUrls, &imageUrls); err == nil {
-		product.ImageUrls = imageUrls
+		product.ImageURLs = imageUrls
 	} else {
 		// Log error or handle failure to unmarshal
 		// slog.Warn("Failed to unmarshal ImageUrls", "product_id", dbRow.ID, "error", err)
-		product.ImageUrls = []string{} // Fallback to empty slice
+		product.ImageURLs = []string{} // Fallback to empty slice
 	}
 
-	var specHighlights map[string]any
+	var specHighlights map[string]interface{} // Use interface{} to match models.Product
 	if err := json.Unmarshal(dbRow.SpecHighlights, &specHighlights); err == nil {
 		product.SpecHighlights = specHighlights
 	} else {
 		// Log error or handle failure to unmarshal
 		// slog.Warn("Failed to unmarshal SpecHighlights", "product_id", dbRow.ID, "error", err)
-		product.SpecHighlights = map[string]any{} // Fallback to empty map
-	}
-
-	// --- Map NEW Discount Information ---
-	// Only populate specific discount details if an active discount was found (HasActiveDiscount is true)
-	if dbRow.HasActiveDiscount {
-		// Map the calculated discounted price
-		discountedPrice := dbRow.DiscountedPriceCents
-		product.DiscountedPriceCents = &discountedPrice // ASSIGN: *int64 (Model)
-
-		// Map optional discount details (these are already pointers from SQLC)
-		// Assign directly, they will be nil if the DB query returned NULL for the discount fields
-		product.DiscountCode = dbRow.DiscountCode   // *string (DB) -> *string (Model)
-		product.DiscountType = dbRow.DiscountType   // *string (DB) -> *string (Model)
-		product.DiscountValue = dbRow.DiscountValue // *int64 (DB) -> *int64 (Model)
+		product.SpecHighlights = map[string]interface{}{} // Fallback to empty map
 	}
 
 	return product
@@ -873,4 +874,11 @@ func (s *ProductService) checkSlugExists(ctx context.Context, slug string) (bool
 		return false, err
 	}
 	return exists, nil
+}
+func calculateDiscountPercentage(originalPrice, finalPrice int64) int64 {
+	if originalPrice == 0 {
+		return 0 // Avoid division by zero
+	}
+	discount := ((originalPrice - finalPrice) / originalPrice) * 100
+	return discount
 }

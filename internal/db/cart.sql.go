@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addCartItemsBulk = `-- name: AddCartItemsBulk :exec
+const addCartItemsBulk = `-- name: AddCartItemsBulk :execrows
 
 INSERT INTO cart_items (cart_id, product_id, quantity, created_at, updated_at)
 SELECT 
@@ -70,9 +70,12 @@ type AddCartItemsBulkParams struct {
 // Adds multiple items to a cart, handling upserts and soft deletes.
 // Checks stock availability for each item during the insert/update process.
 // Join with products table to validate existence, status, deletion, and stock for the INSERT
-func (q *Queries) AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) error {
-	_, err := q.db.Exec(ctx, addCartItemsBulk, arg.CartID, arg.ProductIds, arg.Quantities)
-	return err
+func (q *Queries) AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addCartItemsBulk, arg.CartID, arg.ProductIds, arg.Quantities)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const clearCart = `-- name: ClearCart :exec

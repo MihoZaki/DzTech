@@ -17,7 +17,7 @@ type Querier interface {
 	// Adds multiple items to a cart, handling upserts and soft deletes.
 	// Checks stock availability for each item during the insert/update process.
 	// Join with products table to validate existence, status, deletion, and stock for the INSERT
-	AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) error
+	AddCartItemsBulk(ctx context.Context, arg AddCartItemsBulkParams) (int64, error)
 	// Gets a specific user by ID, regardless of soft-delete status.
 	// Useful for admin to see any user, active or inactive.
 	AdminGetUser(ctx context.Context, userID uuid.UUID) (User, error)
@@ -101,9 +101,8 @@ type Querier interface {
 	GetCartItemsWithProductDetails(ctx context.Context, cartID uuid.UUID) ([]GetCartItemsWithProductDetailsRow, error)
 	GetCartStats(ctx context.Context, cartID uuid.UUID) (GetCartStatsRow, error)
 	GetCartWithItemsAndProducts(ctx context.Context, cartID uuid.UUID) ([]GetCartWithItemsAndProductsRow, error)
-	// Fetches a cart's items along with product details and potential discounted prices for active discounts.
-	// Includes full product details.
-	// Join with product_discounts and discounts to find applicable active discounts
+	// $1 = page_limit, $2 = page_offset
+	// Assuming this returns one cart object with many items
 	GetCartWithItemsAndProductsWithDiscounts(ctx context.Context, id uuid.UUID) ([]GetCartWithItemsAndProductsWithDiscountsRow, error)
 	GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
@@ -171,17 +170,14 @@ type Querier interface {
 	// (This might already be covered by the existing product queries selecting avg_rating, num_ratings)
 	// But here's a dedicated query if needed:
 	GetProductReviewStats(ctx context.Context, id uuid.UUID) (GetProductReviewStatsRow, error)
-	// Fetches a specific product with its original price and potential discounted price and code if an active discount applies.
-	// Includes full product details.
 	GetProductWithDiscountInfo(ctx context.Context, id uuid.UUID) (GetProductWithDiscountInfoRow, error)
-	// Fetches a specific product by its slug with potential discount info.
+	// Query: GetProductWithDiscountInfoBySlug
+	// Retrieves a specific product by slug along with its calculated discount information using the pre-calculated view.
 	GetProductWithDiscountInfoBySlug(ctx context.Context, slug string) (GetProductWithDiscountInfoBySlugRow, error)
 	// Fetches a product and its active product-specific discounts.
 	// This might return multiple rows if there are multiple discounts.
 	// Aggregation into a list happens in Go.
 	GetProductWithMultiDiscountDetails(ctx context.Context, id uuid.UUID) (GetProductWithMultiDiscountDetailsRow, error)
-	// Fetches products with their original price and potential discounted price and code if an active discount applies.
-	// Includes full product details.
 	GetProductsWithDiscountInfo(ctx context.Context, arg GetProductsWithDiscountInfoParams) ([]GetProductsWithDiscountInfoRow, error)
 	GetProductsWithDiscountInfoView(ctx context.Context) ([]VProductsWithCurrentDiscount, error)
 	// Retrieves a specific review by its ID and verifies the user owns it.

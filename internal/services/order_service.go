@@ -65,7 +65,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch current delivery service for user %s: %w", userID, err)
 	}
-	totalAmountCents := cartSummary.TotalValue + deliveryFrees.BaseCostCents
+	totalAmountCents := cartSummary.TotalDiscountedValueCents + deliveryFrees.BaseCostCents
 
 	createOrderParams := db.CreateOrderParams{
 		UserID:            userID,
