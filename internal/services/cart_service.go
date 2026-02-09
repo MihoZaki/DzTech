@@ -479,3 +479,94 @@ func (s *CartService) ClearCart(ctx context.Context, userID *uuid.UUID, sessionI
 
 	return nil
 }
+
+// SyncGuestCartToUserCart merges items from a guest cart into a user's authenticated cart.
+// It fetches the guest cart by sessionID, the user cart by userID, transfers items efficiently using a DB query,
+// and clears the guest cart upon successful transfer.
+func (s *CartService) SyncGuestCartToUserCart(ctx context.Context, guestSessionID string, userID uuid.UUID) error {
+	if guestSessionID == "" {
+		return fmt.Errorf("guest session ID cannot be empty for cart sync")
+	}
+
+	// --- Fetch or Ensure User Cart Header Exists ---
+	var userCart db.GetCartByUserIDRow                            // Declare the variable to hold the user cart header info
+	userCartResult, err := s.querier.GetCartByUserID(ctx, userID) // Use the existing query
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// User cart doesn't exist, create one using the specific query for users
+			newUserCart, err := s.querier.CreateUserCart(ctx, userID) // Pass userID directly as argument
+			if err != nil {
+				return fmt.Errorf("failed to create cart for user %s during sync: %w", userID, err)
+			}
+			s.logger.Debug("Created new cart for user during sync", "user_id", userID, "cart_id", newUserCart.ID)
+
+			// Assign the fields from the newly created cart (db.CreateUserCartRow) to the userCart variable (db.GetCartByUserIDRow)
+			// This explicitly converts the struct types.
+			userCart = db.GetCartByUserIDRow{
+				ID:        newUserCart.ID,
+				UserID:    newUserCart.UserID,
+				SessionID: newUserCart.SessionID,
+				CreatedAt: newUserCart.CreatedAt,
+				UpdatedAt: newUserCart.UpdatedAt,
+			}
+		} else {
+			return fmt.Errorf("failed to get user cart for user %s during sync: %w", userID, err)
+		}
+	} else {
+		userCart = userCartResult
+	}
+
+	// --- Fetch Guest Cart Header ---
+	guestCart, err := s.querier.GetCartBySessionID(ctx, &guestSessionID)
+	if err != nil {
+		// If the guest cart doesn't exist, nothing to sync. This is not an error for the login flow.
+		if errors.Is(err, pgx.ErrNoRows) {
+			s.logger.Debug("No guest cart found for session during sync", "session_id", guestSessionID)
+			return nil
+		}
+		return fmt.Errorf("failed to get guest cart for session %s during sync: %w", guestSessionID, err)
+	}
+	// --- End Fetch Guest Cart Header ---
+
+	// --- Check Guest Cart Items Count ---
+	guestCartItemCount, err := s.querier.GetCartItemsCount(ctx, guestCart.ID) // You might need this simple count query
+	if err != nil {
+		return fmt.Errorf("failed to count items in guest cart %s during sync: %w", guestCart.ID, err)
+	}
+	if guestCartItemCount == 0 {
+		s.logger.Debug("Guest cart is empty, nothing to sync", "session_id", guestSessionID, "guest_cart_id", guestCart.ID)
+		return nil // Nothing to sync
+	}
+	// --- End Check Guest Cart Items Count ---
+
+	// --- Perform the Sync using the new query ---
+	params := db.SyncGuestCartItemsToUserCartParams{
+		TargetUserCartID:  userCart.ID,  // Destination cart (ID from userCart variable)
+		SourceGuestCartID: guestCart.ID, // Source cart
+	}
+	err = s.querier.SyncGuestCartItemsToUserCart(ctx, params)
+	if err != nil {
+		// Log error and return it - this is a critical failure in the sync process.
+		s.logger.Error("Failed to sync guest cart items to user cart in DB", "user_id", userID, "guest_session_id", guestSessionID, "source_cart_id", guestCart.ID, "target_cart_id", userCart.ID, "error", err)
+		return fmt.Errorf("failed to sync cart items: %w", err)
+	}
+	s.logger.Info("Guest cart items synced to user cart", "user_id", userID, "guest_session_id", guestSessionID, "source_cart_id", guestCart.ID, "target_cart_id", userCart.ID)
+	// --- End Sync Query ---
+
+	// --- Clear Guest Cart (after successful sync query) ---
+	err = s.ClearCart(ctx, nil, guestSessionID) // Pass nil userID, sessionID to target the guest cart
+	if err != nil {
+		// Log error but don't fail the login/registration flow if clearing fails
+		s.logger.Error("Failed to clear guest cart after sync", "session_id", guestSessionID, "guest_cart_id", guestCart.ID, "error", err)
+		// Optionally, you could return the error here if clearing is critical.
+		// For now, proceed assuming items were transferred.
+	} else {
+		s.logger.Debug("Successfully cleared guest cart after sync", "session_id", guestSessionID, "guest_cart_id", guestCart.ID)
+	}
+	// --- End Clear Guest Cart ---
+
+	s.logger.Info("Cart sync completed successfully", "session_id", guestSessionID, "user_id", userID)
+	return nil
+}
+
+// ... rest of the CartService methods ...

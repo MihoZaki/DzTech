@@ -50,7 +50,7 @@ func New(cfg *config.Config) http.Handler {
 	productService := services.NewProductService(querier, storer)
 	cartService := services.NewCartService(querier, productService, slog.Default())
 	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
-	authService := services.NewAuthService(querier, userService, cfg.JWTSecret, slog.Default())
+	authService := services.NewAuthService(querier, userService, cartService, cfg.JWTSecret, slog.Default())
 	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
 	adminUserService := services.NewAdminUserService(querier, slog.Default())
 	reviewService := services.NewReviewService(querier, pool, slog.Default())

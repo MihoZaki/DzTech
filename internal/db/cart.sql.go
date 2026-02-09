@@ -393,6 +393,22 @@ func (q *Queries) GetCartItemByID(ctx context.Context, itemID uuid.UUID) (GetCar
 	return i, err
 }
 
+const getCartItemsCount = `-- name: GetCartItemsCount :one
+
+SELECT COUNT(*) AS num_cart_items
+FROM cart_items
+WHERE cart_id = $1 AND deleted_at IS NULL
+`
+
+// Update the timestamp
+// Counts the number of active (non-deleted) items in a specific cart.
+func (q *Queries) GetCartItemsCount(ctx context.Context, cartID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getCartItemsCount, cartID)
+	var num_cart_items int64
+	err := row.Scan(&num_cart_items)
+	return num_cart_items, err
+}
+
 const getCartItemsWithProductDetails = `-- name: GetCartItemsWithProductDetails :many
 SELECT
     ci.id,
@@ -568,6 +584,68 @@ func (q *Queries) GetCartWithItemsAndProducts(ctx context.Context, cartID uuid.U
 		return nil, err
 	}
 	return items, nil
+}
+
+const syncGuestCartItemsToUserCart = `-- name: SyncGuestCartItemsToUserCart :exec
+INSERT INTO cart_items (cart_id, product_id, quantity, created_at, updated_at)
+SELECT
+    $1, -- $1: The destination user's cart ID
+    ci.product_id,
+    ci.quantity, -- Quantity from the guest cart item
+    NOW(), -- New created_at timestamp for the entry in the user's cart
+    NOW()  -- New updated_at timestamp for the user's cart
+FROM
+    cart_items ci -- Primary table: items from the source guest cart
+INNER JOIN products p ON p.id = ci.product_id -- Join with products table to validate and get stock info at INSERT time
+    AND p.stock_quantity >= ci.quantity -- Ensure sufficient stock for the NEW quantity during INSERT
+    AND p.status = 'active'
+    AND p.deleted_at IS NULL
+WHERE
+    ci.cart_id = $2 -- Filter items from the specific guest cart
+    AND ci.deleted_at IS NULL -- Only sync items not marked as deleted in the guest cart
+ON CONFLICT (cart_id, product_id)
+DO UPDATE SET
+    -- In the UPDATE part (conflict resolution), handle merging with existing items in the user's cart
+    quantity = CASE
+        -- Scenario: The item exists in the user's cart but was soft-deleted.
+        WHEN cart_items.deleted_at IS NOT NULL THEN
+            CASE
+                -- Re-check stock against the quantity being added from the guest cart (EXCLUDED.quantity).
+                WHEN (SELECT stock_quantity FROM products WHERE id = EXCLUDED.product_id) >= EXCLUDED.quantity THEN
+                    EXCLUDED.quantity -- Set to the guest cart's quantity (overwrites old soft-deleted quantity)
+                ELSE
+                    -- If stock check fails for the guest quantity, keep the old soft-deleted quantity.
+                    cart_items.quantity
+            END
+        -- Scenario: The item exists in the user's cart and is NOT soft-deleted.
+        ELSE
+            -- Add the guest cart's quantity to the user's existing quantity.
+            -- Use LEAST to cap the total at the product's available stock.
+            LEAST(
+                cart_items.quantity + EXCLUDED.quantity, -- Add guest quantity to existing quantity
+                (SELECT stock_quantity FROM products WHERE id = EXCLUDED.product_id) -- Cap at product's stock
+            )
+    END,
+    -- Handle the soft-delete state during the update.
+    -- If the item was soft-deleted in the user's cart, undelete it.
+    deleted_at = CASE
+        WHEN cart_items.deleted_at IS NOT NULL THEN NULL -- Undelete if it was soft-deleted
+        ELSE cart_items.deleted_at -- Keep existing state (likely NULL)
+    END,
+    updated_at = NOW()
+`
+
+type SyncGuestCartItemsToUserCartParams struct {
+	TargetUserCartID  uuid.UUID `json:"target_user_cart_id"`
+	SourceGuestCartID uuid.UUID `json:"source_guest_cart_id"`
+}
+
+// Merges items from a guest cart into a user's cart using upsert logic.
+// Handles quantity updates, stock checks, and soft-delete state transitions (undeletion).
+// This query performs the core merge operation efficiently in a single statement.
+func (q *Queries) SyncGuestCartItemsToUserCart(ctx context.Context, arg SyncGuestCartItemsToUserCartParams) error {
+	_, err := q.db.Exec(ctx, syncGuestCartItemsToUserCart, arg.TargetUserCartID, arg.SourceGuestCartID)
+	return err
 }
 
 const updateCartItemQuantity = `-- name: UpdateCartItemQuantity :one

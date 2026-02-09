@@ -97,6 +97,9 @@ type Querier interface {
 	GetCartByUserID(ctx context.Context, userID uuid.UUID) (GetCartByUserIDRow, error)
 	GetCartItemByCartAndProduct(ctx context.Context, arg GetCartItemByCartAndProductParams) (GetCartItemByCartAndProductRow, error)
 	GetCartItemByID(ctx context.Context, itemID uuid.UUID) (GetCartItemByIDRow, error)
+	// Update the timestamp
+	// Counts the number of active (non-deleted) items in a specific cart.
+	GetCartItemsCount(ctx context.Context, cartID uuid.UUID) (int64, error)
 	// Enhanced Cart Data Retrieval
 	GetCartItemsWithProductDetails(ctx context.Context, cartID uuid.UUID) ([]GetCartItemsWithProductDetailsRow, error)
 	GetCartStats(ctx context.Context, cartID uuid.UUID) (GetCartStatsRow, error)
@@ -269,6 +272,10 @@ type Querier interface {
 	SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error)
 	// Marks a user as soft-deleted by setting deleted_at to NOW().
 	SoftDeleteUser(ctx context.Context, userID uuid.UUID) error
+	// Merges items from a guest cart into a user's cart using upsert logic.
+	// Handles quantity updates, stock checks, and soft-delete state transitions (undeletion).
+	// This query performs the core merge operation efficiently in a single statement.
+	SyncGuestCartItemsToUserCart(ctx context.Context, arg SyncGuestCartItemsToUserCartParams) error
 	// Removes association between a category and a discount.
 	UnlinkCategoryFromDiscount(ctx context.Context, arg UnlinkCategoryFromDiscountParams) error
 	// Removes association between a product and a discount.

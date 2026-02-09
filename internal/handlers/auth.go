@@ -74,9 +74,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		utils.SendValidationError(w, fieldErrors)
 		return
 	}
-
-	// Call AuthService for registration - now expects (LoginResponse, refreshTokenString, error)
-	loginResp, refreshTokenStr, err := h.authService.Register(r.Context(), req.Email, req.Password, req.FullName)
+	var guestSessionID string
+	sessionCookie, err := r.Cookie("session_id")
+	if err == nil { // Cookie found
+		guestSessionID = sessionCookie.Value
+		slog.Debug("Found guest session ID in cookie for registration", "session_id", guestSessionID)
+	} else {
+		slog.Debug("No guest session ID cookie found during registration", "error", err) // Usually means no guest cart
+	}
+	loginResp, refreshTokenStr, err := h.authService.Register(r.Context(), req.Email, req.Password, req.FullName, guestSessionID)
 	if err != nil {
 		if err.Error() == "user already exists" {
 			utils.SendErrorResponse(w, http.StatusConflict, "User Already Exists", "A user with this email already exists")
@@ -115,9 +121,17 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		utils.SendValidationError(w, fieldErrors)
 		return
 	}
+	var guestSessionID string
+	sessionCookie, err := r.Cookie("session_id")
+	if err == nil { // Cookie found
+		guestSessionID = sessionCookie.Value
+		slog.Debug("Found guest session ID in cookie for registration", "session_id", guestSessionID)
+	} else {
+		slog.Debug("No guest session ID cookie found during registration", "error", err) // Usually means no guest cart
+	}
 
 	// Use AuthService to handle login - now expects (LoginResponse, refreshTokenString, error)
-	loginResp, refreshTokenStr, err := h.authService.Login(r.Context(), req.Email, req.Password)
+	loginResp, refreshTokenStr, err := h.authService.Login(r.Context(), req.Email, req.Password, guestSessionID)
 	if err != nil {
 		if err.Error() == "invalid credentials" {
 			slog.Info("Login failed: invalid credentials", "email", req.Email)

@@ -21,22 +21,24 @@ import (
 type AuthService struct {
 	querier     db.Querier
 	userService *UserService
+	cartService *CartService
 	jwtSecret   []byte // Secret for access/refresh token signing
 	logger      *slog.Logger
 }
 
 // NewAuthService creates a new instance of AuthService.
-func NewAuthService(querier db.Querier, userService *UserService, jwtSecret string, logger *slog.Logger) *AuthService {
+func NewAuthService(querier db.Querier, userService *UserService, cartService *CartService, jwtSecret string, logger *slog.Logger) *AuthService {
 	return &AuthService{
 		querier:     querier,
 		userService: userService,
+		cartService: cartService,
 		jwtSecret:   []byte(jwtSecret),
 		logger:      logger,
 	}
 }
 
 // Login authenticates a user and returns access token, refresh token string, and user details.
-func (s *AuthService) Login(ctx context.Context, email, password string) (*models.LoginResponse, string, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string, sessionID string) (*models.LoginResponse, string, error) {
 	user, err := s.userService.Authenticate(ctx, email, password)
 	if err != nil {
 		return nil, "", err
@@ -50,7 +52,14 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*model
 		s.logger.Error("Failed to generate tokens during login", "error", err, "user_id", user.ID)
 		return nil, "", fmt.Errorf("failed to generate tokens: %w", err)
 	}
-
+	if sessionID != "" {
+		err = s.cartService.SyncGuestCartToUserCart(ctx, sessionID, user.ID) // Call the new method
+		if err != nil {
+			s.logger.Error("Failed to sync guest cart to user cart after login", "user_id", user.ID, "session_id", sessionID, "error", err)
+		} else {
+			s.logger.Info("Guest cart synced successfully after login", "user_id", user.ID, "session_id", sessionID)
+		}
+	}
 	return &models.LoginResponse{
 		Token: accessToken,
 		User:  *user,
@@ -58,7 +67,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*model
 }
 
 // Register registers a new user and returns access token, refresh token string, and user details.
-func (s *AuthService) Register(ctx context.Context, email, password, fullName string) (*models.LoginResponse, string, error) {
+func (s *AuthService) Register(ctx context.Context, email, password, fullName string, sessionID string) (*models.LoginResponse, string, error) {
 	userID, err := s.userService.Register(ctx, email, password, fullName)
 	if err != nil {
 		return nil, "", err
@@ -78,6 +87,14 @@ func (s *AuthService) Register(ctx context.Context, email, password, fullName st
 	if err != nil {
 		s.logger.Error("Failed to generate tokens during registration", "error", err, "user_id", user.ID)
 		return nil, "", fmt.Errorf("failed to generate tokens: %w", err)
+	}
+	if sessionID != "" {
+		err = s.cartService.SyncGuestCartToUserCart(ctx, sessionID, user.ID) // Call the new method
+		if err != nil {
+			s.logger.Error("Failed to sync guest cart to user cart after login", "user_id", user.ID, "session_id", sessionID, "error", err)
+		} else {
+			s.logger.Info("Guest cart synced successfully after login", "user_id", user.ID, "session_id", sessionID)
+		}
 	}
 
 	return &models.LoginResponse{
