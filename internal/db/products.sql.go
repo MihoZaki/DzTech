@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const checkSlugExists = `-- name: CheckSlugExists :one
@@ -35,22 +36,26 @@ func (q *Queries) CountAllProducts(ctx context.Context) (int64, error) {
 }
 
 const countProducts = `-- name: CountProducts :one
-SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
-  AND ($1::TEXT = '' OR name ILIKE '%' || $1 || '%' OR COALESCE(short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
-  AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR category_id = $2)
-  AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
-  AND ($4::BIGINT = 0 OR price_cents >= $4)
-  AND ($5::BIGINT = 0 OR price_cents <= $5)
-  AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND stock_quantity > 0) OR ($6 = false AND stock_quantity <= 0))
+SELECT COUNT(*) FROM products p
+LEFT JOIN v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
+WHERE p.deleted_at IS NULL
+  AND ($1::TEXT = '' OR p.name ILIKE '%' || $1 || '%' OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1))
+  AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $2)
+  AND ($3::TEXT = '' OR p.brand ILIKE '%' || $3 || '%')
+  AND ($4::BIGINT = 0 OR p.price_cents >= $4)
+  AND ($5::BIGINT = 0 OR p.price_cents <= $5)
+  AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND p.stock_quantity > 0) OR ($6 = false AND p.stock_quantity <= 0))
+  AND ($7::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
 `
 
 type CountProductsParams struct {
-	Query       string    `json:"query"`
-	CategoryID  uuid.UUID `json:"category_id"`
-	Brand       string    `json:"brand"`
-	MinPrice    int64     `json:"min_price"`
-	MaxPrice    int64     `json:"max_price"`
-	InStockOnly bool      `json:"in_stock_only"`
+	Query                 string    `json:"query"`
+	CategoryID            uuid.UUID `json:"category_id"`
+	Brand                 string    `json:"brand"`
+	MinPrice              int64     `json:"min_price"`
+	MaxPrice              int64     `json:"max_price"`
+	InStockOnly           bool      `json:"in_stock_only"`
+	IncludeDiscountedOnly bool      `json:"include_discounted_only"`
 }
 
 func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
@@ -61,6 +66,7 @@ func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (i
 		arg.MinPrice,
 		arg.MaxPrice,
 		arg.InStockOnly,
+		arg.IncludeDiscountedOnly,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -525,79 +531,6 @@ func (q *Queries) ListProductsWithCategoryDetail(ctx context.Context, arg ListPr
 	return items, nil
 }
 
-const searchProducts = `-- name: SearchProducts :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
-    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
-FROM products
-WHERE deleted_at IS NULL
-  AND ($1::TEXT = '' OR name ILIKE '%' || $1 || '%' OR COALESCE(short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', $1))
-  AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR category_id = $2)
-  AND ($3::TEXT = '' OR brand ILIKE '%' || $3 || '%')
-  AND ($4::BIGINT = 0 OR price_cents >= $4)
-  AND ($5::BIGINT = 0 OR price_cents <= $5)
-  AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND stock_quantity > 0) OR ($6 = false AND stock_quantity <= 0))
-ORDER BY created_at DESC
-LIMIT $8 OFFSET $7
-`
-
-type SearchProductsParams struct {
-	Query       string    `json:"query"`
-	CategoryID  uuid.UUID `json:"category_id"`
-	Brand       string    `json:"brand"`
-	MinPrice    int64     `json:"min_price"`
-	MaxPrice    int64     `json:"max_price"`
-	InStockOnly bool      `json:"in_stock_only"`
-	PageOffset  int32     `json:"page_offset"`
-	PageLimit   int32     `json:"page_limit"`
-}
-
-func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error) {
-	rows, err := q.db.Query(ctx, searchProducts,
-		arg.Query,
-		arg.CategoryID,
-		arg.Brand,
-		arg.MinPrice,
-		arg.MaxPrice,
-		arg.InStockOnly,
-		arg.PageOffset,
-		arg.PageLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Product
-	for rows.Next() {
-		var i Product
-		if err := rows.Scan(
-			&i.ID,
-			&i.CategoryID,
-			&i.Name,
-			&i.Slug,
-			&i.Description,
-			&i.ShortDescription,
-			&i.PriceCents,
-			&i.StockQuantity,
-			&i.Status,
-			&i.Brand,
-			&i.AvgRating,
-			&i.NumRatings,
-			&i.ImageUrls,
-			&i.SpecHighlights,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const searchProductsWithCategory = `-- name: SearchProductsWithCategory :many
 SELECT 
     p.id, p.category_id, p.name, p.slug, p.description, p.short_description, p.price_cents, p.stock_quantity, p.status, p.brand, p.avg_rating, p.num_ratings, p.image_urls, p.spec_highlights, p.created_at, p.updated_at, p.deleted_at,
@@ -674,6 +607,137 @@ func (q *Queries) SearchProductsWithCategory(ctx context.Context, arg SearchProd
 			&i.CategoryName,
 			&i.CategorySlug,
 			&i.CategoryType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchProductsWithDiscounts = `-- name: SearchProductsWithDiscounts :many
+SELECT
+    p.id,
+    p.category_id,
+    p.name,
+    p.slug,
+    p.description,
+    p.short_description,
+    p.price_cents AS original_price_cents,
+    p.stock_quantity,
+    p.status,
+    p.brand,
+    p.image_urls,
+    p.spec_highlights,
+    p.created_at,
+    p.updated_at,
+    p.deleted_at,
+    p.avg_rating,
+    p.num_ratings,
+    vpcd.total_fixed_discount_cents::BIGINT,
+    vpcd.combined_percentage_factor::FLOAT,
+    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
+    -- Use the has_active_discount boolean directly from the view
+    COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
+FROM
+    products p
+LEFT JOIN
+    v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
+WHERE
+    p.deleted_at IS NULL
+    AND ($1::TEXT = '' OR p.name ILIKE '%' || $1 || '%' OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1))
+    AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $2)
+    AND ($3::TEXT = '' OR p.brand ILIKE '%' || $3 || '%')
+    AND ($4::BIGINT = 0 OR p.price_cents >= $4)
+    AND ($5::BIGINT = 0 OR p.price_cents <= $5)
+    AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND p.stock_quantity > 0) OR ($6 = false AND p.stock_quantity <= 0))
+    AND ($7::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
+ORDER BY
+    p.created_at DESC
+LIMIT $9 OFFSET $8
+`
+
+type SearchProductsWithDiscountsParams struct {
+	Query                 string    `json:"query"`
+	CategoryID            uuid.UUID `json:"category_id"`
+	Brand                 string    `json:"brand"`
+	MinPrice              int64     `json:"min_price"`
+	MaxPrice              int64     `json:"max_price"`
+	InStockOnly           bool      `json:"in_stock_only"`
+	IncludeDiscountedOnly bool      `json:"include_discounted_only"`
+	PageOffset            int32     `json:"page_offset"`
+	PageLimit             int32     `json:"page_limit"`
+}
+
+type SearchProductsWithDiscountsRow struct {
+	ID                           uuid.UUID          `json:"id"`
+	CategoryID                   uuid.UUID          `json:"category_id"`
+	Name                         string             `json:"name"`
+	Slug                         string             `json:"slug"`
+	Description                  *string            `json:"description"`
+	ShortDescription             *string            `json:"short_description"`
+	OriginalPriceCents           int64              `json:"original_price_cents"`
+	StockQuantity                int32              `json:"stock_quantity"`
+	Status                       string             `json:"status"`
+	Brand                        string             `json:"brand"`
+	ImageUrls                    []byte             `json:"image_urls"`
+	SpecHighlights               []byte             `json:"spec_highlights"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt                    pgtype.Timestamptz `json:"deleted_at"`
+	AvgRating                    pgtype.Numeric     `json:"avg_rating"`
+	NumRatings                   *int32             `json:"num_ratings"`
+	VpcdTotalFixedDiscountCents  int64              `json:"vpcd_total_fixed_discount_cents"`
+	VpcdCombinedPercentageFactor float64            `json:"vpcd_combined_percentage_factor"`
+	DiscountedPriceCents         int64              `json:"discounted_price_cents"`
+	HasActiveDiscount            bool               `json:"has_active_discount"`
+}
+
+// Searches for products and includes pre-calculated discount information using the view.
+func (q *Queries) SearchProductsWithDiscounts(ctx context.Context, arg SearchProductsWithDiscountsParams) ([]SearchProductsWithDiscountsRow, error) {
+	rows, err := q.db.Query(ctx, searchProductsWithDiscounts,
+		arg.Query,
+		arg.CategoryID,
+		arg.Brand,
+		arg.MinPrice,
+		arg.MaxPrice,
+		arg.InStockOnly,
+		arg.IncludeDiscountedOnly,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchProductsWithDiscountsRow
+	for rows.Next() {
+		var i SearchProductsWithDiscountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CategoryID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.ShortDescription,
+			&i.OriginalPriceCents,
+			&i.StockQuantity,
+			&i.Status,
+			&i.Brand,
+			&i.ImageUrls,
+			&i.SpecHighlights,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.AvgRating,
+			&i.NumRatings,
+			&i.VpcdTotalFixedDiscountCents,
+			&i.VpcdCombinedPercentageFactor,
+			&i.DiscountedPriceCents,
+			&i.HasActiveDiscount,
 		); err != nil {
 			return nil, err
 		}

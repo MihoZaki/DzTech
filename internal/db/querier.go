@@ -265,8 +265,9 @@ type Querier interface {
 	// Revokes all refresh tokens for a specific user.
 	RevokeAllRefreshTokensByUserID(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshTokenByJTI(ctx context.Context, jti string) error
-	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error)
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
+	// Searches for products and includes pre-calculated discount information using the view.
+	SearchProductsWithDiscounts(ctx context.Context, arg SearchProductsWithDiscountsParams) ([]SearchProductsWithDiscountsRow, error)
 	// Searches users by email or full_name, optionally filtered by active status.
 	// Paginated using LIMIT and OFFSET.
 	SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error)

@@ -548,17 +548,21 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 	if filter.InStockOnly != nil {
 		inStockOnly = *filter.InStockOnly
 	}
-
+	includeDiscountedOnly := false
+	if filter.IncludeDiscountedOnly != nil {
+		includeDiscountedOnly = *filter.IncludeDiscountedOnly
+	}
 	// Use the existing SearchProducts query
-	dbProducts, err := s.querier.SearchProducts(ctx, db.SearchProductsParams{
-		Query:       filter.Query,
-		CategoryID:  categoryID,
-		Brand:       filter.Brand,
-		MinPrice:    minPrice,
-		MaxPrice:    maxPrice,
-		InStockOnly: inStockOnly,
-		PageLimit:   int32(limit),
-		PageOffset:  int32(offset),
+	dbProducts, err := s.querier.SearchProductsWithDiscounts(ctx, db.SearchProductsWithDiscountsParams{
+		Query:                 filter.Query,
+		CategoryID:            categoryID,
+		Brand:                 filter.Brand,
+		MinPrice:              minPrice,
+		MaxPrice:              maxPrice,
+		IncludeDiscountedOnly: includeDiscountedOnly,
+		InStockOnly:           inStockOnly,
+		PageLimit:             int32(limit),
+		PageOffset:            int32(offset),
 	})
 	if err != nil {
 		return nil, err
@@ -572,7 +576,7 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 
 	result := make([]*models.Product, len(dbProducts))
 	for i, p := range dbProducts {
-		result[i] = s.toProductModel(p)
+		result[i] = s.toProductModelWithDiscount(db.GetProductWithDiscountInfoRow(p))
 	}
 
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
@@ -608,14 +612,19 @@ func (s *ProductService) countSearchProducts(ctx context.Context, filter models.
 	if filter.InStockOnly != nil {
 		inStockOnly = *filter.InStockOnly
 	}
+	includeDiscountedOnly := false
+	if filter.IncludeDiscountedOnly != nil {
+		includeDiscountedOnly = *filter.IncludeDiscountedOnly
+	}
 
 	count, err := s.querier.CountProducts(ctx, db.CountProductsParams{
-		Query:       filter.Query,
-		CategoryID:  categoryID,
-		Brand:       filter.Brand,
-		MinPrice:    minPrice,
-		MaxPrice:    maxPrice,
-		InStockOnly: inStockOnly,
+		Query:                 filter.Query,
+		CategoryID:            categoryID,
+		Brand:                 filter.Brand,
+		MinPrice:              minPrice,
+		MaxPrice:              maxPrice,
+		InStockOnly:           inStockOnly,
+		IncludeDiscountedOnly: includeDiscountedOnly,
 	})
 	if err != nil {
 		return 0, err

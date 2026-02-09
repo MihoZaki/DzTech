@@ -58,14 +58,15 @@ type CreateProductRequest struct {
 }
 
 type ProductFilter struct {
-	Query       string    `json:"query,omitempty"`
-	CategoryID  uuid.UUID `json:"category_id,omitempty"`
-	Brand       string    `json:"brand,omitempty"`
-	MinPrice    *int64    `json:"min_price,omitempty"`
-	MaxPrice    *int64    `json:"max_price,omitempty"`
-	InStockOnly *bool     `json:"in_stock_only,omitempty"`
-	Page        int       `json:"page"`
-	Limit       int       `json:"limit"`
+	Query                 string    `json:"query,omitempty"`
+	CategoryID            uuid.UUID `json:"category_id,omitempty"`
+	Brand                 string    `json:"brand,omitempty"`
+	MinPrice              *int64    `json:"min_price,omitempty"`
+	MaxPrice              *int64    `json:"max_price,omitempty"`
+	InStockOnly           *bool     `json:"in_stock_only,omitempty"`
+	IncludeDiscountedOnly *bool     `json:"include_discounted_only,omitempty"`
+	Page                  int       `json:"page"`
+	Limit                 int       `json:"limit"`
 }
 
 type PaginatedResponse struct {

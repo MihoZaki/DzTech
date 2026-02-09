@@ -52,18 +52,47 @@ WHERE p.category_id = sqlc.arg(category_id) AND p.deleted_at IS NULL
 ORDER BY p.created_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
--- name: SearchProducts :many
-SELECT id, category_id, name, slug, description, short_description, price_cents, stock_quantity, status, brand, 
-    avg_rating, num_ratings,image_urls, spec_highlights, created_at, updated_at, deleted_at
-FROM products
-WHERE deleted_at IS NULL
-  AND (sqlc.arg(query)::TEXT = '' OR name ILIKE '%' || sqlc.arg(query) || '%' OR COALESCE(short_description, '') ILIKE '%' || sqlc.arg(query) || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query)))
-  AND (sqlc.arg(category_id)::UUID = '00000000-0000-0000-0000-000000000000' OR category_id = sqlc.arg(category_id))
-  AND (sqlc.arg(brand)::TEXT = '' OR brand ILIKE '%' || sqlc.arg(brand) || '%')
-  AND (sqlc.arg(min_price)::BIGINT = 0 OR price_cents >= sqlc.arg(min_price))
-  AND (sqlc.arg(max_price)::BIGINT = 0 OR price_cents <= sqlc.arg(max_price))
-  AND ((sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL) OR (sqlc.arg(in_stock_only) = true AND stock_quantity > 0) OR (sqlc.arg(in_stock_only) = false AND stock_quantity <= 0))
-ORDER BY created_at DESC
+
+-- name: SearchProductsWithDiscounts :many
+-- Searches for products and includes pre-calculated discount information using the view.
+SELECT
+    p.id,
+    p.category_id,
+    p.name,
+    p.slug,
+    p.description,
+    p.short_description,
+    p.price_cents AS original_price_cents,
+    p.stock_quantity,
+    p.status,
+    p.brand,
+    p.image_urls,
+    p.spec_highlights,
+    p.created_at,
+    p.updated_at,
+    p.deleted_at,
+    p.avg_rating,
+    p.num_ratings,
+    vpcd.total_fixed_discount_cents::BIGINT,
+    vpcd.combined_percentage_factor::FLOAT,
+    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
+    -- Use the has_active_discount boolean directly from the view
+    COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
+FROM
+    products p
+LEFT JOIN
+    v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
+WHERE
+    p.deleted_at IS NULL
+    AND (sqlc.arg(query)::TEXT = '' OR p.name ILIKE '%' || sqlc.arg(query) || '%' OR COALESCE(p.short_description, '') ILIKE '%' || sqlc.arg(query) || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query)))
+    AND (sqlc.arg(category_id)::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = sqlc.arg(category_id))
+    AND (sqlc.arg(brand)::TEXT = '' OR p.brand ILIKE '%' || sqlc.arg(brand) || '%')
+    AND (sqlc.arg(min_price)::BIGINT = 0 OR p.price_cents >= sqlc.arg(min_price))
+    AND (sqlc.arg(max_price)::BIGINT = 0 OR p.price_cents <= sqlc.arg(max_price))
+    AND ((sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL) OR (sqlc.arg(in_stock_only) = true AND p.stock_quantity > 0) OR (sqlc.arg(in_stock_only) = false AND p.stock_quantity <= 0))
+    AND (sqlc.arg(include_discounted_only)::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
+ORDER BY
+    p.created_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: SearchProductsWithCategory :many
@@ -146,13 +175,15 @@ FROM categories
 ORDER BY name;
 
 -- name: CountProducts :one
-SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
-  AND (sqlc.arg(query)::TEXT = '' OR name ILIKE '%' || sqlc.arg(query) || '%' OR COALESCE(short_description, '') ILIKE '%' || sqlc.arg(query) || '%' OR to_tsvector('english', name || ' ' || COALESCE(short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query)))
-  AND (sqlc.arg(category_id)::UUID = '00000000-0000-0000-0000-000000000000' OR category_id = sqlc.arg(category_id))
-  AND (sqlc.arg(brand)::TEXT = '' OR brand ILIKE '%' || sqlc.arg(brand) || '%')
-  AND (sqlc.arg(min_price)::BIGINT = 0 OR price_cents >= sqlc.arg(min_price))
-  AND (sqlc.arg(max_price)::BIGINT = 0 OR price_cents <= sqlc.arg(max_price))
-  AND ((sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL) OR (sqlc.arg(in_stock_only) = true AND stock_quantity > 0) OR (sqlc.arg(in_stock_only) = false AND stock_quantity <= 0));
-
+SELECT COUNT(*) FROM products p
+LEFT JOIN v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
+WHERE p.deleted_at IS NULL
+  AND (sqlc.arg(query)::TEXT = '' OR p.name ILIKE '%' || sqlc.arg(query) || '%' OR COALESCE(p.short_description, '') ILIKE '%' || sqlc.arg(query) || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query)))
+  AND (sqlc.arg(category_id)::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = sqlc.arg(category_id))
+  AND (sqlc.arg(brand)::TEXT = '' OR p.brand ILIKE '%' || sqlc.arg(brand) || '%')
+  AND (sqlc.arg(min_price)::BIGINT = 0 OR p.price_cents >= sqlc.arg(min_price))
+  AND (sqlc.arg(max_price)::BIGINT = 0 OR p.price_cents <= sqlc.arg(max_price))
+  AND ((sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL) OR (sqlc.arg(in_stock_only) = true AND p.stock_quantity > 0) OR (sqlc.arg(in_stock_only) = false AND p.stock_quantity <= 0))
+  AND (sqlc.arg(include_discounted_only)::BOOLEAN = false OR vpcd.has_active_discount = TRUE);
 -- name: CountAllProducts :one
 SELECT COUNT(*) FROM products WHERE deleted_at IS NULL;

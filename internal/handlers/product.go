@@ -242,6 +242,13 @@ func (h *ProductHandler) SearchProducts(w http.ResponseWriter, r *http.Request) 
 		filter.InStockOnly = &inStockOnly
 	}
 
+	includeDiscountedOnlyStr := r.URL.Query().Get("include_discounted_only") // e.g., ?include_discounted_only=true
+	var includeDiscountedOnly *bool
+	if includeDiscountedOnlyStr != "" {
+		includeDiscountedOnlyVal := strings.ToLower(includeDiscountedOnlyStr) == "true"
+		includeDiscountedOnly = &includeDiscountedOnlyVal
+		filter.IncludeDiscountedOnly = includeDiscountedOnly
+	}
 	products, err := h.productService.SearchProducts(r.Context(), filter)
 	if err != nil {
 		slog.Error("Failed to search products", "error", err)
