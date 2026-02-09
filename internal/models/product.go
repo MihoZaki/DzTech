@@ -65,6 +65,7 @@ type ProductFilter struct {
 	MaxPrice              *int64    `json:"max_price,omitempty"`
 	InStockOnly           *bool     `json:"in_stock_only,omitempty"`
 	IncludeDiscountedOnly *bool     `json:"include_discounted_only,omitempty"`
+	SpecFilter            *string   `json:"spec_filter,omitempty"`
 	Page                  int       `json:"page"`
 	Limit                 int       `json:"limit"`
 }

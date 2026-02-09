@@ -267,6 +267,7 @@ type Querier interface {
 	RevokeRefreshTokenByJTI(ctx context.Context, jti string) error
 	SearchProductsWithCategory(ctx context.Context, arg SearchProductsWithCategoryParams) ([]SearchProductsWithCategoryRow, error)
 	// Searches for products and includes pre-calculated discount information using the view.
+	// Includes a flexible spec highlight filter for partial matching within values.
 	SearchProductsWithDiscounts(ctx context.Context, arg SearchProductsWithDiscountsParams) ([]SearchProductsWithDiscountsRow, error)
 	// Searches users by email or full_name, optionally filtered by active status.
 	// Paginated using LIMIT and OFFSET.

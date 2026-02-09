@@ -249,7 +249,22 @@ func (h *ProductHandler) SearchProducts(w http.ResponseWriter, r *http.Request) 
 		includeDiscountedOnly = &includeDiscountedOnlyVal
 		filter.IncludeDiscountedOnly = includeDiscountedOnly
 	}
-	products, err := h.productService.SearchProducts(r.Context(), filter)
+
+	specFilterStr := r.URL.Query().Get("spec_filter") // e.g., ?spec_filter=socket=AM5
+	var specFilterKey, specFilterValue string
+	if specFilterStr != "" {
+		parts := strings.SplitN(specFilterStr, ":", 2) // Split on first ':' only
+		if len(parts) == 2 {
+			specFilterKey = strings.TrimSpace(parts[0])   // e.g., "socket"
+			specFilterValue = strings.TrimSpace(parts[1]) // e.g., "AM5"
+			slog.Debug("the filter key value for spec filter is", "key", specFilterKey, "value", specFilterValue)
+		} else {
+			utils.SendErrorResponse(w, http.StatusBadRequest, "Invalid Spec Filter Format", "spec_filter must be in the format 'key=value'")
+			return
+		}
+	}
+	filter.SpecFilter = &specFilterStr
+	products, err := h.productService.SearchProducts(r.Context(), filter, specFilterKey, specFilterValue)
 	if err != nil {
 		slog.Error("Failed to search products", "error", err)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to search products")

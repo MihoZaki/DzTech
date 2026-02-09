@@ -38,7 +38,7 @@ CREATE INDEX idx_products_active ON products(id) WHERE status = 'active' AND del
 CREATE INDEX idx_products_search ON products USING GIN (
     to_tsvector('english', name || ' ' || COALESCE(short_description, ''))
 );
-
+CREATE INDEX idx_products_spec_highlights ON products USING GIN (spec_highlights);
 CREATE INDEX idx_categories_slug ON categories(slug);
 CREATE INDEX idx_categories_parent ON categories(parent_id);
 CREATE INDEX idx_products_brand ON products(brand);

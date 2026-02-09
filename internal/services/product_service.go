@@ -517,7 +517,7 @@ func (s *ProductService) DeleteProduct(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
-func (s *ProductService) SearchProducts(ctx context.Context, filter models.ProductFilter) (*models.PaginatedResponse, error) {
+func (s *ProductService) SearchProducts(ctx context.Context, filter models.ProductFilter, specFilterKey, specFilterValue string) (*models.PaginatedResponse, error) {
 	limit := filter.Limit
 	if limit == 0 {
 		limit = 20
@@ -552,6 +552,13 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 	if filter.IncludeDiscountedOnly != nil {
 		includeDiscountedOnly = *filter.IncludeDiscountedOnly
 	}
+	specFilter := ""
+	if filter.SpecFilter != nil {
+		specFilter = *filter.SpecFilter
+	}
+
+	applySpecFilter := specFilter != ""
+
 	// Use the existing SearchProducts query
 	dbProducts, err := s.querier.SearchProductsWithDiscounts(ctx, db.SearchProductsWithDiscountsParams{
 		Query:                 filter.Query,
@@ -561,6 +568,9 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 		MaxPrice:              maxPrice,
 		IncludeDiscountedOnly: includeDiscountedOnly,
 		InStockOnly:           inStockOnly,
+		ApplySpecFilter:       applySpecFilter,
+		SpecFilterKey:         specFilterKey,
+		SpecFilterValue:       &specFilterValue,
 		PageLimit:             int32(limit),
 		PageOffset:            int32(offset),
 	})
@@ -569,7 +579,7 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 	}
 
 	// Get total count for pagination using CountProducts with same filters
-	total, err := s.countSearchProducts(ctx, filter)
+	total, err := s.countSearchProducts(ctx, filter, specFilterKey, specFilterValue)
 	if err != nil {
 		return nil, err
 	}
@@ -591,7 +601,7 @@ func (s *ProductService) SearchProducts(ctx context.Context, filter models.Produ
 }
 
 // Helper method to count search results
-func (s *ProductService) countSearchProducts(ctx context.Context, filter models.ProductFilter) (int64, error) {
+func (s *ProductService) countSearchProducts(ctx context.Context, filter models.ProductFilter, specFilterKey, SpecFilterValue string) (int64, error) {
 	// Handle nullable parameters - use zero values when not provided
 	categoryID := uuid.Nil
 	if filter.CategoryID != uuid.Nil {
@@ -617,6 +627,13 @@ func (s *ProductService) countSearchProducts(ctx context.Context, filter models.
 		includeDiscountedOnly = *filter.IncludeDiscountedOnly
 	}
 
+	specFilter := ""
+	if filter.SpecFilter != nil {
+		specFilter = *filter.SpecFilter
+	}
+
+	applySpecFilter := specFilter != ""
+
 	count, err := s.querier.CountProducts(ctx, db.CountProductsParams{
 		Query:                 filter.Query,
 		CategoryID:            categoryID,
@@ -625,6 +642,9 @@ func (s *ProductService) countSearchProducts(ctx context.Context, filter models.
 		MaxPrice:              maxPrice,
 		InStockOnly:           inStockOnly,
 		IncludeDiscountedOnly: includeDiscountedOnly,
+		ApplySpecFilter:       applySpecFilter,
+		SpecFilterKey:         specFilterKey,
+		SpecFilterValue:       &SpecFilterValue,
 	})
 	if err != nil {
 		return 0, err

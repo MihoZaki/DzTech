@@ -39,17 +39,23 @@ const countProducts = `-- name: CountProducts :one
 SELECT COUNT(*) FROM products p
 LEFT JOIN v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE p.deleted_at IS NULL
-  AND ($1::TEXT = '' OR p.name ILIKE '%' || $1 || '%' OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1))
-  AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $2)
-  AND ($3::TEXT = '' OR p.brand ILIKE '%' || $3 || '%')
-  AND ($4::BIGINT = 0 OR p.price_cents >= $4)
-  AND ($5::BIGINT = 0 OR p.price_cents <= $5)
-  AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND p.stock_quantity > 0) OR ($6 = false AND p.stock_quantity <= 0))
-  AND ($7::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
+AND ($1::TEXT = '' OR p.name ILIKE '%' || $1 || '%' OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1) OR p.spec_highlights::TEXT ILIKE '%' || $1 || '%')    -- Spec highlight filter: Check if apply_spec_filter is true, then match the value for the given key
+  -- Apply spec_filter condition only if apply_spec_filter is true
+  AND (NOT $2::BOOLEAN OR ($3::TEXT != '' AND p.spec_highlights ->> $3 ILIKE '%' || $4 || '%'))
+  AND ($5::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $5)
+  AND ($6::TEXT = '' OR p.brand ILIKE '%' || $6 || '%')
+  AND ($7::BIGINT = 0 OR p.price_cents >= $7)
+  AND ($8::BIGINT = 0 OR p.price_cents <= $8)
+  AND (($9::BOOLEAN = false AND $9 IS NOT NULL) OR ($9 = true AND p.stock_quantity > 0) OR ($9 = false AND p.stock_quantity <= 0))
+  -- Add the same discount filter condition as in SearchProductsWithDiscounts
+  AND ($10::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
 `
 
 type CountProductsParams struct {
 	Query                 string    `json:"query"`
+	ApplySpecFilter       bool      `json:"apply_spec_filter"`
+	SpecFilterKey         string    `json:"spec_filter_key"`
+	SpecFilterValue       *string   `json:"spec_filter_value"`
 	CategoryID            uuid.UUID `json:"category_id"`
 	Brand                 string    `json:"brand"`
 	MinPrice              int64     `json:"min_price"`
@@ -61,6 +67,9 @@ type CountProductsParams struct {
 func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countProducts,
 		arg.Query,
+		arg.ApplySpecFilter,
+		arg.SpecFilterKey,
+		arg.SpecFilterValue,
 		arg.CategoryID,
 		arg.Brand,
 		arg.MinPrice,
@@ -640,7 +649,6 @@ SELECT
     vpcd.total_fixed_discount_cents::BIGINT,
     vpcd.combined_percentage_factor::FLOAT,
     COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
-    -- Use the has_active_discount boolean directly from the view
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
 FROM
     products p
@@ -648,20 +656,41 @@ LEFT JOIN
     v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE
     p.deleted_at IS NULL
-    AND ($1::TEXT = '' OR p.name ILIKE '%' || $1 || '%' OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1))
-    AND ($2::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $2)
-    AND ($3::TEXT = '' OR p.brand ILIKE '%' || $3 || '%')
-    AND ($4::BIGINT = 0 OR p.price_cents >= $4)
-    AND ($5::BIGINT = 0 OR p.price_cents <= $5)
-    AND (($6::BOOLEAN = false AND $6 IS NOT NULL) OR ($6 = true AND p.stock_quantity > 0) OR ($6 = false AND p.stock_quantity <= 0))
-    AND ($7::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
+    -- Main text search filter (name, description)
+    AND (
+        $1::TEXT = '' 
+        OR p.name ILIKE '%' || $1 || '%' 
+        OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' 
+        OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1)
+        OR p.spec_highlights::TEXT ILIKE '%' || $1 || '%'
+    )
+    -- Spec highlight filter: Check if apply_spec_filter is true, then match the value for the given key
+    AND (NOT $2::BOOLEAN OR ($3::TEXT != '' AND p.spec_highlights ->> $3 ILIKE '%' || $4 || '%'))
+    -- Category filter
+    AND ($5::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $5)
+    -- Brand filter
+    AND ($6::TEXT = '' OR p.brand ILIKE '%' || $6 || '%')
+    -- Price range filter
+    AND ($7::BIGINT = 0 OR p.price_cents >= $7)
+    AND ($8::BIGINT = 0 OR p.price_cents <= $8)
+    -- Stock availability filter
+    AND (
+        ($9::BOOLEAN = false AND $9 IS NOT NULL)
+        OR ($9 = true AND p.stock_quantity > 0)
+        OR ($9 = false AND p.stock_quantity <= 0)
+    )
+    -- Discount filter
+    AND ($10::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
 ORDER BY
     p.created_at DESC
-LIMIT $9 OFFSET $8
+LIMIT $12 OFFSET $11
 `
 
 type SearchProductsWithDiscountsParams struct {
 	Query                 string    `json:"query"`
+	ApplySpecFilter       bool      `json:"apply_spec_filter"`
+	SpecFilterKey         string    `json:"spec_filter_key"`
+	SpecFilterValue       *string   `json:"spec_filter_value"`
 	CategoryID            uuid.UUID `json:"category_id"`
 	Brand                 string    `json:"brand"`
 	MinPrice              int64     `json:"min_price"`
@@ -697,9 +726,13 @@ type SearchProductsWithDiscountsRow struct {
 }
 
 // Searches for products and includes pre-calculated discount information using the view.
+// Includes a flexible spec highlight filter for partial matching within values.
 func (q *Queries) SearchProductsWithDiscounts(ctx context.Context, arg SearchProductsWithDiscountsParams) ([]SearchProductsWithDiscountsRow, error) {
 	rows, err := q.db.Query(ctx, searchProductsWithDiscounts,
 		arg.Query,
+		arg.ApplySpecFilter,
+		arg.SpecFilterKey,
+		arg.SpecFilterValue,
 		arg.CategoryID,
 		arg.Brand,
 		arg.MinPrice,

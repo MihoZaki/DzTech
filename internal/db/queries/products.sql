@@ -55,6 +55,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: SearchProductsWithDiscounts :many
 -- Searches for products and includes pre-calculated discount information using the view.
+-- Includes a flexible spec highlight filter for partial matching within values.
 SELECT
     p.id,
     p.category_id,
@@ -76,7 +77,6 @@ SELECT
     vpcd.total_fixed_discount_cents::BIGINT,
     vpcd.combined_percentage_factor::FLOAT,
     COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
-    -- Use the has_active_discount boolean directly from the view
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
 FROM
     products p
@@ -84,17 +84,34 @@ LEFT JOIN
     v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE
     p.deleted_at IS NULL
-    AND (sqlc.arg(query)::TEXT = '' OR p.name ILIKE '%' || sqlc.arg(query) || '%' OR COALESCE(p.short_description, '') ILIKE '%' || sqlc.arg(query) || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query)))
+    -- Main text search filter (name, description)
+    AND (
+        sqlc.arg(query)::TEXT = '' 
+        OR p.name ILIKE '%' || sqlc.arg(query) || '%' 
+        OR COALESCE(p.short_description, '') ILIKE '%' || sqlc.arg(query) || '%' 
+        OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query))
+        OR p.spec_highlights::TEXT ILIKE '%' || sqlc.arg(query) || '%'
+    )
+    -- Spec highlight filter: Check if apply_spec_filter is true, then match the value for the given key
+    AND (NOT sqlc.arg(apply_spec_filter)::BOOLEAN OR (sqlc.arg(spec_filter_key)::TEXT != '' AND p.spec_highlights ->> sqlc.arg(spec_filter_key) ILIKE '%' || sqlc.arg(spec_filter_value) || '%'))
+    -- Category filter
     AND (sqlc.arg(category_id)::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = sqlc.arg(category_id))
+    -- Brand filter
     AND (sqlc.arg(brand)::TEXT = '' OR p.brand ILIKE '%' || sqlc.arg(brand) || '%')
+    -- Price range filter
     AND (sqlc.arg(min_price)::BIGINT = 0 OR p.price_cents >= sqlc.arg(min_price))
     AND (sqlc.arg(max_price)::BIGINT = 0 OR p.price_cents <= sqlc.arg(max_price))
-    AND ((sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL) OR (sqlc.arg(in_stock_only) = true AND p.stock_quantity > 0) OR (sqlc.arg(in_stock_only) = false AND p.stock_quantity <= 0))
+    -- Stock availability filter
+    AND (
+        (sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL)
+        OR (sqlc.arg(in_stock_only) = true AND p.stock_quantity > 0)
+        OR (sqlc.arg(in_stock_only) = false AND p.stock_quantity <= 0)
+    )
+    -- Discount filter
     AND (sqlc.arg(include_discounted_only)::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
 ORDER BY
     p.created_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
-
 -- name: SearchProductsWithCategory :many
 SELECT 
     sqlc.embed(p),
@@ -178,12 +195,31 @@ ORDER BY name;
 SELECT COUNT(*) FROM products p
 LEFT JOIN v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE p.deleted_at IS NULL
-  AND (sqlc.arg(query)::TEXT = '' OR p.name ILIKE '%' || sqlc.arg(query) || '%' OR COALESCE(p.short_description, '') ILIKE '%' || sqlc.arg(query) || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query)))
-  AND (sqlc.arg(category_id)::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = sqlc.arg(category_id))
-  AND (sqlc.arg(brand)::TEXT = '' OR p.brand ILIKE '%' || sqlc.arg(brand) || '%')
-  AND (sqlc.arg(min_price)::BIGINT = 0 OR p.price_cents >= sqlc.arg(min_price))
-  AND (sqlc.arg(max_price)::BIGINT = 0 OR p.price_cents <= sqlc.arg(max_price))
-  AND ((sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL) OR (sqlc.arg(in_stock_only) = true AND p.stock_quantity > 0) OR (sqlc.arg(in_stock_only) = false AND p.stock_quantity <= 0))
-  AND (sqlc.arg(include_discounted_only)::BOOLEAN = false OR vpcd.has_active_discount = TRUE);
+    -- Main text search filter (name, description)
+    AND (
+        sqlc.arg(query)::TEXT = '' 
+        OR p.name ILIKE '%' || sqlc.arg(query) || '%' 
+        OR COALESCE(p.short_description, '') ILIKE '%' || sqlc.arg(query) || '%' 
+        OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', sqlc.arg(query))
+        OR p.spec_highlights::TEXT ILIKE '%' || sqlc.arg(query) || '%'
+    )
+    -- Spec highlight filter: Check if apply_spec_filter is true, then match the value for the given key
+    AND (NOT sqlc.arg(apply_spec_filter)::BOOLEAN OR (sqlc.arg(spec_filter_key)::TEXT != '' AND p.spec_highlights ->> sqlc.arg(spec_filter_key) ILIKE '%' || sqlc.arg(spec_filter_value) || '%'))
+    -- Category filter
+    AND (sqlc.arg(category_id)::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = sqlc.arg(category_id))
+    -- Brand filter
+    AND (sqlc.arg(brand)::TEXT = '' OR p.brand ILIKE '%' || sqlc.arg(brand) || '%')
+    -- Price range filter
+    AND (sqlc.arg(min_price)::BIGINT = 0 OR p.price_cents >= sqlc.arg(min_price))
+    AND (sqlc.arg(max_price)::BIGINT = 0 OR p.price_cents <= sqlc.arg(max_price))
+    -- Stock availability filter
+    AND (
+        (sqlc.arg(in_stock_only)::BOOLEAN = false AND sqlc.arg(in_stock_only) IS NOT NULL)
+        OR (sqlc.arg(in_stock_only) = true AND p.stock_quantity > 0)
+        OR (sqlc.arg(in_stock_only) = false AND p.stock_quantity <= 0)
+    )
+    -- Discount filter
+    AND (sqlc.arg(include_discounted_only)::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
+
 -- name: CountAllProducts :one
 SELECT COUNT(*) FROM products WHERE deleted_at IS NULL;
