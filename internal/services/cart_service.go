@@ -570,5 +570,3 @@ func (s *CartService) SyncGuestCartToUserCart(ctx context.Context, guestSessionI
 	s.logger.Info("Cart sync completed successfully", "session_id", guestSessionID, "user_id", userID)
 	return nil
 }
-
-// ... rest of the CartService methods ...

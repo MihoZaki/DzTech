@@ -2,6 +2,7 @@
 SELECT
     p.id,
     p.category_id,
+    c.name AS category_name,
     p.name,
     p.slug,
     p.description,
@@ -24,6 +25,7 @@ SELECT
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
 FROM
     products p
+INNER JOIN categories c ON p.category_id = c.id -- Join with categories table
 LEFT JOIN
     v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE
@@ -36,6 +38,7 @@ WHERE
 SELECT
     p.id,
     p.category_id,
+    c.name AS category_name,
     p.name,
     p.slug,
     p.description,
@@ -53,11 +56,12 @@ SELECT
     p.num_ratings,
     vpcd.total_fixed_discount_cents::BIGINT,
     vpcd.combined_percentage_factor::FLOAT,
-    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents)::BIGINT AS discounted_price_cents,
+    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
     -- Use the has_active_discount boolean directly from the view
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
 FROM
     products p
+INNER JOIN categories c ON p.category_id = c.id -- Join with categories table
 LEFT JOIN
     v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE
@@ -67,6 +71,7 @@ WHERE
 SELECT
     p.id,
     p.category_id,
+    c.name AS category_name,
     p.name,
     p.slug,
     p.description,
@@ -84,11 +89,12 @@ SELECT
     p.num_ratings,
     vpcd.total_fixed_discount_cents::BIGINT,
     vpcd.combined_percentage_factor::FLOAT,
-    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents)::BIGINT  AS discounted_price_cents,
+    COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
     -- Use the has_active_discount boolean directly from the view
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
 FROM
     products p
+INNER JOIN categories c ON p.category_id = c.id -- Join with categories table
 LEFT JOIN
     v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE

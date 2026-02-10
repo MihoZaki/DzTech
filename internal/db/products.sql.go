@@ -39,16 +39,31 @@ const countProducts = `-- name: CountProducts :one
 SELECT COUNT(*) FROM products p
 LEFT JOIN v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE p.deleted_at IS NULL
-AND ($1::TEXT = '' OR p.name ILIKE '%' || $1 || '%' OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1) OR p.spec_highlights::TEXT ILIKE '%' || $1 || '%')    -- Spec highlight filter: Check if apply_spec_filter is true, then match the value for the given key
-  -- Apply spec_filter condition only if apply_spec_filter is true
-  AND (NOT $2::BOOLEAN OR ($3::TEXT != '' AND p.spec_highlights ->> $3 ILIKE '%' || $4 || '%'))
-  AND ($5::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $5)
-  AND ($6::TEXT = '' OR p.brand ILIKE '%' || $6 || '%')
-  AND ($7::BIGINT = 0 OR p.price_cents >= $7)
-  AND ($8::BIGINT = 0 OR p.price_cents <= $8)
-  AND (($9::BOOLEAN = false AND $9 IS NOT NULL) OR ($9 = true AND p.stock_quantity > 0) OR ($9 = false AND p.stock_quantity <= 0))
-  -- Add the same discount filter condition as in SearchProductsWithDiscounts
-  AND ($10::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
+    -- Main text search filter (name, description)
+    AND (
+        $1::TEXT = '' 
+        OR p.name ILIKE '%' || $1 || '%' 
+        OR COALESCE(p.short_description, '') ILIKE '%' || $1 || '%' 
+        OR to_tsvector('english', p.name || ' ' || COALESCE(p.short_description, '')) @@ plainto_tsquery('english', $1)
+        OR p.spec_highlights::TEXT ILIKE '%' || $1 || '%'
+    )
+    -- Spec highlight filter: Check if apply_spec_filter is true, then match the value for the given key
+    AND (NOT $2::BOOLEAN OR ($3::TEXT != '' AND p.spec_highlights ->> $3 ILIKE '%' || $4 || '%'))
+    -- Category filter
+    AND ($5::UUID = '00000000-0000-0000-0000-000000000000' OR p.category_id = $5)
+    -- Brand filter
+    AND ($6::TEXT = '' OR p.brand ILIKE '%' || $6 || '%')
+    -- Price range filter
+    AND ($7::BIGINT = 0 OR p.price_cents >= $7)
+    AND ($8::BIGINT = 0 OR p.price_cents <= $8)
+    -- Stock availability filter
+    AND (
+        ($9::BOOLEAN = false AND $9 IS NOT NULL)
+        OR ($9 = true AND p.stock_quantity > 0)
+        OR ($9 = false AND p.stock_quantity <= 0)
+    )
+    -- Discount filter
+    AND ($10::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
 `
 
 type CountProductsParams struct {
@@ -631,6 +646,7 @@ const searchProductsWithDiscounts = `-- name: SearchProductsWithDiscounts :many
 SELECT
     p.id,
     p.category_id,
+    c.name AS category_name,
     p.name,
     p.slug,
     p.description,
@@ -649,9 +665,11 @@ SELECT
     vpcd.total_fixed_discount_cents::BIGINT,
     vpcd.combined_percentage_factor::FLOAT,
     COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
+    -- Use the has_active_discount boolean directly from the view
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
 FROM
     products p
+INNER JOIN categories c ON p.category_id = c.id -- Join with categories table
 LEFT JOIN
     v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE
@@ -704,6 +722,7 @@ type SearchProductsWithDiscountsParams struct {
 type SearchProductsWithDiscountsRow struct {
 	ID                           uuid.UUID          `json:"id"`
 	CategoryID                   uuid.UUID          `json:"category_id"`
+	CategoryName                 string             `json:"category_name"`
 	Name                         string             `json:"name"`
 	Slug                         string             `json:"slug"`
 	Description                  *string            `json:"description"`
@@ -752,6 +771,7 @@ func (q *Queries) SearchProductsWithDiscounts(ctx context.Context, arg SearchPro
 		if err := rows.Scan(
 			&i.ID,
 			&i.CategoryID,
+			&i.CategoryName,
 			&i.Name,
 			&i.Slug,
 			&i.Description,

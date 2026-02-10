@@ -739,10 +739,11 @@ func (s *ProductService) toProductModel(dbProduct db.Product) *models.Product {
 // This version includes discount information calculated by the view.
 func (s *ProductService) toProductModelWithDiscount(dbRow db.GetProductWithDiscountInfoRow) *models.Product {
 	product := &models.Product{
-		ID:         dbRow.ID,
-		CategoryID: dbRow.CategoryID,
-		Name:       dbRow.Name,
-		Slug:       dbRow.Slug,
+		ID:           dbRow.ID,
+		CategoryID:   dbRow.CategoryID,
+		Name:         dbRow.Name,
+		CategoryName: &dbRow.CategoryName,
+		Slug:         dbRow.Slug,
 		// Use OriginalPriceCents from the query result for the base price in the model
 		PriceCents:    dbRow.OriginalPriceCents,
 		StockQuantity: int(dbRow.StockQuantity), // Convert int32 to int

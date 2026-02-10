@@ -10,6 +10,7 @@ import (
 type Product struct {
 	ID                                 uuid.UUID              `json:"id"`
 	CategoryID                         uuid.UUID              `json:"category_id"`
+	CategoryName                       *string                `json:"category_name,omitempty"`
 	Name                               string                 `json:"name"`
 	Slug                               string                 `json:"slug"`
 	Description                        *string                `json:"description,omitempty"`

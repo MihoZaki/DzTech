@@ -59,6 +59,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 SELECT
     p.id,
     p.category_id,
+    c.name AS category_name,
     p.name,
     p.slug,
     p.description,
@@ -77,9 +78,11 @@ SELECT
     vpcd.total_fixed_discount_cents::BIGINT,
     vpcd.combined_percentage_factor::FLOAT,
     COALESCE(vpcd.calculated_discounted_price_cents, p.price_cents) AS discounted_price_cents,
+    -- Use the has_active_discount boolean directly from the view
     COALESCE(vpcd.has_active_discount, FALSE) AS has_active_discount
 FROM
     products p
+INNER JOIN categories c ON p.category_id = c.id -- Join with categories table
 LEFT JOIN
     v_products_with_calculated_discounts vpcd ON p.id = vpcd.product_id
 WHERE
@@ -219,7 +222,7 @@ WHERE p.deleted_at IS NULL
         OR (sqlc.arg(in_stock_only) = false AND p.stock_quantity <= 0)
     )
     -- Discount filter
-    AND (sqlc.arg(include_discounted_only)::BOOLEAN = false OR vpcd.has_active_discount = TRUE)
+    AND (sqlc.arg(include_discounted_only)::BOOLEAN = false OR vpcd.has_active_discount = TRUE);
 
 -- name: CountAllProducts :one
 SELECT COUNT(*) FROM products WHERE deleted_at IS NULL;

@@ -1,5 +1,3 @@
-// internal/models/discount.go
-
 package models
 
 import (
