@@ -11,6 +11,7 @@ import (
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/MihoZaki/DzTech/internal/utils"
 	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5"
@@ -163,10 +164,11 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 		}
 	}
 
+	totalOriginalValueCentsRounded := utils.RoundToDinarCents(totalOriginalValueCents)
+	totalDiscountedValueCentsRounded := utils.RoundToDinarCents(totalDiscountedValueCents)
 	// --- Calculate Final Savings ---
-	totalSavingsCents := totalOriginalValueCents - totalDiscountedValueCents
+	totalSavingsCents := totalOriginalValueCentsRounded - totalDiscountedValueCentsRounded
 	// ---
-
 	return &models.CartSummary{
 		ID:                        cartID,
 		UserID:                    cartUserID,
@@ -176,8 +178,8 @@ func (s *CartService) GetCartForContext(ctx context.Context, userID *uuid.UUID, 
 		Items:                     items,
 		TotalItems:                totalItems,
 		TotalQty:                  totalQuantity,
-		TotalOriginalValueCents:   totalOriginalValueCents,
-		TotalDiscountedValueCents: totalDiscountedValueCents,
+		TotalOriginalValueCents:   totalOriginalValueCentsRounded,
+		TotalDiscountedValueCents: totalDiscountedValueCentsRounded,
 		TotalSavingsCents:         totalSavingsCents,
 		// ---
 		// Optionally, remove TotalValue or set it to the discounted value for backward compatibility if needed elsewhere.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/MihoZaki/DzTech/internal/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,12 +66,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 	// Use the validated total from the cart summary (sum of final discounted prices) + delivery fee
 	totalAmountCents := cartSummary.TotalDiscountedValueCents + deliveryService.BaseCostCents
 
+	totalAmountCentsRounded := utils.RoundToDinarCents(totalAmountCents)
 	// --- STEP 4: Prepare order creation parameters ---
 	createOrderParams := db.CreateOrderParams{
 		UserID:            userID,
 		UserFullName:      req.ShippingAddress.FullName,
 		Status:            "pending",
-		TotalAmountCents:  totalAmountCents,
+		TotalAmountCents:  totalAmountCentsRounded,
 		PaymentMethod:     "Cash on Delivery", // Or get from req if variable
 		Province:          req.ShippingAddress.Province,
 		City:              req.ShippingAddress.City,
