@@ -121,3 +121,10 @@ VALUES ($1, $2);
 -- Associates a discount with a specific category (simplified version, might need more checks).
 INSERT INTO category_discounts (category_id, discount_id)
 VALUES ($1, $2);
+
+-- name: CountDiscounts :one
+-- Counts discounts based on the same filters as ListDiscounts.
+SELECT COUNT(*) FROM discounts
+WHERE (@is_active::boolean IS NULL OR is_active = @is_active) -- Filter by active status if provided
+  AND (@from_date::timestamptz IS NULL OR valid_from <= @from_date) -- Filter by valid from date if provided
+  AND (@until_date::timestamptz IS NULL OR valid_until >= @until_date) ;-- Filter by valid until date if provided

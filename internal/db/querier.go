@@ -38,6 +38,8 @@ type Querier interface {
 	CleanupExpiredRefreshTokens(ctx context.Context) error
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
 	CountAllProducts(ctx context.Context) (int64, error)
+	// Counts discounts based on the same filters as ListDiscounts.
+	CountDiscounts(ctx context.Context, arg CountDiscountsParams) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	// Counts users matching the search term, optionally filtered by active status.
 	// Useful for pagination metadata with search.

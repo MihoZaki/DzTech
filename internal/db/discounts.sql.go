@@ -46,6 +46,27 @@ func (q *Queries) ApplyDiscountToProduct(ctx context.Context, arg ApplyDiscountT
 	return err
 }
 
+const countDiscounts = `-- name: CountDiscounts :one
+SELECT COUNT(*) FROM discounts
+WHERE ($1::boolean IS NULL OR is_active = $1) -- Filter by active status if provided
+  AND ($2::timestamptz IS NULL OR valid_from <= $2) -- Filter by valid from date if provided
+  AND ($3::timestamptz IS NULL OR valid_until >= $3)
+`
+
+type CountDiscountsParams struct {
+	IsActive  bool               `json:"is_active"`
+	FromDate  pgtype.Timestamptz `json:"from_date"`
+	UntilDate pgtype.Timestamptz `json:"until_date"`
+}
+
+// Counts discounts based on the same filters as ListDiscounts.
+func (q *Queries) CountDiscounts(ctx context.Context, arg CountDiscountsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDiscounts, arg.IsActive, arg.FromDate, arg.UntilDate)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDiscount = `-- name: CreateDiscount :one
 INSERT INTO discounts (
     code, description, discount_type, discount_value,

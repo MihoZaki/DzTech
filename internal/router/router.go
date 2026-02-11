@@ -53,6 +53,7 @@ func New(cfg *config.Config) http.Handler {
 	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
 	adminUserService := services.NewAdminUserService(querier, slog.Default())
 	reviewService := services.NewReviewService(querier, pool, slog.Default())
+	discountService := services.NewDiscountService(querier, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -65,6 +66,7 @@ func New(cfg *config.Config) http.Handler {
 	deliveryOptionsHandler := handlers.NewDeliveryOptionsHandler(deliveryService, slog.Default())
 	adminUserHandler := handlers.NewAdminUserHandler(adminUserService, slog.Default())
 	reviewHandler := handlers.NewReviewHandler(reviewService, slog.Default())
+	discountHandler := handlers.NewDiscountHandler(discountService, slog.Default())
 
 	// Create sub-routers
 	authRouter := chi.NewRouter()
@@ -91,6 +93,9 @@ func New(cfg *config.Config) http.Handler {
 	})
 	adminRouter.Route("/users", func(r chi.Router) {
 		adminUserHandler.RegisterRoutes(r)
+	})
+	adminRouter.Route("/discounts", func(r chi.Router) {
+		discountHandler.RegisterRoutes(r)
 	})
 
 	cartRouter := chi.NewRouter()
