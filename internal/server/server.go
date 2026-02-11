@@ -13,11 +13,13 @@ import (
 	"github.com/MihoZaki/DzTech/db"
 	"github.com/MihoZaki/DzTech/internal/config"
 	"github.com/MihoZaki/DzTech/internal/router"
+	"github.com/redis/go-redis/v9"
 )
 
 type Server struct {
-	httpServer *http.Server
-	cfg        *config.Config
+	httpServer  *http.Server
+	cfg         *config.Config
+	redisClient *redis.Client
 }
 
 func New(cfg *config.Config) *Server {
@@ -38,15 +40,31 @@ func New(cfg *config.Config) *Server {
 	if pool == nil {
 		panic("database pool is nil after initialization")
 	}
+	// --- Initialize Redis Client ---
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     cfg.RedisHost + ":" + cfg.RedisPort,
+		Password: cfg.RedisPassword, // no password set
+		DB:       cfg.RedisDB,       // use default DB
+	})
 
-	httpRouter := router.New(cfg)
+	// Test the Redis connection
+	ctx := context.Background()
+	pong, err := redisClient.Ping(ctx).Result()
+	if err != nil {
+		slog.Error("Failed to connect to Redis", "error", err)
+		panic(fmt.Sprintf("failed to connect to Redis: %v", err)) // Panic if Redis connection fails
+	}
+	slog.Info("Connected to Redis", "pong", pong)
+
+	httpRouter := router.New(cfg, redisClient)
 
 	return &Server{
 		httpServer: &http.Server{
 			Addr:    ":" + cfg.ServerPort,
 			Handler: httpRouter,
 		},
-		cfg: cfg,
+		cfg:         cfg,
+		redisClient: redisClient,
 	}
 }
 
@@ -80,5 +98,16 @@ func (s *Server) Start() error {
 func (s *Server) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return s.httpServer.Shutdown(ctx)
+
+	// Shutdown HTTP server first
+	httpErr := s.httpServer.Shutdown(ctx)
+
+	// Close Redis client
+	redisErr := s.redisClient.Close()
+
+	// Return the first error encountered (preferably the HTTP shutdown error)
+	if httpErr != nil {
+		return httpErr
+	}
+	return redisErr // Return Redis close error if HTTP shutdown was successful
 }

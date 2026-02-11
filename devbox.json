@@ -8,7 +8,8 @@
     "github:seatedro/glimpse",
     "glow@latest",
     "nodejs@latest",
-    "gcc"
+    "gcc",
+    "redis@latest"
   ],
   "env": {
     "PGPORT": "5433"

@@ -150,7 +150,7 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		product, err = h.productService.GetProduct(r.Context(), id)
 	} else {
 		// Assume it's a slug
-		product, err = h.productService.GetProductBySlug(r.Context(), identifier)
+		product, err = h.productService.GetProductWithDiscountInfoBySlug(r.Context(), identifier)
 	}
 
 	if err != nil {

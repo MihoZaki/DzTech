@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
@@ -17,17 +18,28 @@ import (
 	"github.com/MihoZaki/DzTech/internal/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 type ProductService struct {
 	querier db.Querier
 	storer  storage.Storer
+	cache   *redis.Client
+	logger  *slog.Logger
 }
 
-func NewProductService(querier db.Querier, storer storage.Storer) *ProductService {
+const (
+	CacheKeyProductByID   = "product:id:%s"   // Format: product:id:{uuid_string}
+	CacheKeyProductBySlug = "product:slug:%s" // Format: product:slug:{slug_string}
+	ProductCacheTTL       = 30 * time.Minute  // Define TTL for product cache entries
+)
+
+func NewProductService(querier db.Querier, storer storage.Storer, cache *redis.Client, logger *slog.Logger) *ProductService {
 	return &ProductService{
 		querier: querier,
 		storer:  storer,
+		cache:   cache,
+		logger:  logger,
 	}
 }
 
@@ -140,27 +152,117 @@ func (s *ProductService) CreateProductWithUpload(ctx context.Context, req models
 	return s.toProductModel(dbProduct), nil
 }
 
+// GetProduct retrieves a product by its ID, including calculated discount information, utilizing caching.
 func (s *ProductService) GetProduct(ctx context.Context, id uuid.UUID) (*models.Product, error) {
-	dbProductWithDiscount, err := s.querier.GetProductWithDiscountInfo(ctx, id)
+	cacheKey := fmt.Sprintf(CacheKeyProductByID, id.String())
+
+	// --- Try to get from cache first ---
+	cachedData, err := s.cache.Get(ctx, cacheKey).Result()
+	if err == nil {
+		// Cache hit - deserialize and return
+		var product models.Product
+		if err := json.Unmarshal([]byte(cachedData), &product); err != nil {
+			s.logger.Error("Failed to unmarshal cached product", "key", cacheKey, "error", err)
+			// Proceed to fetch from DB below
+		} else {
+			s.logger.Debug("Product fetched from cache", "id", id)
+			return &product, nil
+		}
+	} else if !errors.Is(err, redis.Nil) {
+		// Some other Redis error occurred
+		s.logger.Error("Redis error fetching product by ID", "key", cacheKey, "error", err)
+		// Proceed to fetch from DB below
+	}
+	// If err was redis.Nil (cache miss) or unmarshalling failed, fetch from DB
+	// ---
+
+	s.logger.Debug("Product cache miss, fetching from database", "id", id)
+
+	// Fetch from database using the existing query
+	// Assuming you have a query like db.GetProductWithDiscountInfoRow(id)
+	dbProduct, err := s.querier.GetProductWithDiscountInfo(ctx, id) // Use the actual query name
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch product from database: %w", err)
 	}
 
-	return s.toProductModelWithDiscount(dbProductWithDiscount), nil
+	// Map the database product (with discount info) to the application model
+	product := s.toProductModelWithDiscount(dbProduct) // Use the actual mapping function name
+
+	// --- Store the result in cache ---
+	productJSON, err := json.Marshal(product)
+	if err != nil {
+		s.logger.Error("Failed to marshal product for caching", "id", id, "error", err)
+		// Still return the product fetched from the DB
+	} else {
+		// Cache for 30 minutes (adjust TTL as needed)
+		if err := s.cache.Set(ctx, cacheKey, productJSON, ProductCacheTTL).Err(); err != nil {
+			s.logger.Error("Failed to cache product", "key", cacheKey, "error", err)
+		} else {
+			s.logger.Debug("Product cached", "id", id, "key", cacheKey)
+		}
+	}
+
+	return product, nil
 }
-func (s *ProductService) GetProductBySlug(ctx context.Context, slug string) (*models.Product, error) {
-	dbProductWithDiscount, err := s.querier.GetProductWithDiscountInfoBySlug(ctx, slug) // Use new query if it exists
+
+// GetProductWithDiscountInfoBySlug retrieves a product by its slug, including calculated discount information, utilizing caching.
+func (s *ProductService) GetProductWithDiscountInfoBySlug(ctx context.Context, slug string) (*models.Product, error) {
+	cacheKey := fmt.Sprintf(CacheKeyProductBySlug, slug)
+
+	// --- Try to get from cache first ---
+	cachedData, err := s.cache.Get(ctx, cacheKey).Result()
+	if err == nil {
+		// Cache hit - deserialize and return
+		var product models.Product
+		if err := json.Unmarshal([]byte(cachedData), &product); err != nil {
+			s.logger.Error("Failed to unmarshal cached product by slug", "key", cacheKey, "error", err)
+			// Proceed to fetch from DB below
+		} else {
+			s.logger.Debug("Product fetched from cache by slug", "slug", slug)
+			return &product, nil
+		}
+	} else if !errors.Is(err, redis.Nil) {
+		// Some other Redis error occurred
+		s.logger.Error("Redis error fetching product by slug", "key", cacheKey, "error", err)
+		// Proceed to fetch from DB below
+	}
+	// If err was redis.Nil (cache miss) or unmarshalling failed, fetch from DB
+	// ---
+
+	s.logger.Debug("Product by slug cache miss, fetching from database", "slug", slug)
+
+	// Fetch from database using the existing query
+	// Assuming you have a query like db.GetProductWithDiscountInfoBySlugRow(slug)
+	dbProduct, err := s.querier.GetProductWithDiscountInfoBySlug(ctx, slug) // Use the actual query name
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch product from database: %w", err)
 	}
 
-	return s.toProductModelWithDiscount(db.GetProductWithDiscountInfoRow(dbProductWithDiscount)), nil
+	// Map the database product (with discount info) to the application model
+	// FIX: Corrected the mapping call
+	product := s.toProductModelWithDiscount(db.GetProductWithDiscountInfoRow(dbProduct)) // Pass the row struct directly, not a call to GetProductWithDiscountInfoRow
+
+	// --- Store the result in cache ---
+	productJSON, err := json.Marshal(product)
+	if err != nil {
+		s.logger.Error("Failed to marshal product for caching by slug", "slug", slug, "error", err)
+		// Still return the product fetched from the DB
+	} else {
+		// Cache for 30 minutes (adjust TTL as needed)
+		if err := s.cache.Set(ctx, cacheKey, productJSON, ProductCacheTTL).Err(); err != nil {
+			s.logger.Error("Failed to cache product by slug", "key", cacheKey, "error", err)
+		} else {
+			s.logger.Debug("Product cached by slug", "slug", slug, "key", cacheKey)
+		}
+	}
+
+	return product, nil
 }
 
 // Add a method that uses the basic ListProducts function (without search)
@@ -271,15 +373,18 @@ func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category
 	return result, nil
 }
 
+// UpdateProduct updates an existing product and invalidates its cache entries.
 func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req models.UpdateProductRequest) (*models.Product, error) {
+	// Fetch the *existing* product to get its current values (including slug) for potential cache invalidation
 	existingDbProduct, err := s.querier.GetProduct(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch existing product for cache invalidation: %w", err)
 	}
 
+	// --- Perform the actual update logic (keeping existing validation and parameter preparation) ---
 	var finalImageUrls []string
 	if req.ImageUrls != nil {
 		finalImageUrls = *req.ImageUrls
@@ -304,7 +409,7 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req mo
 		}
 	}
 
-	// If Name is being updated
+	// If Name is being updated, generate a new slug
 	if req.Name != nil && *req.Name != existingDbProduct.Name { // Check if name actually changed
 		newBaseSlug := utils.GenerateSlug(*req.Name)
 		newFinalSlug := s.ensureUniqueSlug(ctx, newBaseSlug) // Use the helper again
@@ -313,6 +418,7 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req mo
 		// If name didn't change, keep the existing slug
 		params.Slug = existingDbProduct.Slug
 	}
+
 	updatedDbProduct, err := s.querier.UpdateProduct(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -326,7 +432,39 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req mo
 		return nil, fmt.Errorf("failed to update product in database: %w", err)
 	}
 
-	return s.toProductModel(updatedDbProduct), nil
+	updatedProduct := s.toProductModel(updatedDbProduct)
+
+	// --- Invalidate Cache Entries ---
+	// Invalidate the entry for the product ID
+	cacheKeyByID := fmt.Sprintf(CacheKeyProductByID, id.String())
+	if err := s.cache.Del(ctx, cacheKeyByID).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by ID on update", "key", cacheKeyByID, "error", err)
+	} else {
+		s.logger.Debug("Product cache invalidated by ID on update", "id", id, "key", cacheKeyByID)
+	}
+
+	// Invalidate the entry for the OLD slug if it changed
+	oldSlug := existingDbProduct.Slug
+	newSlug := updatedProduct.Slug // Get the new slug from the *updated* product model
+	if oldSlug != newSlug {
+		cacheKeyByOldSlug := fmt.Sprintf(CacheKeyProductBySlug, oldSlug)
+		if err := s.cache.Del(ctx, cacheKeyByOldSlug).Err(); err != nil {
+			s.logger.Error("Failed to invalidate product cache by old slug on update", "slug", oldSlug, "key", cacheKeyByOldSlug, "error", err)
+		} else {
+			s.logger.Debug("Product cache invalidated by old slug on update", "slug", oldSlug, "key", cacheKeyByOldSlug)
+		}
+	}
+
+	// Always invalidate the entry for the NEW slug (in case it's used elsewhere or if slug didn't change)
+	cacheKeyByNewSlug := fmt.Sprintf(CacheKeyProductBySlug, newSlug)
+	if err := s.cache.Del(ctx, cacheKeyByNewSlug).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by new slug on update", "slug", newSlug, "key", cacheKeyByNewSlug, "error", err)
+	} else {
+		s.logger.Debug("Product cache invalidated by new slug on update", "slug", newSlug, "key", cacheKeyByNewSlug)
+	}
+	// ---
+
+	return updatedProduct, nil
 }
 
 // UpdateProductWithUpload updates a product, replacing its images if new ones are provided.
@@ -334,6 +472,7 @@ func (s *ProductService) UpdateProduct(ctx context.Context, id uuid.UUID, req mo
 func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID uuid.UUID, req models.UpdateProductRequest, imageFileHeaders []*multipart.FileHeader,
 ) (*models.Product, error) {
 	// Step 1: Fetch the existing product to get its current image URLs for potential cleanup
+	// Also get the old slug for cache invalidation
 	existingDbProduct, err := s.querier.GetProduct(ctx, productID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -341,6 +480,9 @@ func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID 
 		}
 		return nil, fmt.Errorf("failed to get existing product: %w", err)
 	}
+
+	// Store the old slug for cache invalidation later
+	oldSlug := existingDbProduct.Slug
 
 	// Step 2: Determine the final image URLs based on input
 	var finalImageUrls []string
@@ -442,7 +584,40 @@ func (s *ProductService) UpdateProductWithUpload(ctx context.Context, productID 
 	}
 
 	// Step 6: Return the updated product model
-	return s.toProductModel(updatedDbProduct), nil
+	updatedProduct := s.toProductModel(updatedDbProduct)
+
+	// --- CACHE INVALIDATION (Added) ---
+	// Invalidate the entry for the product ID
+	cacheKeyByID := fmt.Sprintf(CacheKeyProductByID, productID.String())
+	if err := s.cache.Del(ctx, cacheKeyByID).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by ID on update with upload", "key", cacheKeyByID, "error", err)
+	} else {
+		s.logger.Debug("Product cache invalidated by ID on update with upload", "id", productID, "key", cacheKeyByID)
+	}
+
+	// Get the new slug from the updated product model
+	newSlug := updatedProduct.Slug
+
+	// Invalidate the entry for the OLD slug if it changed
+	if oldSlug != newSlug {
+		cacheKeyByOldSlug := fmt.Sprintf(CacheKeyProductBySlug, oldSlug)
+		if err := s.cache.Del(ctx, cacheKeyByOldSlug).Err(); err != nil {
+			s.logger.Error("Failed to invalidate product cache by old slug on update with upload", "slug", oldSlug, "key", cacheKeyByOldSlug, "error", err)
+		} else {
+			s.logger.Debug("Product cache invalidated by old slug on update with upload", "slug", oldSlug, "key", cacheKeyByOldSlug)
+		}
+	}
+
+	// Always invalidate the entry for the NEW slug (in case it's used elsewhere or if slug didn't change)
+	cacheKeyByNewSlug := fmt.Sprintf(CacheKeyProductBySlug, newSlug)
+	if err := s.cache.Del(ctx, cacheKeyByNewSlug).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by new slug on update with upload", "slug", newSlug, "key", cacheKeyByNewSlug, "error", err)
+	} else {
+		s.logger.Debug("Product cache invalidated by new slug on update with upload", "slug", newSlug, "key", cacheKeyByNewSlug)
+	}
+	// ---
+
+	return updatedProduct, nil
 }
 
 func coalesceUUIDPtr(newVal *uuid.UUID, existingVal uuid.UUID) uuid.UUID {
@@ -480,14 +655,15 @@ func coalesceInt32(newVal *int, existingVal int32) int32 {
 }
 
 // DeleteProduct soft-deletes a product and cleans up its associated image files.
+// It also invalidates the product's cache entries.
 func (s *ProductService) DeleteProduct(ctx context.Context, id uuid.UUID) error {
-	// Step 1: Fetch the existing product *before* deletion to get its image URLs.
+	// Step 1: Fetch the existing product *before* deletion to get its slug for cache invalidation.
 	existingDbProduct, err := s.querier.GetProduct(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errors.New("product not found")
 		}
-		return fmt.Errorf("failed to get product for deletion/cleanup: %w", err)
+		return fmt.Errorf("failed to get product for deletion/cleanup/cache invalidation: %w", err)
 	}
 
 	// Step 2: Perform the soft-delete in the database.
@@ -513,6 +689,24 @@ func (s *ProductService) DeleteProduct(ctx context.Context, id uuid.UUID) error 
 			}
 		}
 	}
+
+	// --- Invalidate Cache Entries ---
+	// Invalidate the entry for the product ID
+	cacheKeyByID := fmt.Sprintf(CacheKeyProductByID, id.String())
+	if err := s.cache.Del(ctx, cacheKeyByID).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by ID on delete", "key", cacheKeyByID, "error", err)
+	} else {
+		s.logger.Debug("Product cache invalidated by ID on delete", "id", id, "key", cacheKeyByID)
+	}
+
+	// Invalidate the entry for the product slug
+	cacheKeyBySlug := fmt.Sprintf(CacheKeyProductBySlug, existingDbProduct.Slug)
+	if err := s.cache.Del(ctx, cacheKeyBySlug).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by slug on delete", "slug", existingDbProduct.Slug, "key", cacheKeyBySlug, "error", err)
+	} else {
+		s.logger.Debug("Product cache invalidated by slug on delete", "slug", existingDbProduct.Slug, "key", cacheKeyBySlug)
+	}
+	// ---
 
 	return nil
 }

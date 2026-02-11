@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,16 +21,24 @@ import (
 // DiscountService handles business logic for discounts.
 type DiscountService struct {
 	querier db.Querier
+	cache   *redis.Client
 	logger  *slog.Logger
 }
 
 // NewDiscountService creates a new instance of DiscountService.
-func NewDiscountService(querier db.Querier, logger *slog.Logger) *DiscountService {
+func NewDiscountService(querier db.Querier, cache *redis.Client, logger *slog.Logger) *DiscountService {
 	return &DiscountService{
 		querier: querier,
+		cache:   cache,
 		logger:  logger,
 	}
 }
+
+const (
+	CacheKeyDiscountByID   = "discount:id:%s"   // Format: discount:id:{uuid_string}
+	CacheKeyDiscountByCode = "discount:code:%s" // Format: discount:code:{code_string}
+	DiscountCacheTTL       = 1 * time.Hour      // Define TTL for discount cache entries
+)
 
 // CreateDiscount creates a new discount rule.
 func (s *DiscountService) CreateDiscount(ctx context.Context, req models.CreateDiscountRequest) (*models.Discount, error) {
@@ -40,18 +50,11 @@ func (s *DiscountService) CreateDiscount(ctx context.Context, req models.CreateD
 	// Check if code already exists
 	_, err := s.querier.GetDiscountByCode(ctx, req.Code)
 	if err == nil {
-		// A discount with this code already exists (and is active/valid)
-		// Note: GetDiscountByCode only finds *active* valid discounts.
-		// If you want to prevent reuse of *any* code, even inactive ones, you'd need a different check.
-		// For now, assuming uniqueness is enforced by the DB UNIQUE constraint.
-		// Let the DB handle the conflict, but check here for better error messaging if desired.
-		// Let's assume the DB constraint will catch this.
 	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		// An unexpected DB error occurred while checking existence
 		return nil, fmt.Errorf("failed to check for existing discount code: %w", err)
 	}
-	// If err is pgx.ErrNoRows, it means the code is unique among *active* discounts at this moment, proceed.
 	// The DB UNIQUE constraint will ultimately enforce global uniqueness.
 
 	// Prepare parameters for the query, converting from models to db types
@@ -84,24 +87,63 @@ func (s *DiscountService) CreateDiscount(ctx context.Context, req models.CreateD
 	return createdDiscount, nil
 }
 
-// GetDiscount retrieves a discount by its ID.
+// GetDiscount retrieves a discount by its ID, utilizing caching.
 func (s *DiscountService) GetDiscount(ctx context.Context, id uuid.UUID) (*models.Discount, error) {
+	cacheKey := fmt.Sprintf(CacheKeyDiscountByID, id.String())
+
+	// --- Try to get from cache first ---
+	cachedData, err := s.cache.Get(ctx, cacheKey).Result()
+	if err == nil {
+		// Cache hit - deserialize and return
+		var discount models.Discount
+		if err := json.Unmarshal([]byte(cachedData), &discount); err != nil {
+			s.logger.Error("Failed to unmarshal cached discount", "key", cacheKey, "error", err)
+			// Proceed to fetch from DB below
+		} else {
+			s.logger.Debug("Discount fetched from cache", "id", id)
+			return &discount, nil
+		}
+	} else if !errors.Is(err, redis.Nil) {
+		// Some other Redis error occurred
+		s.logger.Error("Redis error fetching discount by ID", "key", cacheKey, "error", err)
+		// Proceed to fetch from DB below
+	}
+
+	s.logger.Debug("Discount cache miss, fetching from database", "id", id)
+
+	// Fetch from database using the existing query
 	dbDiscount, err := s.querier.GetDiscountByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("discount not found")
 		}
-		return nil, fmt.Errorf("failed to fetch discount: %w", err)
+		return nil, fmt.Errorf("failed to fetch discount from database: %w", err)
 	}
 
+	// Map the database discount to the application model
 	discount := s.mapDbDiscountToModel(dbDiscount)
+
+	// --- Store the result in cache ---
+	discountJSON, err := json.Marshal(discount)
+	if err != nil {
+		s.logger.Error("Failed to marshal discount for caching", "id", id, "error", err)
+		// Still return the discount fetched from the DB
+	} else {
+		// Cache for 1 hour (adjust TTL as needed)
+		if err := s.cache.Set(ctx, cacheKey, discountJSON, DiscountCacheTTL).Err(); err != nil {
+			s.logger.Error("Failed to cache discount", "key", cacheKey, "error", err)
+		} else {
+			s.logger.Debug("Discount cached", "id", id, "key", cacheKey)
+		}
+	}
 
 	return discount, nil
 }
 
 // UpdateDiscount updates an existing discount rule.
+// UpdateDiscount updates an existing discount rule and invalidates its cache.
 func (s *DiscountService) UpdateDiscount(ctx context.Context, id uuid.UUID, req models.UpdateDiscountRequest) (*models.Discount, error) {
-	// Fetch the existing discount to get current values and validate
+	// Fetch the existing discount to get its current values (including code) for potential cache invalidation
 	existingDBDisc, err := s.querier.GetDiscountByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -111,8 +153,8 @@ func (s *DiscountService) UpdateDiscount(ctx context.Context, id uuid.UUID, req 
 	}
 
 	// Prepare update parameters, using existing values if not provided in request
-	// Convert request pointers to values or use existing DB values
 	code := CoalesceString(req.Code, existingDBDisc.Code)
+	// ... (prepare other parameters like description, discountType, etc., as before) ...
 	description := CoalesceStringPtr(req.Description, existingDBDisc.Description)
 	discountTypeStr := CoalesceString((*string)(req.DiscountType), existingDBDisc.DiscountType)
 	discountValue := CoalesceInt64(req.DiscountValue, existingDBDisc.DiscountValue)
@@ -122,6 +164,7 @@ func (s *DiscountService) UpdateDiscount(ctx context.Context, id uuid.UUID, req 
 	validUntil := CoalesceTime(req.ValidUntil, existingDBDisc.ValidUntil.Time)
 	isActive := CoalesceBool(req.IsActive, existingDBDisc.IsActive)
 
+	// Validate DiscountValue based on DiscountType if it's being updated
 	currentType := models.DiscountType(discountTypeStr)
 	if req.DiscountType != nil || req.DiscountValue != nil {
 		newValue := discountValue
@@ -137,23 +180,17 @@ func (s *DiscountService) UpdateDiscount(ctx context.Context, id uuid.UUID, req 
 	if req.Code != nil && *req.Code != existingDBDisc.Code {
 		_, err := s.querier.GetDiscountByCode(ctx, *req.Code)
 		if err == nil {
-			// A discount with this code already exists (and is active/valid)
-			// This is tricky - GetDiscountByCode only finds *active* valid ones.
-			// To truly prevent *any* reuse, you'd need a query checking all codes.
-			// Let's rely on the DB UNIQUE constraint here too, but check for better UX if needed.
-			// For now, assume DB handles it.
+			return nil, fmt.Errorf("discount with code '%s' already exists", *req.Code)
 		}
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			// An unexpected DB error occurred
 			return nil, fmt.Errorf("failed to check for existing discount code: %w", err)
 		}
-		// If err is pgx.ErrNoRows, it means the new code is unique among *active* discounts at this moment, proceed.
-		// DB constraint will enforce uniqueness.
+		// If err is pgx.ErrNoRows, it means the new code is unique, proceed.
 	}
 
 	// Prepare the query parameters
 	params := db.UpdateDiscountParams{
-		ID:                 id, // The ID of the discount to update
+		ID:                 id,
 		Code:               code,
 		Description:        description,
 		DiscountType:       discountTypeStr,
@@ -168,7 +205,6 @@ func (s *DiscountService) UpdateDiscount(ctx context.Context, id uuid.UUID, req 
 	// Execute the update query
 	updatedDBDisc, err := s.querier.UpdateDiscount(ctx, params)
 	if err != nil {
-		// Check if the error is due to UNIQUE constraint violation (duplicate code)
 		if IsUniqueViolation(err, "discounts_code_key") {
 			return nil, fmt.Errorf("discount with code '%s' already exists", params.Code)
 		}
@@ -178,20 +214,132 @@ func (s *DiscountService) UpdateDiscount(ctx context.Context, id uuid.UUID, req 
 	// Map the updated database discount to the application model
 	updatedDiscount := s.mapDbDiscountToModel(updatedDBDisc)
 
+	// --- Invalidate Cache Entries ---
+	// Invalidate the entry for the discount ID
+	cacheKeyByID := fmt.Sprintf(CacheKeyDiscountByID, id.String())
+	if err := s.cache.Del(ctx, cacheKeyByID).Err(); err != nil {
+		s.logger.Error("Failed to invalidate discount cache by ID", "key", cacheKeyByID, "error", err)
+	} else {
+		s.logger.Debug("Discount cache invalidated by ID", "id", id, "key", cacheKeyByID)
+	}
+
+	// Invalidate the entry for the OLD code if it changed
+	oldCode := existingDBDisc.Code
+	newCode := updatedDiscount.Code
+	if oldCode != newCode {
+		cacheKeyByOldCode := fmt.Sprintf(CacheKeyDiscountByCode, oldCode)
+		if err := s.cache.Del(ctx, cacheKeyByOldCode).Err(); err != nil {
+			s.logger.Error("Failed to invalidate discount cache by old code", "code", oldCode, "key", cacheKeyByOldCode, "error", err)
+		} else {
+			s.logger.Debug("Discount cache invalidated by old code", "code", oldCode, "key", cacheKeyByOldCode)
+		}
+	}
+
+	// Always invalidate the entry for the NEW code (in case it's used elsewhere or if code didn't change)
+	cacheKeyByNewCode := fmt.Sprintf(CacheKeyDiscountByCode, newCode)
+	if err := s.cache.Del(ctx, cacheKeyByNewCode).Err(); err != nil {
+		s.logger.Error("Failed to invalidate discount cache by new code", "code", newCode, "key", cacheKeyByNewCode, "error", err)
+	} else {
+		s.logger.Debug("Discount cache invalidated by new code", "code", newCode, "key", cacheKeyByNewCode)
+	}
+	// ---
+
 	s.logger.Info("Discount updated successfully", "discount_id", updatedDiscount.ID, "code", updatedDiscount.Code)
 	return updatedDiscount, nil
 }
 
-// DeleteDiscount deletes a discount by its ID.
+// DeleteDiscount deletes a discount by its ID and invalidates its cache.
 func (s *DiscountService) DeleteDiscount(ctx context.Context, id uuid.UUID) error {
+	// Fetch the discount first to get its code for cache invalidation
+	dbDiscount, err := s.querier.GetDiscountByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("discount not found")
+		}
+		return fmt.Errorf("failed to fetch discount for cache invalidation: %w", err)
+	}
+
 	// Execute the delete query
-	err := s.querier.DeleteDiscount(ctx, id)
+	err = s.querier.DeleteDiscount(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete discount from database: %w", err)
 	}
 
-	s.logger.Info("Discount deleted successfully", "discount_id", id)
+	// --- Invalidate Cache Entries ---
+	// Invalidate the entry for the discount ID
+	cacheKeyByID := fmt.Sprintf(CacheKeyDiscountByID, id.String())
+	if err := s.cache.Del(ctx, cacheKeyByID).Err(); err != nil {
+		s.logger.Error("Failed to invalidate discount cache by ID on delete", "key", cacheKeyByID, "error", err)
+	} else {
+		s.logger.Debug("Discount cache invalidated by ID on delete", "id", id, "key", cacheKeyByID)
+	}
+
+	// Invalidate the entry for the discount code
+	cacheKeyByCode := fmt.Sprintf(CacheKeyDiscountByCode, dbDiscount.Code)
+	if err := s.cache.Del(ctx, cacheKeyByCode).Err(); err != nil {
+		s.logger.Error("Failed to invalidate discount cache by code on delete", "code", dbDiscount.Code, "key", cacheKeyByCode, "error", err)
+	} else {
+		s.logger.Debug("Discount cache invalidated by code on delete", "code", dbDiscount.Code, "key", cacheKeyByCode)
+	}
+	// ---
+
+	s.logger.Info("Discount deleted successfully", "discount_id", id, "code", dbDiscount.Code)
 	return nil
+}
+
+// GetDiscountByCode retrieves a discount by its unique code, utilizing caching.
+// You would add similar logic here as GetDiscount, but with CacheKeyDiscountByCode.
+// This is a placeholder for the concept.
+func (s *DiscountService) GetDiscountByCode(ctx context.Context, code string) (*models.Discount, error) {
+	cacheKey := fmt.Sprintf(CacheKeyDiscountByCode, code)
+
+	// --- Try to get from cache first ---
+	cachedData, err := s.cache.Get(ctx, cacheKey).Result()
+	if err == nil {
+		// Cache hit - deserialize and return
+		var discount models.Discount
+		if err := json.Unmarshal([]byte(cachedData), &discount); err != nil {
+			s.logger.Error("Failed to unmarshal cached discount by code", "key", cacheKey, "error", err)
+			// Proceed to fetch from DB below
+		} else {
+			s.logger.Debug("Discount fetched from cache by code", "code", code)
+			return &discount, nil
+		}
+	} else if !errors.Is(err, redis.Nil) {
+		// Some other Redis error occurred
+		s.logger.Error("Redis error fetching discount by code", "key", cacheKey, "error", err)
+		// Proceed to fetch from DB below
+	}
+
+	s.logger.Debug("Discount by code cache miss, fetching from database", "code", code)
+
+	// Fetch from database using the existing query
+	dbDiscount, err := s.querier.GetDiscountByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("discount not found")
+		}
+		return nil, fmt.Errorf("failed to fetch discount from database: %w", err)
+	}
+
+	// Map the database discount to the application model
+	discount := s.mapDbDiscountToModel(dbDiscount)
+
+	// --- Store the result in cache ---
+	discountJSON, err := json.Marshal(discount)
+	if err != nil {
+		s.logger.Error("Failed to marshal discount for caching by code", "code", code, "error", err)
+		// Still return the discount fetched from the DB
+	} else {
+		// Cache for 1 hour (adjust TTL as needed)
+		if err := s.cache.Set(ctx, cacheKey, discountJSON, DiscountCacheTTL).Err(); err != nil {
+			s.logger.Error("Failed to cache discount by code", "key", cacheKey, "error", err)
+		} else {
+			s.logger.Debug("Discount cached by code", "code", code, "key", cacheKey)
+		}
+	}
+
+	return discount, nil
 }
 
 // ListDiscounts retrieves a paginated list of discounts based on filters.

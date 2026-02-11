@@ -12,9 +12,10 @@ import (
 	"github.com/MihoZaki/DzTech/internal/services"
 	"github.com/MihoZaki/DzTech/internal/storage"
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 )
 
-func New(cfg *config.Config) http.Handler {
+func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 
 	r := chi.NewRouter()
 
@@ -46,14 +47,14 @@ func New(cfg *config.Config) http.Handler {
 
 	// Initialize services
 	userService := services.NewUserService(querier)
-	productService := services.NewProductService(querier, storer)
+	productService := services.NewProductService(querier, storer, redisClient, slog.Default())
 	cartService := services.NewCartService(querier, productService, slog.Default())
 	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
 	authService := services.NewAuthService(querier, userService, cartService, cfg.JWTSecret, slog.Default())
 	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
 	adminUserService := services.NewAdminUserService(querier, slog.Default())
 	reviewService := services.NewReviewService(querier, pool, slog.Default())
-	discountService := services.NewDiscountService(querier, slog.Default())
+	discountService := services.NewDiscountService(querier, redisClient, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
