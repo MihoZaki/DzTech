@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -109,6 +110,18 @@ func ApplyMiddleware(r *chi.Mux) {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip, _ := httprate.KeyByIP(r)
+			slog.Debug("Rate limiter middleware hit", "path", r.URL.Path, "ip", ip)
+			next.ServeHTTP(w, r)
+		})
+	})
+	r.Use(httprate.Limit(
+		10,             // requests
+		10*time.Second, // per duration
+		httprate.WithKeyFuncs(httprate.KeyByIP, httprate.KeyByEndpoint),
+	))
 	// Logging middleware with structured logging
 	r.Use(middleware.Logger)
 

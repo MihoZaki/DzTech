@@ -26,7 +26,6 @@ func New(cfg *config.Config) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
-
 	// Get the database pool from the db package
 	pool := db.GetPool()
 	if pool == nil {
