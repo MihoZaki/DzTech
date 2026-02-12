@@ -41,6 +41,7 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	maxFileSize := int64(10 * 1024 * 1024) // 10MB
 
 	storer := storage.NewLocalStorage(localStoragePath, localPublicPath, allowedTypes, maxFileSize)
+	r.Handle(localPublicPath+"/*", http.StripPrefix(localPublicPath, http.FileServer(http.Dir(localStoragePath))))
 
 	// Initialize database querier
 	querier := db_queries.New(pool)
