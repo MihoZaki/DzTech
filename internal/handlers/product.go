@@ -100,6 +100,7 @@ func (h *ProductHandler) createProductFromMultipart(r *http.Request) (*models.Pr
 		specHighlights = make(map[string]any) // Initialize as empty map if not provided
 	}
 	imageFileHeaders := r.MultipartForm.File["images"] // Get []*multipart.FileHeader
+	slog.Debug("backend received the image files headers", "image_headers", imageFileHeaders)
 
 	req := models.CreateProductRequest{
 		CategoryID:       categoryID,
@@ -393,6 +394,7 @@ func (h *ProductHandler) updateProductFromMultipart(r *http.Request, productID u
 		}
 	}
 	imageFiles := r.MultipartForm.File["images"]
+	slog.Debug("Update handler received the update image headers", "headers", imageFiles)
 
 	product, err := h.productService.UpdateProductWithUpload(
 		r.Context(),

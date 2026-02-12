@@ -10,7 +10,7 @@ JOIN
     order_items oi ON o.id = oi.order_id
 WHERE
     o.status = 'delivered' -- Only delivered orders contribute to revenue
-    AND o.created_at BETWEEN $1 AND $2; -- $1 = start_date, $2 = end_date
+    AND o.created_at BETWEEN @start_date AND end_date; -- $1 = start_date, $2 = end_date
 
 -- name: GetSalesVolume :one
 -- Counts the total number of delivered orders within a given time range.
@@ -20,7 +20,7 @@ FROM
     orders
 WHERE
     status = 'delivered'
-    AND created_at BETWEEN $1 AND $2; -- $1 = start_date, $2 = end_date
+    AND created_at BETWEEN @start_date AND @end_date; -- @start_date = start_date, @start_date = end_date
 
 -- name: GetAverageOrderValue :one
 -- Calculates the average order value (AOV) for delivered orders within a given time range.
@@ -30,7 +30,7 @@ FROM
     orders o
 WHERE
     o.status = 'delivered'
-    AND o.created_at BETWEEN $1 AND $2; -- $1 = start_date, $2 = end_date
+    AND o.created_at BETWEEN @start_date AND @end_date; -- $1 = start_date, $2 = end_date
 
 -- name: GetTopSellingProducts :many
 -- Retrieves the top N selling products (by quantity sold) within a given time range.
@@ -46,12 +46,12 @@ JOIN
     products p ON oi.product_id = p.id
 WHERE
     o.status = 'delivered'
-    AND o.created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date
+    AND o.created_at BETWEEN @start_date AND @end_date -- $1 = start_date, $2 = end_date
 GROUP BY
     p.id, p.name
 ORDER BY
     total_units_sold DESC
-LIMIT $3; -- $3 = number of top products to return (N)
+LIMIT @limits; -- $3 = number of top products to return (N)
 
 -- name: GetTopSellingCategories :many
 -- Retrieves the top N selling categories (by quantity sold) within a given time range.
@@ -69,12 +69,12 @@ JOIN
     categories c ON p.category_id = c.id
 WHERE
     o.status = 'delivered'
-    AND o.created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date
+    AND o.created_at BETWEEN @start_date AND @end_date -- $1 = start_date, $2 = end_date
 GROUP BY
     c.id, c.name
 ORDER BY
     total_units_sold DESC
-LIMIT $3; -- $3 = number of top categories to return (N)
+LIMIT @limits; -- $3 = number of top products to return (N)
 
 -- --- Product Performance ---
 
@@ -113,7 +113,7 @@ SELECT
 FROM
     users
 WHERE
-    created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date
+    created_at BETWEEN @start_date AND @end_date-- $1 = start_date, $2 = end_date
     AND deleted_at IS NULL; -- Exclude soft-deleted users
 
 -- --- Order Metrics ---
@@ -126,7 +126,7 @@ SELECT
 FROM
     orders
 WHERE
-    created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date (optional, remove if counting all time)
+    created_at BETWEEN @start_date AND @end_date -- $1 = start_date, $2 = end_date (optional, remove if counting all time)
 GROUP BY
     status;
 
@@ -142,7 +142,7 @@ JOIN
 WHERE
     o_confirmed.status = 'confirmed'
     AND (o_shipped_or_delivered.status = 'shipped' OR o_shipped_or_delivered.status = 'delivered')
-    AND o_confirmed.created_at BETWEEN $1 AND $2; -- $1 = start_date, $2 = end_date
+    AND o_confirmed.created_at BETWEEN @start_date AND @end_date; -- $1 = start_date, $2 = end_date
 -- Note: This query is complex because order status updates modify the same row.
 -- A more robust approach might involve an order_status_history table or window functions.
 -- Simplified version assuming statuses are updated sequentially and we just compare timestamps.
@@ -169,7 +169,7 @@ SELECT
 FROM
     orders
 WHERE
-    created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date
+    created_at BETWEEN @start_date AND @end_date -- $1 = start_date, $2 = end_date (optional, remove if counting all time)
 GROUP BY
     status;
 
@@ -189,6 +189,6 @@ JOIN
     discounts d ON o.applied_discount_code = d.code -- Assuming orders table stores the code used
 WHERE
     o.status = 'delivered'
-    AND o.created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date
+    AND o.created_at BETWEEN @start_date AND @end_date -- $1 = start_date, $2 = end_date
 GROUP BY
     d.code, d.discount_type, d.discount_value;

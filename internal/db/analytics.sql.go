@@ -26,14 +26,14 @@ WHERE
 `
 
 type GetAverageFulfillmentTimeParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
 // Calculates the average time between order confirmation and shipment/delivery completion.
 // Assumes 'confirmed' status is the start and 'shipped' or 'delivered' is the end.
 func (q *Queries) GetAverageFulfillmentTime(ctx context.Context, arg GetAverageFulfillmentTimeParams) (float64, error) {
-	row := q.db.QueryRow(ctx, getAverageFulfillmentTime, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getAverageFulfillmentTime, arg.StartDate, arg.EndDate)
 	var avg_seconds float64
 	err := row.Scan(&avg_seconds)
 	return avg_seconds, err
@@ -51,14 +51,14 @@ WHERE
 `
 
 type GetAverageOrderValueParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
-// $1 = start_date, $2 = end_date
+// @start_date = start_date, @start_date = end_date
 // Calculates the average order value (AOV) for delivered orders within a given time range.
 func (q *Queries) GetAverageOrderValue(ctx context.Context, arg GetAverageOrderValueParams) (float64, error) {
-	row := q.db.QueryRow(ctx, getAverageOrderValue, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getAverageOrderValue, arg.StartDate, arg.EndDate)
 	var aov_cents float64
 	err := row.Scan(&aov_cents)
 	return aov_cents, err
@@ -84,8 +84,8 @@ GROUP BY
 `
 
 type GetDiscountUsageParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
 type GetDiscountUsageRow struct {
@@ -99,7 +99,7 @@ type GetDiscountUsageRow struct {
 // --- Discount Effectiveness ---
 // Retrieves usage count and revenue attributed to specific discount codes within a time range.
 func (q *Queries) GetDiscountUsage(ctx context.Context, arg GetDiscountUsageParams) ([]GetDiscountUsageRow, error) {
-	rows, err := q.db.Query(ctx, getDiscountUsage, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getDiscountUsage, arg.StartDate, arg.EndDate)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ type GetLowStockProductsRow struct {
 	StockQuantity int32     `json:"stock_quantity"`
 }
 
-// $3 = number of top categories to return (N)
+// $3 = number of top products to return (N)
 // --- Product Performance ---
 // Retrieves products with stock quantity below a specified threshold.
 func (q *Queries) GetLowStockProducts(ctx context.Context, stockQuantity int32) ([]GetLowStockProductsRow, error) {
@@ -176,19 +176,19 @@ SELECT
 FROM
     users
 WHERE
-    created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date
+    created_at BETWEEN $1 AND $2-- $1 = start_date, $2 = end_date
     AND deleted_at IS NULL
 `
 
 type GetNewCustomersCountParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
 // --- Customer Insights ---
 // Counts the number of new customers registered within a given time range.
 func (q *Queries) GetNewCustomersCount(ctx context.Context, arg GetNewCustomersCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getNewCustomersCount, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getNewCustomersCount, arg.StartDate, arg.EndDate)
 	var new_customers_count int64
 	err := row.Scan(&new_customers_count)
 	return new_customers_count, err
@@ -209,8 +209,8 @@ GROUP BY
 `
 
 type GetOrderStatusCountsParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
 type GetOrderStatusCountsRow struct {
@@ -222,7 +222,7 @@ type GetOrderStatusCountsRow struct {
 // --- Order Metrics ---
 // Counts the number of orders in each status (pending, confirmed, shipped, delivered, cancelled).
 func (q *Queries) GetOrderStatusCounts(ctx context.Context, arg GetOrderStatusCountsParams) ([]GetOrderStatusCountsRow, error) {
-	rows, err := q.db.Query(ctx, getOrderStatusCounts, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getOrderStatusCounts, arg.StartDate, arg.EndDate)
 	if err != nil {
 		return nil, err
 	}
@@ -248,14 +248,14 @@ SELECT
 FROM
     orders
 WHERE
-    created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date
+    created_at BETWEEN $1 AND $2 -- $1 = start_date, $2 = end_date (optional, remove if counting all time)
 GROUP BY
     status
 `
 
 type GetOrdersByStatusWithinTimeRangeParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
 type GetOrdersByStatusWithinTimeRangeRow struct {
@@ -284,7 +284,7 @@ type GetOrdersByStatusWithinTimeRangeRow struct {
 // Counts orders by status within a time range.
 // This is similar to GetOrderStatusCounts but with a time filter.
 func (q *Queries) GetOrdersByStatusWithinTimeRange(ctx context.Context, arg GetOrdersByStatusWithinTimeRangeParams) ([]GetOrdersByStatusWithinTimeRangeRow, error) {
-	rows, err := q.db.Query(ctx, getOrdersByStatusWithinTimeRange, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getOrdersByStatusWithinTimeRange, arg.StartDate, arg.EndDate)
 	if err != nil {
 		return nil, err
 	}
@@ -340,14 +340,14 @@ WHERE
 `
 
 type GetSalesVolumeParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
 }
 
 // $1 = start_date, $2 = end_date
 // Counts the total number of delivered orders within a given time range.
 func (q *Queries) GetSalesVolume(ctx context.Context, arg GetSalesVolumeParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getSalesVolume, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getSalesVolume, arg.StartDate, arg.EndDate)
 	var total_orders int64
 	err := row.Scan(&total_orders)
 	return total_orders, err
@@ -378,9 +378,9 @@ LIMIT $3
 `
 
 type GetTopSellingCategoriesParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
-	Limit       int32              `json:"limit"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
+	Limits    int32              `json:"limits"`
 }
 
 type GetTopSellingCategoriesRow struct {
@@ -392,7 +392,7 @@ type GetTopSellingCategoriesRow struct {
 // $3 = number of top products to return (N)
 // Retrieves the top N selling categories (by quantity sold) within a given time range.
 func (q *Queries) GetTopSellingCategories(ctx context.Context, arg GetTopSellingCategoriesParams) ([]GetTopSellingCategoriesRow, error) {
-	rows, err := q.db.Query(ctx, getTopSellingCategories, arg.CreatedAt, arg.CreatedAt_2, arg.Limit)
+	rows, err := q.db.Query(ctx, getTopSellingCategories, arg.StartDate, arg.EndDate, arg.Limits)
 	if err != nil {
 		return nil, err
 	}
@@ -434,9 +434,9 @@ LIMIT $3
 `
 
 type GetTopSellingProductsParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
-	Limit       int32              `json:"limit"`
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
+	Limits    int32              `json:"limits"`
 }
 
 type GetTopSellingProductsRow struct {
@@ -448,7 +448,7 @@ type GetTopSellingProductsRow struct {
 // $1 = start_date, $2 = end_date
 // Retrieves the top N selling products (by quantity sold) within a given time range.
 func (q *Queries) GetTopSellingProducts(ctx context.Context, arg GetTopSellingProductsParams) ([]GetTopSellingProductsRow, error) {
-	rows, err := q.db.Query(ctx, getTopSellingProducts, arg.CreatedAt, arg.CreatedAt_2, arg.Limit)
+	rows, err := q.db.Query(ctx, getTopSellingProducts, arg.StartDate, arg.EndDate, arg.Limits)
 	if err != nil {
 		return nil, err
 	}
@@ -477,18 +477,13 @@ JOIN
     order_items oi ON o.id = oi.order_id
 WHERE
     o.status = 'delivered' -- Only delivered orders contribute to revenue
-    AND o.created_at BETWEEN $1 AND $2
+    AND o.created_at BETWEEN $1 AND end_date
 `
-
-type GetTotalRevenueParams struct {
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
-}
 
 // --- Sales Performance ---
 // Calculates the total revenue from all delivered orders within a given time range.
-func (q *Queries) GetTotalRevenue(ctx context.Context, arg GetTotalRevenueParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getTotalRevenue, arg.CreatedAt, arg.CreatedAt_2)
+func (q *Queries) GetTotalRevenue(ctx context.Context, startDate pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, getTotalRevenue, startDate)
 	var total_revenue_cents int64
 	err := row.Scan(&total_revenue_cents)
 	return total_revenue_cents, err

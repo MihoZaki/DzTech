@@ -177,6 +177,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if newRefreshTokenStr != "" {
 		setRefreshTokenCookie(w, newRefreshTokenStr)
 	}
+	slog.Debug("user asked for a refresh token", "refresh_token", newRefreshTokenStr)
 
 	// Send the response containing only the new access token
 	w.Header().Set("Content-Type", "application/json")

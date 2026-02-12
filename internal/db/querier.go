@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -91,7 +92,7 @@ type Querier interface {
 	// Calculates the average time between order confirmation and shipment/delivery completion.
 	// Assumes 'confirmed' status is the start and 'shipped' or 'delivered' is the end.
 	GetAverageFulfillmentTime(ctx context.Context, arg GetAverageFulfillmentTimeParams) (float64, error)
-	// $1 = start_date, $2 = end_date
+	// @start_date = start_date, @start_date = end_date
 	// Calculates the average order value (AOV) for delivered orders within a given time range.
 	GetAverageOrderValue(ctx context.Context, arg GetAverageOrderValueParams) (float64, error)
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
@@ -128,7 +129,7 @@ type Querier interface {
 	GetDiscountsByCategoryID(ctx context.Context, categoryID uuid.UUID) ([]Discount, error)
 	// Fetches active discounts applicable to a specific product.
 	GetDiscountsByProductID(ctx context.Context, productID uuid.UUID) ([]Discount, error)
-	// $3 = number of top categories to return (N)
+	// $3 = number of top products to return (N)
 	// --- Product Performance ---
 	// Retrieves products with stock quantity below a specified threshold.
 	GetLowStockProducts(ctx context.Context, stockQuantity int32) ([]GetLowStockProductsRow, error)
@@ -204,7 +205,7 @@ type Querier interface {
 	GetTopSellingProducts(ctx context.Context, arg GetTopSellingProductsParams) ([]GetTopSellingProductsRow, error)
 	// --- Sales Performance ---
 	// Calculates the total revenue from all delivered orders within a given time range.
-	GetTotalRevenue(ctx context.Context, arg GetTotalRevenueParams) (int64, error)
+	GetTotalRevenue(ctx context.Context, startDate pgtype.Timestamptz) (int64, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Fetches a specific user by ID along with order count and last order date.
