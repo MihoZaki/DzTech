@@ -39,8 +39,8 @@ func (h *DiscountHandler) RegisterRoutes(r chi.Router) {
 	r.Put("/{id}", h.UpdateDiscount)
 	r.Delete("/{id}", h.DeleteDiscount)
 	r.Get("/", h.ListDiscounts)
+	r.Get("/product/{product_id}", h.GetDiscountsByProductID)
 
-	// Nested routes for linking/unlinking to products
 	r.Route("/{discount_id}/link", func(r chi.Router) {
 		r.Post("/product", h.LinkDiscountToProduct)
 	})
@@ -119,6 +119,28 @@ func (h *DiscountHandler) GetDiscount(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(discount)
+}
+
+func (h *DiscountHandler) GetDiscountsByProductID(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "product_id")
+	productID, err := uuid.Parse(productIDStr)
+	if err != nil {
+		h.logger.Error("Invalid product ID parameter in GetDiscountsByProductID request", "value", productIDStr, "error", err)
+		http.Error(w, `{"error": "Invalid Parameter", "message": "Parameter 'product_id' must be a valid UUID"}`, http.StatusBadRequest)
+		return
+	}
+
+	discounts, err := h.service.GetDiscountsByProductID(r.Context(), productID)
+	if err != nil {
+		h.logger.Error("Failed to get discounts for product", "product_id", productID, "error", err)
+		http.Error(w, `{"error": "Internal Server Error", "message": "Failed to retrieve discounts for product"}`, http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("Discounts retrieved successfully for product", "product_id", productID, "count", len(discounts))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(discounts) // Encode the slice directly
 }
 
 // UpdateDiscount handles updating an existing discount by ID.

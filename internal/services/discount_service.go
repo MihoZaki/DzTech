@@ -140,6 +140,22 @@ func (s *DiscountService) GetDiscount(ctx context.Context, id uuid.UUID) (*model
 	return discount, nil
 }
 
+// GetDiscountsByProductID retrieves active discounts applicable to a specific product.
+func (s *DiscountService) GetDiscountsByProductID(ctx context.Context, productID uuid.UUID) ([]*models.Discount, error) {
+	// Execute the query to get discounts for the product ID
+	dbDiscounts, err := s.querier.GetDiscountsByProductID(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch discounts for product (ID: %s) from database: %w", productID, err)
+	}
+
+	result := make([]*models.Discount, len(dbDiscounts))
+	for i, dbDisc := range dbDiscounts {
+		result[i] = s.mapDbDiscountToModel(dbDisc)
+	}
+
+	return result, nil
+}
+
 // UpdateDiscount updates an existing discount rule.
 // UpdateDiscount updates an existing discount rule and invalidates its cache.
 func (s *DiscountService) UpdateDiscount(ctx context.Context, id uuid.UUID, req models.UpdateDiscountRequest) (*models.Discount, error) {
@@ -458,10 +474,6 @@ func (s *DiscountService) LinkDiscountToProduct(ctx context.Context, discountID,
 		return fmt.Errorf("failed to verify discount: %w", err)
 	}
 
-	// Validate that the product exists (you'd need a product query/service method)
-	// Example: _, err = s.productService.GetProduct(ctx, productID)
-	// if err != nil { return fmt.Errorf("failed to verify product: %w", err) }
-
 	// Execute the link query
 	err = s.querier.LinkProductToDiscount(ctx, db.LinkProductToDiscountParams{
 		ProductID:  productID,
@@ -473,6 +485,17 @@ func (s *DiscountService) LinkDiscountToProduct(ctx context.Context, discountID,
 			return fmt.Errorf("discount %s is already linked to product %s", discountID, productID)
 		}
 		return fmt.Errorf("failed to link discount to product: %w", err)
+	}
+
+	// --- Invalidate Product Cache ---
+	// The product's discount status has changed, so its cache entry is stale.
+	productCacheKeyByID := fmt.Sprintf(CacheKeyProductByID, productID.String())
+	if err := s.cache.Del(ctx, productCacheKeyByID).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by ID after linking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID, "error", err)
+		// Depending on your tolerance for stale data, you might choose to return the error here
+		// or just log it and proceed. For now, let's just log.
+	} else {
+		s.logger.Debug("Product cache invalidated by ID after linking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID)
 	}
 
 	s.logger.Info("Discount linked to product", "discount_id", discountID, "product_id", productID)
@@ -490,6 +513,15 @@ func (s *DiscountService) UnlinkDiscountFromProduct(ctx context.Context, discoun
 		return fmt.Errorf("failed to unlink discount from product: %w", err)
 	}
 
+	// --- Invalidate Product Cache ---
+	// The product's discount status has changed, so its cache entry is stale.
+	productCacheKeyByID := fmt.Sprintf(CacheKeyProductByID, productID.String())
+	if err := s.cache.Del(ctx, productCacheKeyByID).Err(); err != nil {
+		s.logger.Error("Failed to invalidate product cache by ID after unlinking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID, "error", err)
+		// Log only, don't fail the unlink operation itself.
+	} else {
+		s.logger.Debug("Product cache invalidated by ID after unlinking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID)
+	}
 	s.logger.Info("Discount unlinked from product", "discount_id", discountID, "product_id", productID)
 	return nil
 }
