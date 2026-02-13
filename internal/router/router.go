@@ -56,6 +56,7 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	adminUserService := services.NewAdminUserService(querier, slog.Default())
 	reviewService := services.NewReviewService(querier, pool, slog.Default())
 	discountService := services.NewDiscountService(querier, redisClient, slog.Default())
+	categoryService := services.NewCategoryService(querier, redisClient, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -69,6 +70,7 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	adminUserHandler := handlers.NewAdminUserHandler(adminUserService, slog.Default())
 	reviewHandler := handlers.NewReviewHandler(reviewService, slog.Default())
 	discountHandler := handlers.NewDiscountHandler(discountService, slog.Default())
+	categoryHandler := handlers.NewCategoryHandler(categoryService, slog.Default())
 
 	// Create sub-routers
 	authRouter := chi.NewRouter()
@@ -98,6 +100,9 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	})
 	adminRouter.Route("/discounts", func(r chi.Router) {
 		discountHandler.RegisterRoutes(r)
+	})
+	adminRouter.Route("/categories", func(r chi.Router) {
+		categoryHandler.RegisterRoutes(r)
 	})
 
 	cartRouter := chi.NewRouter()

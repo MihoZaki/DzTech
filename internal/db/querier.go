@@ -34,11 +34,13 @@ type Querier interface {
 	// Updates the status of an order to 'cancelled' and sets the cancelled_at and completed_at timestamps.
 	// This is a soft cancellation.
 	CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, error)
+	CheckCategorySlugExists(ctx context.Context, slug string) (bool, error)
 	// Checks if a product slug already exists (excluding soft-deleted products).
 	CheckSlugExists(ctx context.Context, slug string) (bool, error)
 	CleanupExpiredRefreshTokens(ctx context.Context) error
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
 	CountAllProducts(ctx context.Context) (int64, error)
+	CountCategories(ctx context.Context) (int64, error)
 	// Counts discounts based on the same filters as ListDiscounts.
 	CountDiscounts(ctx context.Context, arg CountDiscountsParams) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
@@ -50,6 +52,7 @@ type Querier interface {
 	CountUsers(ctx context.Context, activeOnly bool) (int64, error)
 	// Cart Item Management
 	CreateCartItem(ctx context.Context, arg CreateCartItemParams) (CartItem, error)
+	CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error)
 	CreateDeliveryService(ctx context.Context, arg CreateDeliveryServiceParams) (DeliveryService, error)
 	// Inserts a new discount record.
 	CreateDiscount(ctx context.Context, arg CreateDiscountParams) (Discount, error)
@@ -74,6 +77,7 @@ type Querier interface {
 	DeleteCart(ctx context.Context, cartID uuid.UUID) error
 	// Cart Cleanup
 	DeleteCartItem(ctx context.Context, itemID uuid.UUID) error
+	DeleteCategory(ctx context.Context, id uuid.UUID) error
 	// Soft delete could be achieved by updating is_active to FALSE
 	// For hard delete:
 	DeleteDeliveryService(ctx context.Context, id uuid.UUID) error
@@ -110,7 +114,7 @@ type Querier interface {
 	// $1 = page_limit, $2 = page_offset
 	// Assuming this returns one cart object with many items
 	GetCartWithItemsAndProductsWithDiscounts(ctx context.Context, id uuid.UUID) ([]GetCartWithItemsAndProductsWithDiscountsRow, error)
-	GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error)
+	GetCategory(ctx context.Context, id uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
 	GetDeliveryService(ctx context.Context, arg GetDeliveryServiceParams) (DeliveryService, error)
 	// Retrieves a delivery service by its ID, regardless of its active status.
@@ -243,7 +247,7 @@ type Querier interface {
 	// If filter_user_id is the zero UUID ('00000000-0000-0000-0000-000000000000'), it retrieves orders for all users.
 	// If filter_status is an empty string (''), it retrieves orders of all statuses.
 	ListAllOrders(ctx context.Context, arg ListAllOrdersParams) ([]Order, error)
-	ListCategories(ctx context.Context) ([]Category, error)
+	ListCategories(ctx context.Context, arg ListCategoriesParams) ([]Category, error)
 	// Fetches a list of discounts, potentially with filters and pagination.
 	ListDiscounts(ctx context.Context, arg ListDiscountsParams) ([]Discount, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
@@ -286,6 +290,7 @@ type Querier interface {
 	// Removes association between a product and a discount.
 	UnlinkProductFromDiscount(ctx context.Context, arg UnlinkProductFromDiscountParams) error
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)
+	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error)
 	// Allow filtering by active status
 	UpdateDeliveryService(ctx context.Context, arg UpdateDeliveryServiceParams) (DeliveryService, error)
 	// Updates an existing discount record.

@@ -36,15 +36,6 @@ type Product struct {
 	EffectiveDiscountPercentage        *float64               `json:"effective_discount_percentage,omitempty"` // e.g., 20.5%
 }
 
-type Category struct {
-	ID        uuid.UUID  `json:"id"`
-	Name      string     `json:"name"`
-	Slug      string     `json:"slug"`
-	Type      string     `json:"type"`
-	ParentID  *uuid.UUID `json:"parent_id,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-}
-
 type CreateProductRequest struct {
 	CategoryID       uuid.UUID      `json:"category_id" validate:"required,uuid"`
 	Name             string         `json:"name" validate:"required,max=255"`

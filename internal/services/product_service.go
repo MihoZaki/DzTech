@@ -359,8 +359,19 @@ func (s *ProductService) ListProductsByCategory(ctx context.Context, categoryID 
 	}, nil
 }
 
-func (s *ProductService) ListCategories(ctx context.Context) ([]*models.Category, error) {
-	dbCategories, err := s.querier.ListCategories(ctx)
+func (s *ProductService) ListCategories(ctx context.Context, page, limit int) ([]*models.Category, error) {
+	if limit == 0 {
+		limit = 20
+	}
+	if page == 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	dbCategories, err := s.querier.ListCategories(ctx, db.ListCategoriesParams{
+		Limit:  20,
+		Offset: int32(offset),
+	})
 	if err != nil {
 		return nil, err
 	}

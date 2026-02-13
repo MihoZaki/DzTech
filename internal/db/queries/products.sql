@@ -179,20 +179,6 @@ UPDATE products
 SET deleted_at = NOW()
 WHERE id = sqlc.arg(product_id);
 
--- name: GetCategory :one
-SELECT id, name, slug, type, parent_id, created_at
-FROM categories
-WHERE id = sqlc.arg(category_id);
-
--- name: GetCategoryBySlug :one
-SELECT id, name, slug, type, parent_id, created_at
-FROM categories
-WHERE slug = sqlc.arg(slug);
-
--- name: ListCategories :many
-SELECT id, name, slug, type, parent_id, created_at
-FROM categories
-ORDER BY name;
 
 -- name: CountProducts :one
 SELECT COUNT(*) FROM products p
@@ -226,3 +212,47 @@ WHERE p.deleted_at IS NULL
 
 -- name: CountAllProducts :one
 SELECT COUNT(*) FROM products WHERE deleted_at IS NULL;
+
+-- name: CreateCategory :one
+INSERT INTO categories (
+    name, slug, type
+) VALUES (
+    $1, $2, $3
+) RETURNING id, name, slug, type, parent_id, created_at ;
+
+-- name: GetCategory :one
+SELECT id, name, slug, type, parent_id, created_at 
+FROM categories
+WHERE id = $1 ;
+
+-- name: GetCategoryBySlug :one
+SELECT id, name, slug, type, parent_id, created_at 
+FROM categories
+WHERE slug = $1 ;
+
+-- name: ListCategories :many
+SELECT id, name, slug, type, parent_id, created_at 
+FROM categories
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: UpdateCategory :one
+UPDATE categories
+SET
+    name = COALESCE($2, name),
+    slug = COALESCE($3, slug),
+    type = COALESCE($4, type)
+WHERE id = $1 
+RETURNING id, name, slug, type, parent_id, created_at ;
+
+-- name: DeleteCategory :exec
+DELETE FROM categories WHERE id = $1;
+ 
+-- name: CountCategories :one
+SELECT COUNT(*) FROM categories ;
+
+-- name: CheckCategorySlugExists :one
+SELECT EXISTS(
+    SELECT 1 FROM categories
+    WHERE slug = $1 
+) AS exists;

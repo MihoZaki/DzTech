@@ -432,7 +432,25 @@ func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 
 // Add new ListCategories endpoint
 func (h *ProductHandler) ListCategories(w http.ResponseWriter, r *http.Request) {
-	categories, err := h.productService.ListCategories(r.Context())
+
+	page := 1
+	limit := 20
+
+	pageStr := r.URL.Query().Get("page")
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	categories, err := h.productService.ListCategories(r.Context(), page, limit)
 	if err != nil {
 		slog.Error("Failed to list categories", "error", err)
 		utils.SendErrorResponse(w, http.StatusInternalServerError, "Internal Server Error", "Failed to list categories")

@@ -12,6 +12,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkCategorySlugExists = `-- name: CheckCategorySlugExists :one
+SELECT EXISTS(
+    SELECT 1 FROM categories
+    WHERE slug = $1 
+) AS exists
+`
+
+func (q *Queries) CheckCategorySlugExists(ctx context.Context, slug string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkCategorySlugExists, slug)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const checkSlugExists = `-- name: CheckSlugExists :one
 SELECT EXISTS(SELECT 1 FROM products WHERE slug = $1 AND deleted_at IS NULL) AS exists
 `
@@ -30,6 +44,17 @@ SELECT COUNT(*) FROM products WHERE deleted_at IS NULL
 
 func (q *Queries) CountAllProducts(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countAllProducts)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countCategories = `-- name: CountCategories :one
+SELECT COUNT(*) FROM categories
+`
+
+func (q *Queries) CountCategories(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countCategories)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -95,6 +120,34 @@ func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (i
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createCategory = `-- name: CreateCategory :one
+INSERT INTO categories (
+    name, slug, type
+) VALUES (
+    $1, $2, $3
+) RETURNING id, name, slug, type, parent_id, created_at
+`
+
+type CreateCategoryParams struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+	Type string `json:"type"`
+}
+
+func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error) {
+	row := q.db.QueryRow(ctx, createCategory, arg.Name, arg.Slug, arg.Type)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Type,
+		&i.ParentID,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const createProduct = `-- name: CreateProduct :one
@@ -170,6 +223,15 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 	return i, err
 }
 
+const deleteCategory = `-- name: DeleteCategory :exec
+DELETE FROM categories WHERE id = $1
+`
+
+func (q *Queries) DeleteCategory(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCategory, id)
+	return err
+}
+
 const deleteProduct = `-- name: DeleteProduct :exec
 UPDATE products
 SET deleted_at = NOW()
@@ -182,13 +244,13 @@ func (q *Queries) DeleteProduct(ctx context.Context, productID uuid.UUID) error 
 }
 
 const getCategory = `-- name: GetCategory :one
-SELECT id, name, slug, type, parent_id, created_at
+SELECT id, name, slug, type, parent_id, created_at 
 FROM categories
 WHERE id = $1
 `
 
-func (q *Queries) GetCategory(ctx context.Context, categoryID uuid.UUID) (Category, error) {
-	row := q.db.QueryRow(ctx, getCategory, categoryID)
+func (q *Queries) GetCategory(ctx context.Context, id uuid.UUID) (Category, error) {
+	row := q.db.QueryRow(ctx, getCategory, id)
 	var i Category
 	err := row.Scan(
 		&i.ID,
@@ -202,7 +264,7 @@ func (q *Queries) GetCategory(ctx context.Context, categoryID uuid.UUID) (Catego
 }
 
 const getCategoryBySlug = `-- name: GetCategoryBySlug :one
-SELECT id, name, slug, type, parent_id, created_at
+SELECT id, name, slug, type, parent_id, created_at 
 FROM categories
 WHERE slug = $1
 `
@@ -286,13 +348,19 @@ func (q *Queries) GetProductBySlug(ctx context.Context, slug string) (Product, e
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, name, slug, type, parent_id, created_at
+SELECT id, name, slug, type, parent_id, created_at 
 FROM categories
-ORDER BY name
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
-	rows, err := q.db.Query(ctx, listCategories)
+type ListCategoriesParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListCategories(ctx context.Context, arg ListCategoriesParams) ([]Category, error) {
+	rows, err := q.db.Query(ctx, listCategories, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -800,6 +868,42 @@ func (q *Queries) SearchProductsWithDiscounts(ctx context.Context, arg SearchPro
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCategory = `-- name: UpdateCategory :one
+UPDATE categories
+SET
+    name = COALESCE($2, name),
+    slug = COALESCE($3, slug),
+    type = COALESCE($4, type)
+WHERE id = $1 
+RETURNING id, name, slug, type, parent_id, created_at
+`
+
+type UpdateCategoryParams struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	Slug string    `json:"slug"`
+	Type string    `json:"type"`
+}
+
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
+	row := q.db.QueryRow(ctx, updateCategory,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.Type,
+	)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Type,
+		&i.ParentID,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const updateProduct = `-- name: UpdateProduct :one
