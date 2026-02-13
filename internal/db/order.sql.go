@@ -646,7 +646,7 @@ func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (Order
 
 const updateOrderStatus = `-- name: UpdateOrderStatus :one
 UPDATE orders
-SET status = $1,
+SET status = $1::TEXT ,
     updated_at = NOW(),
     completed_at = CASE
         WHEN $1 IN ('delivered', 'cancelled') AND completed_at IS NULL THEN NOW()

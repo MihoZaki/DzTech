@@ -95,7 +95,7 @@ RETURNING id, user_id, user_full_name, status, total_amount_cents, payment_metho
 -- name: UpdateOrderStatus :one
 -- Updates the status of an order and manages completion/cancellation timestamps.
 UPDATE orders
-SET status = sqlc.arg(status),
+SET status = sqlc.arg(status)::TEXT ,
     updated_at = NOW(),
     completed_at = CASE
         WHEN sqlc.arg(status) IN ('delivered', 'cancelled') AND completed_at IS NULL THEN NOW()
