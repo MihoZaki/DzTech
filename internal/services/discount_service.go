@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -492,8 +493,6 @@ func (s *DiscountService) LinkDiscountToProduct(ctx context.Context, discountID,
 	productCacheKeyByID := fmt.Sprintf(CacheKeyProductByID, productID.String())
 	if err := s.cache.Del(ctx, productCacheKeyByID).Err(); err != nil {
 		s.logger.Error("Failed to invalidate product cache by ID after linking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID, "error", err)
-		// Depending on your tolerance for stale data, you might choose to return the error here
-		// or just log it and proceed. For now, let's just log.
 	} else {
 		s.logger.Debug("Product cache invalidated by ID after linking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID)
 	}
@@ -518,7 +517,6 @@ func (s *DiscountService) UnlinkDiscountFromProduct(ctx context.Context, discoun
 	productCacheKeyByID := fmt.Sprintf(CacheKeyProductByID, productID.String())
 	if err := s.cache.Del(ctx, productCacheKeyByID).Err(); err != nil {
 		s.logger.Error("Failed to invalidate product cache by ID after unlinking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID, "error", err)
-		// Log only, don't fail the unlink operation itself.
 	} else {
 		s.logger.Debug("Product cache invalidated by ID after unlinking discount", "product_id", productID, "discount_id", discountID, "key", productCacheKeyByID)
 	}
@@ -667,8 +665,11 @@ func CoalesceBool(a *bool, b bool) bool {
 	return b
 }
 
-// IsUniqueViolation checks if the error is a PostgreSQL unique_violation (error code 23505).
-// You might have a utility function for this already.
 func IsUniqueViolation(err error, constraintName string) bool {
-	return false // Placeholder - implement with pgconn
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		// Check for unique_violation code and specific constraint name
+		return pgErr.Code == "23505" && pgErr.ConstraintName == constraintName
+	}
+	return false
 }

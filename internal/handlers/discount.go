@@ -341,6 +341,11 @@ func (h *DiscountHandler) LinkDiscountToProduct(w http.ResponseWriter, r *http.R
 	err = h.service.LinkDiscountToProduct(r.Context(), discountID, req.ProductID)
 	if err != nil {
 		h.logger.Error("Failed to link discount to product", "discount_id", discountID, "product_id", req.ProductID, "error", err)
+		if strings.Contains(err.Error(), "already linked to product") {
+
+			http.Error(w, `{"error": "Conflict", "message": "The discount is already linked to the specified product"}`, http.StatusConflict)
+			return
+		}
 		http.Error(w, `{"error": "Internal Server Error", "message": "Failed to link discount to product"}`, http.StatusInternalServerError)
 		return
 	}
