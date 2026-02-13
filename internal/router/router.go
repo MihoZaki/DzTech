@@ -50,7 +50,7 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	userService := services.NewUserService(querier)
 	productService := services.NewProductService(querier, storer, redisClient, slog.Default())
 	cartService := services.NewCartService(querier, productService, slog.Default())
-	orderService := services.NewOrderService(querier, pool, cartService, productService, slog.Default())
+	orderService := services.NewOrderService(querier, pool, cartService, redisClient, productService, slog.Default())
 	authService := services.NewAuthService(querier, userService, cartService, cfg.JWTSecret, slog.Default())
 	deliveryService := services.NewDeliveryServiceService(querier, slog.Default())
 	adminUserService := services.NewAdminUserService(querier, slog.Default())

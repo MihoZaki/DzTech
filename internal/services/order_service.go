@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 var (
@@ -21,17 +22,19 @@ var (
 // OrderService handles business logic for orders.
 type OrderService struct {
 	querier        db.Querier
-	pool           *pgxpool.Pool   // Add pool for transactions
-	cartService    *CartService    // Required for checkout logic
+	pool           *pgxpool.Pool // Add pool for transactions
+	cartService    *CartService  // Required for checkout logic
+	cache          *redis.Client
 	productService *ProductService // Required for fetching product details/prices during checkout
 	logger         *slog.Logger
 }
 
-func NewOrderService(querier db.Querier, pool *pgxpool.Pool, cartService *CartService, productService *ProductService, logger *slog.Logger) *OrderService {
+func NewOrderService(querier db.Querier, pool *pgxpool.Pool, cartService *CartService, cache *redis.Client, productService *ProductService, logger *slog.Logger) *OrderService {
 	return &OrderService{
 		querier:        querier,
 		pool:           pool, // Store the pool
 		cartService:    cartService,
+		cache:          cache,
 		productService: productService,
 		logger:         logger,
 	}
@@ -359,40 +362,79 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, orderID uuid.UUID,
 
 	// 2. Validate the requested status transition
 	if !isValidStatusTransition(currentOrder.Status, req.Status) {
-		return nil, fmt.Errorf("invalid status transition: %s -> %s", currentOrder.Status, req.Status)
+		return nil, &StatusTransitionError{
+			CurrentStatus:   currentOrder.Status,
+			RequestedStatus: req.Status,
+			Msg:             fmt.Sprintf("transition from '%s' to '%s' is not allowed", currentOrder.Status, req.Status),
+		}
 	}
 
-	// 3. Determine if stock deduction is needed based on the transition
+	// 3. Determine if stock deduction or release is needed based on the transition
 	needsStockDeduction := (currentOrder.Status == "pending" && req.Status == "confirmed")
+	needsStockRelease := (req.Status == "cancelled") // Stock release happens when the *new* status is 'cancelled'
+
+	// --- Fetch Order Items for Cache Invalidation (Do this *before* the transaction) ---
+	var orderItemsForCache []db.OrderItem
+	if needsStockDeduction || needsStockRelease {
+		orderItemsForCache, err = s.querier.GetOrderItemsByOrderID(ctx, orderID) // Fetch *outside* the main TX to get items as they were
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch order items for cache invalidation: %w", err)
+		}
+	}
+	// --- END Fetch Order Items for Cache Invalidation ---
 
 	queries, ok := s.querier.(*db.Queries)
 	if !ok {
 		return nil, errors.New("querier type assertion to *db.Queries failed, cannot create transactional querier")
 	}
 	var updatedOrder db.Order
-	if needsStockDeduction {
-		// 4. Begin transaction for stock deduction and status update
-		tx, err := s.pool.Begin(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to begin transaction for status update and stock deduction: %w", err)
+
+	// 4. Begin transaction
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction for status update: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			s.logger.Error("Error during transaction rollback in UpdateOrderStatus", "error", err)
 		}
-		defer func() {
-			if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-				s.logger.Error("Error during transaction rollback in UpdateOrderStatus", "error", err)
-			}
-		}()
+	}()
 
-		txQuerier := queries.WithTx(tx) // Use the concrete type's WithTx method via the interface variable
+	txQuerier := queries.WithTx(tx)
 
-		// 5. Fetch order items within the transaction
-		orderItems, err := txQuerier.GetOrderItemsByOrderID(ctx, orderID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch order items for stock deduction: %w", err)
-		}
+	// 5. Handle Stock Release (if cancelling)
+	if needsStockRelease {
+		// 5a. Fetch order items within the transaction (already fetched outside for cache, but ensure TX consistency if needed)
+		// orderItems, err := txQuerier.GetOrderItemsByOrderID(ctx, orderID) // Use txQuerier if needed within TX for absolute consistency
+		orderItems := orderItemsForCache // Use the list fetched before the TX started
 
-		// 6. Perform stock deduction for each item within the transaction using the new query
+		// 5b. Perform stock release for each item within the transaction using the IncrementStock query
 		for _, item := range orderItems {
+			// Call the existing SQLC-generated query to increment stock
+			updatedProduct, err := txQuerier.IncrementStock(ctx, db.IncrementStockParams{
+				ProductID:       item.ProductID,
+				IncrementAmount: item.Quantity, // item.Quantity is int32
+			})
 
+			if err != nil {
+				// Some database error occurred during stock increment
+				// Rollback happens via defer
+				return nil, fmt.Errorf("failed to release stock for product %s (ID: %s) during cancellation (status update): %w", item.ProductName, item.ProductID, err)
+			}
+			// Optionally log the new stock level if needed
+			s.logger.Debug("Stock incremented for product during order cancellation (via status update)",
+				"product_id", item.ProductID, "new_stock", updatedProduct.StockQuantity)
+		}
+	}
+
+	// 6. Handle Stock Deduction (if confirming)
+	if needsStockDeduction {
+		// 6a. Fetch order items within the transaction (already fetched outside for cache, but ensure TX consistency if needed)
+		// orderItems, err := txQuerier.GetOrderItemsByOrderID(ctx, orderID) // Use txQuerier if needed within TX for absolute consistency
+		orderItems := orderItemsForCache // Use the list fetched before the TX started
+
+		// 6b. Perform stock deduction for each item within the transaction using the DecrementStockIfSufficient query
+		for _, item := range orderItems {
 			updatedProduct, err := txQuerier.DecrementStockIfSufficient(ctx, db.DecrementStockIfSufficientParams{
 				ProductID:       item.ProductID,
 				DecrementAmount: item.Quantity,
@@ -400,69 +442,60 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, orderID uuid.UUID,
 
 			if err != nil {
 				// Check if the error is due to no rows being affected (insufficient stock)
-				// The exact error type might vary, but pgx usually returns pgx.ErrNoRows if RETURNING is used and no row matches
 				if errors.Is(err, pgx.ErrNoRows) {
 					// This means the WHERE condition (stock >= decrement_amount) failed for this product
 					// Rollback happens via defer
-					return nil, fmt.Errorf("insufficient stock for product %s (ID: %s) during confirmation", item.ProductName, item.ProductID)
+					return nil, fmt.Errorf("insufficient stock for product %s (ID: %s) during confirmation (status update)", item.ProductName, item.ProductID)
 				}
 				// Some other database error occurred
 				// Rollback happens via defer
-				return nil, fmt.Errorf("failed to update stock for product %s (ID: %s) during confirmation: %w", item.ProductName, item.ProductID, err)
+				return nil, fmt.Errorf("failed to update stock for product %s (ID: %s) during confirmation (status update): %w", item.ProductName, item.ProductID, err)
 			}
 			// Optionally log the new stock level if needed
-			s.logger.Debug("Stock decremented for product during order confirmation",
+			s.logger.Debug("Stock decremented for product during order confirmation (via status update)",
 				"product_id", item.ProductID, "new_stock", updatedProduct.StockQuantity)
-		}
-
-		// 7. Update the order status within the same transaction
-		updatedOrder, err = txQuerier.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-			Status:  req.Status,
-			OrderID: orderID,
-		})
-		if err != nil {
-			// Rollback happens via defer
-			return nil, fmt.Errorf("failed to update order status in transaction: %w", err)
-		}
-
-		// 8. Commit the transaction
-		if err := tx.Commit(ctx); err != nil {
-			return nil, fmt.Errorf("failed to commit transaction for status update and stock deduction: %w", err)
-		}
-
-	} else {
-		// 9. If no stock deduction needed, update status directly in a simple transaction or just the querier
-		// For consistency and to ensure atomicity of the status change itself, use a transaction.
-		tx, err := s.pool.Begin(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to begin transaction for status update: %w", err)
-		}
-		defer func() {
-			if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-				s.logger.Error("Error during transaction rollback in UpdateOrderStatus (simple update)", "error", err)
-			}
-		}()
-
-		txQuerier := queries.WithTx(tx)
-
-		updatedOrder, err = txQuerier.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-			Status:  req.Status,
-			OrderID: orderID,
-		})
-		if err != nil {
-			// Rollback happens via defer
-			return nil, fmt.Errorf("failed to update order status: %w", err)
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return nil, fmt.Errorf("failed to commit transaction for status update: %w", err)
 		}
 	}
 
-	// 10. Convert the updated db.Order to models.Order using the helper
+	// 7. Update the order status within the same transaction
+	updatedOrder, err = txQuerier.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
+		Status:  req.Status, // Use the requested status
+		OrderID: orderID,
+	})
+	if err != nil {
+		// Rollback happens via defer
+		return nil, fmt.Errorf("failed to update order status in transaction: %w", err)
+	}
+
+	// 8. Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction for status update and potential stock change: %w", err)
+	}
+
+	// --- Invalidate Product Caches After Successful Transaction ---
+	// Only invalidate if stock was actually changed
+	if needsStockDeduction || needsStockRelease {
+		for _, item := range orderItemsForCache { // Use the list fetched before the TX
+			productID := item.ProductID
+
+			// Invalidate by Product ID
+			productCacheKeyByID := fmt.Sprintf(CacheKeyProductByID, productID.String())
+			if err := s.cache.Del(ctx, productCacheKeyByID).Err(); err != nil {
+				s.logger.Error("Failed to invalidate product cache by ID after stock change (status update)",
+					"product_id", productID, "order_id", orderID, "status_change", fmt.Sprintf("%s->%s", currentOrder.Status, req.Status), "key", productCacheKeyByID, "error", err)
+				// Log but don't fail the order status update itself
+			} else {
+				s.logger.Debug("Product cache invalidated by ID after stock change (status update)",
+					"product_id", productID, "order_id", orderID, "status_change", fmt.Sprintf("%s->%s", currentOrder.Status, req.Status), "key", productCacheKeyByID)
+			}
+		}
+	}
+	// --- END Invalidate Product Caches After Successful Transaction ---
+
+	// 9. Convert the updated db.Order to models.Order using the helper
 	updOrder := s.dbOrderToModelOrder(updatedOrder)
 
-	// 11. Return the updated order details
+	// 10. Return the updated order details
 	return &updOrder, nil
 }
 
