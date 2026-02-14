@@ -26,7 +26,6 @@ type AdminUpdateUserRequest struct {
 
 // AdminActivateUserRequest represents data for activating a user (currently empty, could add audit reason later).
 type AdminActivateUserRequest struct {
-	// Potentially add fields like 'reason' for activation if needed
 }
 
 // AdminDeactivateUserRequest represents data for deactivating a user (currently empty, could add audit reason later).

@@ -80,6 +80,8 @@ const countUsers = `-- name: CountUsers :one
 SELECT COUNT(*) AS total_users
 FROM users
 WHERE 
+    is_admin = false
+    AND
   -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
   CASE 
     WHEN $1::boolean THEN deleted_at IS NULL 
@@ -232,6 +234,8 @@ const listUsers = `-- name: ListUsers :many
 SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
 FROM users
 WHERE 
+    is_admin = false
+    AND
   -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
   CASE 
     WHEN $1::boolean THEN deleted_at IS NULL 
@@ -293,6 +297,8 @@ FROM
 LEFT JOIN
     orders o ON u.id = o.user_id
 WHERE
+is_admin = false
+AND
   CASE
     WHEN $1::boolean THEN u.deleted_at IS NULL
     WHEN NOT $1::boolean THEN TRUE

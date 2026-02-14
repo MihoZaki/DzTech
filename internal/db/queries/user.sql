@@ -21,6 +21,8 @@ WHERE id = $1 AND deleted_at IS NULL;
 SELECT id, email, password_hash, full_name, is_admin, created_at, updated_at, deleted_at
 FROM users
 WHERE 
+    is_admin = false
+    AND
   -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
   CASE 
     WHEN @active_only::boolean THEN deleted_at IS NULL 
@@ -36,6 +38,8 @@ LIMIT @page_limit::int4 OFFSET @page_offset::int4;
 SELECT COUNT(*) AS total_users
 FROM users
 WHERE 
+    is_admin = false
+    AND
   -- Filter by active status (NULL means active, NOT NULL means soft-deleted/inactive)
   CASE 
     WHEN @active_only::boolean THEN deleted_at IS NULL 
@@ -149,6 +153,8 @@ FROM
 LEFT JOIN
     orders o ON u.id = o.user_id
 WHERE
+is_admin = false
+AND
   CASE
     WHEN @active_only::boolean THEN u.deleted_at IS NULL
     WHEN NOT @active_only::boolean THEN TRUE

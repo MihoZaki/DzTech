@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/MihoZaki/DzTech/internal/db"
@@ -30,13 +31,15 @@ func NewAdminUserService(querier db.Querier, logger *slog.Logger) *AdminUserServ
 }
 
 // ListUsers retrieves a list of users, optionally filtered by active status and paginated.
-func (s *AdminUserService) ListUsers(ctx context.Context, activeOnly bool, limit, offset int) ([]models.AdminUserListItem, error) {
+// Returns a PaginatedResponse containing the user list and pagination metadata.
+func (s *AdminUserService) ListUsers(ctx context.Context, activeOnly bool, page, limit int) (*models.PaginatedResponse, error) {
 	if limit <= 0 {
 		limit = 20 // Default limit
 	}
-	if offset < 0 {
-		offset = 0 // Default offset
+	if page <= 0 {
+		page = 1 // Default page
 	}
+	offset := (page - 1) * limit
 
 	params := db.ListUsersWithListDetailsParams{ // Use the new query's params struct
 		ActiveOnly: activeOnly,
@@ -54,7 +57,23 @@ func (s *AdminUserService) ListUsers(ctx context.Context, activeOnly bool, limit
 		apiUsers[i] = s.toAdminUserListItemModelFromListRow(dbUser) // Use the new helper
 	}
 
-	return apiUsers, nil
+	total, err := s.querier.CountUsers(ctx, activeOnly)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count users for pagination: %w", err)
+	}
+	// ---
+
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+
+	paginatedResponse := &models.PaginatedResponse{
+		Data:       apiUsers,   // The list of users
+		Page:       page,       // The current page number
+		Limit:      limit,      // The number of items per page
+		Total:      total,      // The total number of users matching the filters
+		TotalPages: totalPages, // The total number of pages
+	}
+
+	return paginatedResponse, nil
 }
 
 // GetUser retrieves a specific user's details for admin view.

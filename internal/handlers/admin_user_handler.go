@@ -36,40 +36,41 @@ func (h *AdminUserHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/{id}/deactivate", h.DeactivateUser) // POST /api/v1/admin/users/{id}/deactivate
 }
 
-// ListUsers handles listing users.
+// ListUsers handles the request to list users with optional filtering and pagination.
 func (h *AdminUserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters for filtering and pagination
 	activeOnlyStr := r.URL.Query().Get("active_only")
-	activeOnly := activeOnlyStr == "true" // Default to false if not provided or not "true"
+	activeOnly := false // Default to false (include both active and inactive)
+	if activeOnlyStr == "true" || activeOnlyStr == "1" {
+		activeOnly = true
+	}
+
 	pageStr := r.URL.Query().Get("page")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1 // Default to page 1
+	}
+
 	limitStr := r.URL.Query().Get("limit")
-
-	page := 1 // Default page
-	if pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		} // else, keep default
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = 20 // Default limit
+	}
+	if limit > 100 { // Example maximum limit
+		limit = 100
 	}
 
-	limit := 20 // Default limit
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		} // else, keep default
-	}
-
-	offset := (page - 1) * limit
-
-	users, err := h.service.ListUsers(r.Context(), activeOnly, limit, offset)
+	paginatedResult, err := h.service.ListUsers(r.Context(), activeOnly, page, limit)
 	if err != nil {
 		h.logger.Error("Failed to list users", "error", err, "active_only", activeOnly, "page", page, "limit", limit)
-		http.Error(w, "Failed to retrieve users", http.StatusInternalServerError)
+		http.Error(w, "Failed to list users", http.StatusInternalServerError)
 		return
 	}
 
+	// Send the PaginatedResponse as JSON
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) // 200 OK
-	if err := json.NewEncoder(w).Encode(users); err != nil {
+	w.WriteHeader(http.StatusOK) // Or appropriate status code
+	if err := json.NewEncoder(w).Encode(paginatedResult); err != nil {
 		h.logger.Error("Failed to encode ListUsers response", "error", err)
 	}
 }
