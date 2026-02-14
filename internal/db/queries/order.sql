@@ -175,3 +175,16 @@ LEFT JOIN
 WHERE
     ci.cart_id = sqlc.arg(cart_id) -- Fetch items from the specific cart
     AND ci.deleted_at IS NULL; -- Only include items not marked as deleted in the cart
+ 
+-- name: CountUserOrders :one
+-- Counts orders for a specific user based on optional status filter.
+-- NOTE: UserID is a specific user to count for, FilterStatus is optional.
+SELECT COUNT(*) FROM orders
+WHERE user_id = sqlc.arg(user_id) -- Fixed user ID, not a filter
+  AND (sqlc.narg(filter_status)::TEXT IS NULL OR status = sqlc.narg(filter_status)); -- Nullable status filter
+
+-- name: CountAllOrders :one
+-- Counts all orders based on optional user and status filters.
+SELECT COUNT(*) FROM orders
+WHERE (sqlc.arg(filter_user_id)::UUID ='00000000-0000-0000-0000-000000000000'OR user_id = sqlc.arg(filter_user_id)) -- Nullable user filter
+  AND (sqlc.arg(filter_status)::TEXT = '' OR status = sqlc.arg(filter_status)); -- Nullable status filter

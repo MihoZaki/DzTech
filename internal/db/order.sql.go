@@ -55,6 +55,49 @@ func (q *Queries) CancelOrder(ctx context.Context, orderID uuid.UUID) (Order, er
 	return i, err
 }
 
+const countAllOrders = `-- name: CountAllOrders :one
+
+SELECT COUNT(*) FROM orders
+WHERE ($1::UUID ='00000000-0000-0000-0000-000000000000'OR user_id = $1) -- Nullable user filter
+  AND ($2::TEXT = '' OR status = $2)
+`
+
+type CountAllOrdersParams struct {
+	FilterUserID uuid.UUID `json:"filter_user_id"`
+	FilterStatus string    `json:"filter_status"`
+}
+
+// Nullable status filter
+// Counts all orders based on optional user and status filters.
+func (q *Queries) CountAllOrders(ctx context.Context, arg CountAllOrdersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllOrders, arg.FilterUserID, arg.FilterStatus)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUserOrders = `-- name: CountUserOrders :one
+ 
+SELECT COUNT(*) FROM orders
+WHERE user_id = $1 -- Fixed user ID, not a filter
+  AND ($2::TEXT IS NULL OR status = $2)
+`
+
+type CountUserOrdersParams struct {
+	UserID       uuid.UUID `json:"user_id"`
+	FilterStatus *string   `json:"filter_status"`
+}
+
+// Only include items not marked as deleted in the cart
+// Counts orders for a specific user based on optional status filter.
+// NOTE: UserID is a specific user to count for, FilterStatus is optional.
+func (q *Queries) CountUserOrders(ctx context.Context, arg CountUserOrdersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserOrders, arg.UserID, arg.FilterStatus)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrder = `-- name: CreateOrder :one
 INSERT INTO orders (
     user_id, user_full_name, status, total_amount_cents, payment_method,

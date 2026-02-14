@@ -39,6 +39,9 @@ type Querier interface {
 	CheckSlugExists(ctx context.Context, slug string) (bool, error)
 	CleanupExpiredRefreshTokens(ctx context.Context) error
 	ClearCart(ctx context.Context, cartID uuid.UUID) error
+	// Nullable status filter
+	// Counts all orders based on optional user and status filters.
+	CountAllOrders(ctx context.Context, arg CountAllOrdersParams) (int64, error)
 	CountAllProducts(ctx context.Context) (int64, error)
 	CountCategories(ctx context.Context) (int64, error)
 	// Counts discounts based on the same filters as ListDiscounts.
@@ -47,6 +50,10 @@ type Querier interface {
 	// Counts users matching the search term, optionally filtered by active status.
 	// Useful for pagination metadata with search.
 	CountSearchUsers(ctx context.Context, arg CountSearchUsersParams) (int64, error)
+	// Only include items not marked as deleted in the cart
+	// Counts orders for a specific user based on optional status filter.
+	// NOTE: UserID is a specific user to count for, FilterStatus is optional.
+	CountUserOrders(ctx context.Context, arg CountUserOrdersParams) (int64, error)
 	// Counts total users, optionally filtered by active status (soft-deleted).
 	// Useful for pagination metadata.
 	CountUsers(ctx context.Context, activeOnly bool) (int64, error)

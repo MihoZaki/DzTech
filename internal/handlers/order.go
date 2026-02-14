@@ -214,7 +214,8 @@ func (h *OrderHandler) ListUserOrders(w http.ResponseWriter, r *http.Request) {
 		} // else, keep default
 	}
 
-	orders, err := h.service.ListUserOrders(r.Context(), *userIDVal, statusFilter, page, limit)
+	// Call the service method which now returns PaginatedResponse
+	paginatedResult, err := h.service.ListUserOrders(r.Context(), *userIDVal, statusFilter, page, limit)
 	if err != nil {
 		h.logger.Error("Failed to list user orders", "error", err, "user_id", *userIDVal)
 		http.Error(w, "Failed to retrieve orders", http.StatusInternalServerError)
@@ -223,7 +224,8 @@ func (h *OrderHandler) ListUserOrders(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK) // 200 OK
-	if err := json.NewEncoder(w).Encode(orders); err != nil {
+	// Encode the PaginatedResponse struct directly
+	if err := json.NewEncoder(w).Encode(paginatedResult); err != nil {
 		h.logger.Error("Failed to encode ListUserOrders response", "error", err)
 	}
 }
@@ -272,7 +274,8 @@ func (h *OrderHandler) ListAllOrders(w http.ResponseWriter, r *http.Request) {
 		} // else, keep default
 	}
 
-	orders, err := h.service.ListAllOrders(r.Context(), userFilterID, statusFilter, page, limit)
+	// Call the service method which now returns PaginatedResponse
+	paginatedResult, err := h.service.ListAllOrders(r.Context(), userFilterID, statusFilter, page, limit)
 	if err != nil {
 		h.logger.Error("Failed to list all orders", "error", err, "user_id", *userIDVal) // Log the admin user ID making the request
 		http.Error(w, "Failed to retrieve orders", http.StatusInternalServerError)
@@ -281,7 +284,8 @@ func (h *OrderHandler) ListAllOrders(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK) // 200 OK
-	if err := json.NewEncoder(w).Encode(orders); err != nil {
+	// Encode the PaginatedResponse struct directly
+	if err := json.NewEncoder(w).Encode(paginatedResult); err != nil {
 		h.logger.Error("Failed to encode ListAllOrders response", "error", err)
 	}
 }

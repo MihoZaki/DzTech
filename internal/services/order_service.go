@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 
 	"github.com/MihoZaki/DzTech/internal/db"
 	"github.com/MihoZaki/DzTech/internal/models"
@@ -264,8 +265,7 @@ func (s *OrderService) dbOrderToModelOrder(dbOrder db.Order) models.Order {
 }
 
 // ListUserOrders retrieves a paginated list of orders for a specific user, optionally filtered by status.
-// It excludes cancelled orders.
-func (s *OrderService) ListUserOrders(ctx context.Context, userID uuid.UUID, statusFilter string, page, limit int) ([]models.Order, error) {
+func (s *OrderService) ListUserOrders(ctx context.Context, userID uuid.UUID, statusFilter string, page, limit int) (*models.PaginatedResponse, error) {
 	if limit <= 0 {
 		limit = 20 // Default limit
 	}
@@ -291,10 +291,46 @@ func (s *OrderService) ListUserOrders(ctx context.Context, userID uuid.UUID, sta
 		apiOrders[i] = s.dbOrderToModelOrder(dbOrder)
 	}
 
-	return apiOrders, nil
+	var statusFilterPtr *string
+	if statusFilter != "" {
+		statusFilterPtr = &statusFilter
+	}
+	// UserID is required, so we pass it directly. FilterStatus is optional, so we pass the pointer.
+	countParams := db.CountUserOrdersParams{
+		UserID:       userID,          // Pass the specific user ID, required
+		FilterStatus: statusFilterPtr, // Use the nullable pointer for status filter
+	}
+	// ---
+
+	// --- DEBUG LOGGING ---
+	s.logger.Debug("Calling CountUserOrders query", "params", countParams)
+	// ---
+
+	total, err := s.querier.CountUserOrders(ctx, countParams)
+
+	// --- DEBUG LOGGING ---
+	s.logger.Debug("CountUserOrders query result", "total", total, "error", err)
+	// ---
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to count user orders for pagination: %w", err)
+	}
+	// --- (rest of the method) ---
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+
+	paginatedResponse := &models.PaginatedResponse{
+		Data:       apiOrders,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	}
+
+	return paginatedResponse, nil
 }
 
-func (s *OrderService) ListAllOrders(ctx context.Context, userIDFilter uuid.UUID, statusFilter string, page, limit int) ([]models.Order, error) {
+// ListAllOrders retrieves a paginated list of *all* orders, optionally filtered by user ID and/or status.
+func (s *OrderService) ListAllOrders(ctx context.Context, userIDFilter uuid.UUID, statusFilter string, page, limit int) (*models.PaginatedResponse, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -305,8 +341,8 @@ func (s *OrderService) ListAllOrders(ctx context.Context, userIDFilter uuid.UUID
 
 	// Prepare parameters for the ListAllOrders query
 	params := db.ListAllOrdersParams{
-		FilterUserID: userIDFilter,
-		FilterStatus: statusFilter,
+		FilterUserID: userIDFilter, // Pass the UUID (even if Nil) for List query - it handles uuid.Nil correctly if written properly
+		FilterStatus: statusFilter, // Pass the string (even if empty) for List query - it handles "" correctly if written properly
 		PageOffset:   int32(offset),
 		PageLimit:    int32(limit),
 	}
@@ -320,7 +356,39 @@ func (s *OrderService) ListAllOrders(ctx context.Context, userIDFilter uuid.UUID
 		apiOrders[i] = s.dbOrderToModelOrder(dbOrder)
 	}
 
-	return apiOrders, nil
+	// --- COUNT TOTAL MATCHING RECORDS ---
+
+	countParams := db.CountAllOrdersParams{
+		FilterUserID: userIDFilter, // Use the nullable pointer (nil if uuid.Nil)
+		FilterStatus: statusFilter, // Use the nullable pointer (nil if "")
+	}
+	// ---
+
+	// --- DEBUG LOGGING ---
+	s.logger.Debug("Calling CountAllOrders query", "params", countParams)
+	// ---
+
+	total, err := s.querier.CountAllOrders(ctx, countParams)
+
+	// --- DEBUG LOGGING ---
+	s.logger.Debug("CountAllOrders query result", "total", total, "error", err)
+	// ---
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to count all orders for pagination: %w", err)
+	}
+	// ---
+
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+
+	paginatedResponse := &models.PaginatedResponse{
+		Data:       apiOrders,
+		Page:       page,
+		Limit:      limit,
+		Total:      total,
+		TotalPages: totalPages,
+	}
+	return paginatedResponse, nil
 }
 
 // Valid status transitions
