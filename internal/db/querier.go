@@ -8,7 +8,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -216,7 +215,7 @@ type Querier interface {
 	GetTopSellingProducts(ctx context.Context, arg GetTopSellingProductsParams) ([]GetTopSellingProductsRow, error)
 	// --- Sales Performance ---
 	// Calculates the total revenue from all delivered orders within a given time range.
-	GetTotalRevenue(ctx context.Context, startDate pgtype.Timestamptz) (int64, error)
+	GetTotalRevenue(ctx context.Context, arg GetTotalRevenueParams) (int64, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	// Fetches a specific user by ID along with order count and last order date.

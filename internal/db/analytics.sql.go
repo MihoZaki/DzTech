@@ -477,13 +477,18 @@ JOIN
     order_items oi ON o.id = oi.order_id
 WHERE
     o.status = 'delivered' -- Only delivered orders contribute to revenue
-    AND o.created_at BETWEEN $1 AND end_date
+    AND o.created_at BETWEEN $1 AND $2
 `
+
+type GetTotalRevenueParams struct {
+	StartDate pgtype.Timestamptz `json:"start_date"`
+	EndDate   pgtype.Timestamptz `json:"end_date"`
+}
 
 // --- Sales Performance ---
 // Calculates the total revenue from all delivered orders within a given time range.
-func (q *Queries) GetTotalRevenue(ctx context.Context, startDate pgtype.Timestamptz) (int64, error) {
-	row := q.db.QueryRow(ctx, getTotalRevenue, startDate)
+func (q *Queries) GetTotalRevenue(ctx context.Context, arg GetTotalRevenueParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getTotalRevenue, arg.StartDate, arg.EndDate)
 	var total_revenue_cents int64
 	err := row.Scan(&total_revenue_cents)
 	return total_revenue_cents, err

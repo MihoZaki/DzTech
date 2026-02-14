@@ -10,7 +10,7 @@ JOIN
     order_items oi ON o.id = oi.order_id
 WHERE
     o.status = 'delivered' -- Only delivered orders contribute to revenue
-    AND o.created_at BETWEEN @start_date AND end_date; -- $1 = start_date, $2 = end_date
+    AND o.created_at BETWEEN @start_date AND @end_date; -- $1 = start_date, $2 = end_date
 
 -- name: GetSalesVolume :one
 -- Counts the total number of delivered orders within a given time range.
