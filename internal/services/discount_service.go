@@ -580,8 +580,8 @@ func (s *DiscountService) mapDbDiscountToModel(dbDisc db.Discount) *models.Disco
 		Code:               dbDisc.Code,
 		DiscountType:       models.DiscountType(dbDisc.DiscountType),
 		DiscountValue:      dbDisc.DiscountValue,
-		MinOrderValueCents: *dbDisc.MinOrderValueCents, // Assumes it's not null based on DB schema default
-		CurrentUses:        int(*dbDisc.CurrentUses),   // Assumes it's not null based on DB schema default
+		MinOrderValueCents: dbDisc.MinOrderValueCents, // Assumes it's not null based on DB schema default
+		CurrentUses:        int(*dbDisc.CurrentUses),  // Assumes it's not null based on DB schema default
 		ValidFrom:          dbDisc.ValidFrom.Time,
 		ValidUntil:         dbDisc.ValidUntil.Time,
 		IsActive:           dbDisc.IsActive,

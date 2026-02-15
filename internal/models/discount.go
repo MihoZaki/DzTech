@@ -24,7 +24,7 @@ type Discount struct {
 	Description        *string      `json:"description,omitempty"` // Nullable description
 	DiscountType       DiscountType `json:"discount_type"`         // Either 'percentage' or 'fixed'
 	DiscountValue      int64        `json:"discount_value"`        // e.g., 10 for 10%, 500 for $5
-	MinOrderValueCents int64        `json:"min_order_value_cents"` // Minimum order value (default 0)
+	MinOrderValueCents *int64       `json:"min_order_value_cents"` // Minimum order value (default 0)
 	MaxUses            *int         `json:"max_uses,omitempty"`    // Nullable maximum uses (NULL means unlimited)
 	CurrentUses        int          `json:"current_uses"`          // Counter for current usage (default 0)
 	ValidFrom          time.Time    `json:"valid_from"`            // Start date for the discount
@@ -38,7 +38,7 @@ type Discount struct {
 
 // CreateDiscountRequest holds data for creating a new discount.
 type CreateDiscountRequest struct {
-	Code               string       `json:"code" validate:"required,alphanum,max=50"`                   // Required, alphanumeric, max 50 chars
+	Code               string       `json:"code" validate:"required,max=50"`                            // Required, alphanumeric, max 50 chars
 	Description        *string      `json:"description,omitempty"`                                      // Optional description
 	DiscountType       DiscountType `json:"discount_type" validate:"required,oneof=percentage fixed"`   // Required, must be percentage or fixed
 	DiscountValue      int64        `json:"discount_value" validate:"required,min=0"`                   // Required, non-negative
@@ -52,15 +52,15 @@ type CreateDiscountRequest struct {
 // UpdateDiscountRequest holds data for updating an existing discount.
 // All fields are pointers, allowing partial updates.
 type UpdateDiscountRequest struct {
-	Code               *string       `json:"code,omitempty" validate:"omitempty,alphanum,max=50"`                   // Optional, alphanumeric, max 50 chars
-	Description        *string       `json:"description,omitempty"`                                                 // Optional description
-	DiscountType       *DiscountType `json:"discount_type,omitempty" validate:"omitempty,oneof=percentage fixed"`   // Optional, must be percentage or fixed
-	DiscountValue      *int64        `json:"discount_value,omitempty" validate:"omitempty,min=0"`                   // Optional, non-negative
-	MinOrderValueCents *int64        `json:"min_order_value_cents,omitempty" validate:"omitempty,min=0"`            // Optional, non-negative
-	MaxUses            *int          `json:"max_uses,omitempty" validate:"omitempty,min=1"`                         // Optional, minimum 1 if provided
-	ValidFrom          *time.Time    `json:"valid_from,omitempty" validate:"omitempty,datetime"`                    // Optional datetime
-	ValidUntil         *time.Time    `json:"valid_until,omitempty" validate:"omitempty,datetime,gtfield=ValidFrom"` // Optional datetime, must be after ValidFrom if both are provided
-	IsActive           *bool         `json:"is_active,omitempty"`                                                   // Optional (true/false)
+	Code               *string       `json:"code,omitempty" validate:"omitempty,max=50"`                          // Optional, alphanumeric, max 50 chars
+	Description        *string       `json:"description,omitempty"`                                               // Optional description
+	DiscountType       *DiscountType `json:"discount_type,omitempty" validate:"omitempty,oneof=percentage fixed"` // Optional, must be percentage or fixed
+	DiscountValue      *int64        `json:"discount_value,omitempty" validate:"omitempty,min=0"`                 // Optional, non-negative
+	MinOrderValueCents *int64        `json:"min_order_value_cents,omitempty" validate:"omitempty,min=0"`          // Optional, non-negative
+	MaxUses            *int          `json:"max_uses,omitempty" validate:"omitempty,min=1"`                       // Optional, minimum 1 if provided
+	ValidFrom          *time.Time    `json:"valid_from,omitempty" validate:"omitempty"`                           // Optional datetime
+	ValidUntil         *time.Time    `json:"valid_until,omitempty" validate:"omitempty,gtfield=ValidFrom"`        // Optional datetime, must be after ValidFrom if both are provided
+	IsActive           *bool         `json:"is_active,omitempty"`                                                 // Optional (true/false)
 }
 
 // LinkDiscountRequest holds data for linking a discount to a product.
