@@ -47,7 +47,8 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	querier := db_queries.New(pool)
 
 	// Initialize services
-	userService := services.NewUserService(querier)
+	emailService := services.NewEmailService(cfg, slog.Default())
+	userService := services.NewUserService(querier, emailService) // Initialize services (add redisClient if needed in constructor)
 	productService := services.NewProductService(querier, storer, redisClient, slog.Default())
 	cartService := services.NewCartService(querier, productService, slog.Default())
 	orderService := services.NewOrderService(querier, pool, cartService, redisClient, productService, slog.Default())
@@ -57,6 +58,7 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	reviewService := services.NewReviewService(querier, pool, slog.Default())
 	discountService := services.NewDiscountService(querier, redisClient, slog.Default())
 	categoryService := services.NewCategoryService(querier, redisClient, slog.Default())
+	analyticsService := services.NewAnalyticsService(querier, redisClient, slog.Default())
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -71,10 +73,17 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	reviewHandler := handlers.NewReviewHandler(reviewService, slog.Default())
 	discountHandler := handlers.NewDiscountHandler(discountService, slog.Default())
 	categoryHandler := handlers.NewCategoryHandler(categoryService, slog.Default())
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService, slog.Default())
+	profileHandler := handlers.NewProfileHandler(userService, emailService, slog.Default())
 
 	// Create sub-routers
 	authRouter := chi.NewRouter()
 	authHandler.RegisterRoutes(authRouter)
+	// Register password recovery routes on the auth router (public)
+	profileHandler.RegisterAuthRoutes(authRouter) // Adds /forgot-password, /reset-password under /api/v1/auth
+
+	analyticsRouter := chi.NewRouter()
+	analyticsHandler.RegisterRoutes(analyticsRouter)
 
 	productRouter := chi.NewRouter()
 	productRouter.Get("/", productHandler.ListAllProducts)
@@ -104,6 +113,14 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	adminRouter.Route("/categories", func(r chi.Router) {
 		categoryHandler.RegisterRoutes(r)
 	})
+	adminRouter.Route("/analytics", func(r chi.Router) {
+		analyticsHandler.RegisterRoutes(r)
+	})
+
+	// Create user-specific sub-router (protected)
+	userRouter := chi.NewRouter()
+	userRouter.Use(middleware.JWTMiddleware(cfg)) // Apply JWT middleware to user routes
+	profileHandler.RegisterRoutes(userRouter)
 
 	cartRouter := chi.NewRouter()
 	cartRouter.Use(middleware.JWTMiddleware(cfg))
@@ -122,9 +139,10 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	reviewHandler.RegisterRoutes(reviewRouter)
 
 	// Mount sub-routers
-	r.Mount("/api/v1/auth", authRouter)
+	r.Mount("/api/v1/auth", authRouter) // Contains /register, /login, /forgot-password, /reset-password
 	r.Mount("/api/v1/products", productRouter)
 	r.Mount("/api/v1/admin", adminRouter)
+	r.Mount("/api/v1/user", userRouter) // Contains /profile, /password/change
 	r.Mount("/api/v1/cart", cartRouter)
 	r.Mount("/api/v1/orders", orderRouter)
 	r.Mount("/api/v1/delivery-options", deliveryOptionsRouter)

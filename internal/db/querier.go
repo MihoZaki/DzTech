@@ -65,6 +65,9 @@ type Querier interface {
 	CreateGuestCart(ctx context.Context, sessionID *string) (Cart, error)
 	// Creates a new order with denormalized address fields and returns its details.
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	// --- Password Reset Tokens ---
+	// Inserts a new password reset token record.
+	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) error
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	// Inserts a new review and returns its details.
@@ -89,6 +92,12 @@ type Querier interface {
 	DeleteDeliveryService(ctx context.Context, id uuid.UUID) error
 	// Deletes a discount record (and associated links via CASCADE).
 	DeleteDiscount(ctx context.Context, id uuid.UUID) error
+	// $1=token_string
+	// Deletes all password reset tokens that have expired.
+	DeleteExpiredPasswordResetTokens(ctx context.Context) error
+	// Ensure token hasn't expired
+	// Deletes a specific password reset token record by its token string.
+	DeletePasswordResetToken(ctx context.Context, token string) error
 	DeleteProduct(ctx context.Context, productID uuid.UUID) error
 	// Soft deletes a review by setting deleted_at.
 	// NOTE: This query alone does not update the product's avg_rating/num_ratings.
@@ -196,6 +205,9 @@ type Querier interface {
 	GetProductWithMultiDiscountDetails(ctx context.Context, id uuid.UUID) (GetProductWithMultiDiscountDetailsRow, error)
 	GetProductsWithDiscountInfo(ctx context.Context, arg GetProductsWithDiscountInfoParams) ([]GetProductsWithDiscountInfoRow, error)
 	GetProductsWithDiscountInfoView(ctx context.Context) ([]VProductsWithCurrentDiscount, error)
+	// $1=user_id, $2=token_string, $3=expiry_time
+	// Fetches a password reset token record by its token string.
+	GetResetToken(ctx context.Context, token string) (PasswordResetToken, error)
 	// Retrieves a specific review by its ID and verifies the user owns it.
 	GetReviewByIDAndUser(ctx context.Context, arg GetReviewByIDAndUserParams) (GetReviewByIDAndUserRow, error)
 	// Retrieves a review by a specific user for a specific product.
@@ -218,6 +230,9 @@ type Querier interface {
 	GetTotalRevenue(ctx context.Context, arg GetTotalRevenueParams) (int64, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	// $1=token_string
+	// Fetches the user associated with a valid, non-expired reset token.
+	GetUserByResetToken(ctx context.Context, token string) (GetUserByResetTokenRow, error)
 	// Fetches a specific user by ID along with order count and last order date.
 	// Joins with the orders table to get aggregated details.
 	// Includes soft-deleted users as well.
@@ -313,6 +328,13 @@ type Querier interface {
 	// Updates the rating of an existing review.
 	// NOTE: This query alone does not update the product's avg_rating/num_ratings.
 	UpdateReview(ctx context.Context, arg UpdateReviewParams) (UpdateReviewRow, error)
+	// Updates the user's email address.
+	UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (UpdateUserEmailRow, error)
+	// --- Profile & Password Management ---
+	// Updates the user's full name.
+	UpdateUserFullName(ctx context.Context, arg UpdateUserFullNameParams) (UpdateUserFullNameRow, error)
+	// Updates the user's hashed password.
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (UpdateUserPasswordRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
