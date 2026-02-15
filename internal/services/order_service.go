@@ -41,24 +41,45 @@ func NewOrderService(querier db.Querier, pool *pgxpool.Pool, cartService *CartSe
 	}
 }
 
-// CreateOrder creates a new order from the user's current cart state.
-// It fetches the cart internally, validates state (implicitly through cart fetch),
+// CreateOrder creates a new order from the user's current cart state (database or session).
+// It fetches the cart internally based on userID or sessionID, validates state (implicitly through cart fetch),
 // calculates the total, creates the order and its items transactionally,
-// and clears the cart afterwards.
-func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFromCartRequest, userID uuid.UUID) (*models.OrderWithItems, error) {
-	// --- STEP 1: Fetch the current cart state for the user ---
-	// This implicitly validates the user has a cart and items in it.
-	// The cart summary includes TotalDiscountedValueCents.
-	cartSummary, err := s.cartService.GetCartForContext(ctx, &userID, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch current cart state for user %s: %w", userID, err)
+// and clears the cart afterwards (only for authenticated users).
+// Exactly one of userID or sessionID must be non-nil.
+func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFromCartRequest, userID *uuid.UUID, sessionID string) (*models.OrderWithItems, error) {
+	// Validate input: exactly one of userID or sessionID must be provided
+	if (userID == nil) == (sessionID == "") {
+		return nil, fmt.Errorf("exactly one of userID or sessionID must be provided")
 	}
 
+	// --- STEP 1: Fetch the current cart state based on userID or sessionID ---
+	// This implicitly validates the user has a cart and items in it (for db carts).
+	// The cart summary includes TotalDiscountedValueCents.
+	cartSummary, err := s.cartService.GetCartForContext(ctx, userID, sessionID)
+	if err != nil {
+		if userID != nil {
+			return nil, fmt.Errorf("failed to fetch current cart state for user %s: %w", *userID, err)
+		} else {
+			return nil, fmt.Errorf("failed to fetch current cart state for session %s: %w", sessionID, err)
+		}
+	}
 	if len(cartSummary.Items) == 0 {
 		return nil, fmt.Errorf("cannot create order from an empty cart")
 	}
 
-	s.logger.Debug("successfully fetched cart summary for order creation", "summary cart id", cartSummary.ID, "user_id", userID)
+	var actualUserID uuid.UUID
+	if userID != nil {
+		actualUserID = *userID
+		s.logger.Debug("successfully fetched cart summary for authenticated user order creation", "summary cart id", cartSummary.ID, "user_id", actualUserID)
+	} else {
+		// Generate a temporary user ID for the guest order
+		temporaryUserID, err := uuid.Parse(sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate user ID from session ID %s: %w", sessionID, err)
+		}
+		actualUserID = temporaryUserID
+		s.logger.Debug("successfully fetched cart summary for guest order creation", "summary cart id", cartSummary.ID, "session_user", actualUserID, "session_id", temporaryUserID)
+	}
 
 	// --- STEP 2: Fetch delivery service details ---
 	deliveryService, err := s.querier.GetDeliveryServiceByID(ctx, req.DeliveryServiceID)
@@ -69,11 +90,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 	// --- STEP 3: Calculate total amount ---
 	// Use the validated total from the cart summary (sum of final discounted prices) + delivery fee
 	totalAmountCents := cartSummary.TotalDiscountedValueCents + deliveryService.BaseCostCents
-
 	totalAmountCentsRounded := utils.RoundToDinarCents(totalAmountCents)
 	// --- STEP 4: Prepare order creation parameters ---
 	createOrderParams := db.CreateOrderParams{
-		UserID:            userID,
+		UserID:            actualUserID, // Use the determined user ID (original or temporary)
 		UserFullName:      req.ShippingAddress.FullName,
 		Status:            "pending",
 		TotalAmountCents:  totalAmountCentsRounded,
@@ -109,14 +129,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order record in transaction: %w", err)
 	}
-
 	orderID := dbOrder.ID
 
 	// 5b. Insert order items directly from the user's current cart (using the cart ID fetched earlier)
 	// This ensures the items are captured exactly as they were in the validated cart state.
 	insertOrderItemsFromCartParams := db.InsertOrderItemsFromCartParams{
 		OrderID: orderID,
-		CartID:  cartSummary.ID, // Use the validated cart ID from the summary
+		CartID:  cartSummary.ID, // Use the validated cart ID from the summary (works for both db and session carts if mapped correctly)
 	}
 	err = txQuerier.InsertOrderItemsFromCart(ctx, insertOrderItemsFromCartParams)
 	if err != nil {
@@ -130,12 +149,22 @@ func (s *OrderService) CreateOrder(ctx context.Context, req models.CreateOrderFr
 	}
 
 	// --- STEP 6: Post-Creation Actions (Outside Transaction for Resilience) ---
-	// Clear the user's cart after successful order creation
-	err = s.cartService.ClearCart(ctx, &userID, "") // Use the userID that placed the order
-	if err != nil {
-		// Log as a critical error, but don't fail the order creation itself
-		s.logger.Error("CRITICAL: Failed to clear user's cart after successful order creation",
-			"cart_id", cartSummary.ID, "user_id", userID, "order_id", orderID, "error", err)
+	// Clear the user's cart after successful order creation *only* if it was a database cart (authenticated user)
+	if userID != nil {
+		err = s.cartService.ClearCart(ctx, userID, "") // Use the original userID that placed the order
+		if err != nil {
+			// Log as a critical error, but don't fail the order creation itself
+			s.logger.Error("CRITICAL: Failed to clear user's cart after successful order creation",
+				"cart_id", cartSummary.ID, "user_id", *userID, "order_id", orderID, "error", err)
+		}
+	} else {
+		err = s.cartService.ClearCart(ctx, nil, sessionID) // Use the original userID that placed the order
+		if err != nil {
+			// Log as a critical error, but don't fail the order creation itself
+			s.logger.Error("CRITICAL: Failed to clear session's cart after successful order creation",
+				"cart_id", cartSummary.ID, "session", sessionID, "order_id", orderID, "error", err)
+		}
+		s.logger.Info("Guest order created, session cart cleared", "session_id", sessionID, "order_id", orderID, "session", actualUserID)
 	}
 
 	// Fetch and return the newly created order with its items

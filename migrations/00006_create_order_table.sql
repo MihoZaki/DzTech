@@ -2,7 +2,7 @@
 -- Create the 'orders' table
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- Link to users table
+    user_id UUID NOT NULL ,
     user_full_name VARCHAR(255) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'shipped', 'delivered', 'cancelled')), -- Enum-like constraint
     total_amount_cents BIGINT NOT NULL DEFAULT 0, -- Total amount in cents

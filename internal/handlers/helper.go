@@ -85,3 +85,37 @@ func SendServiceError(w http.ResponseWriter, logger *slog.Logger, operation stri
 	logger.Error(fmt.Sprintf("Failed to %s", operation), "error", err)
 	utils.SendErrorResponse(w, status, http.StatusText(status), detail)
 }
+
+// getSessionIDFromCookie extracts the session ID from the "session_id" cookie.
+func GetSessionIDFromCookie(r *http.Request) (string, bool) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		slog.Debug("Session cookie not found in request", "error", err)
+		return "", false
+	}
+	return cookie.Value, true
+}
+
+// setSessionIDCookie sets the "session_id" cookie in the response.
+// It generates a new UUID if no session ID exists yet.
+// It configures the cookie with HttpOnly and SameSite flags for security.
+func SetSessionIDCookie(w http.ResponseWriter, sessionID string) {
+	if sessionID == "" {
+		// Generate a new session ID if none exists
+		sessionID = uuid.New().String()
+		slog.Debug("Generated new session ID for cookie", "session_id", sessionID)
+	}
+
+	cookie := &http.Cookie{
+		Name:     "session_id",            // Name of the cookie
+		Value:    sessionID,               // The session ID value
+		Path:     "/",                     // Cookie is valid for the entire site
+		HttpOnly: true,                    // Prevents JavaScript access (security)
+		Secure:   false,                   // Set to true if using HTTPS in production
+		SameSite: http.SameSiteStrictMode, // Mitigate CSRF (adjust if needed for cross-origin requests)
+		MaxAge:   86400,                   // Cookie expires in 24 hours (86400 seconds)
+		// Expires:  time.Now().Add(24 * time.Hour), // Alternative to MaxAge
+	}
+
+	http.SetCookie(w, cookie) // Add the cookie to the response headers
+}

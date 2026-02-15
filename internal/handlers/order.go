@@ -35,6 +35,11 @@ func (h *OrderHandler) RegisterUserRoutes(r chi.Router) {
 
 }
 
+func (h *OrderHandler) RegisterGuestRoutes(r chi.Router) {
+	r.Post("/guest", h.CreateGuestOrder) // POST /api/v1/order(checkout)
+
+}
+
 // RegisterAdminRoutes registers the order-related routes accessible only to admins.
 func (h *OrderHandler) RegisterAdminRoutes(r chi.Router) {
 	r.Get("/all", h.ListAllOrders)             // GET /api/v1/admin/orders/all?page=&limit=&user_id=&status=
@@ -58,7 +63,7 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := *userIDVal // Dereference for easier use
-
+	sessionID := ""
 	// 2. Decode Request Body into CreateOrderFromCartRequest
 	var req models.CreateOrderFromCartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -73,7 +78,7 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. Call the Service Method
-	orderSummary, err := h.service.CreateOrder(r.Context(), req, userID) // Pass the NEW req and userID
+	orderSummary, err := h.service.CreateOrder(r.Context(), req, &userID, sessionID) // Pass the NEW req and userID
 	if err != nil {
 		// Log the error server-side
 		h.logger.Error("Failed to create order", "error", err, "user_id", userID)
@@ -88,6 +93,59 @@ func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(orderSummary); err != nil {
 		// Log encoding error, but response headers might already be sent
 		h.logger.Error("Failed to encode CreateOrder response", "error", err)
+	}
+}
+
+// CreateGuestOrder handles the creation of a new order for unauthenticated (guest) users.
+// Expected JSON body: models.CreateOrderFromCartRequest
+// Does NOT require UserID from JWT context. Requires sessionID from the frontend.
+func (h *OrderHandler) CreateGuestOrder(w http.ResponseWriter, r *http.Request) {
+	// 1. Extract SessionID from a header or cookie set by the frontend (or potentially from the request body if less secure)
+	// Assuming the frontend sends it in a header called X-Session-ID
+	sessionIDStr, ok := GetSessionIDFromCookie(r)
+	if !ok {
+		http.Error(w, "Missing session identifier (session Cookie)", http.StatusBadRequest)
+		return
+	}
+
+	if sessionIDStr == "" {
+		http.Error(w, "Session ID cant be empty", http.StatusBadRequest)
+		return
+	}
+	sessionID := sessionIDStr // Convert to *string
+
+	// userID is nil for guest users
+	var userID *uuid.UUID
+
+	// 2. Decode Request Body into CreateOrderFromCartRequest
+	var req models.CreateOrderFromCartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON in request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// 3. Validate the request struct
+	if err := req.Validate(); err != nil {
+		http.Error(w, "Validation error: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// 4. Call the Service Method (pass nil for userID, sessionID)
+	orderSummary, err := h.service.CreateOrder(r.Context(), req, userID, sessionID) // Pass req, nil userID, and sessionID
+	if err != nil {
+		// Log the error server-side
+		h.logger.Error("Failed to create order for guest user", "error", err, "session_id", sessionIDStr)
+		// Return a generic error message to the client
+		http.Error(w, "Failed to create order: "+err.Error(), http.StatusInternalServerError) // More specific error message
+		return
+	}
+
+	// 5. Send Success Response (201 Created)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated) // 201 Created
+	if err := json.NewEncoder(w).Encode(orderSummary); err != nil {
+		// Log encoding error, but response headers might already be sent
+		h.logger.Error("Failed to encode CreateGuestOrder response", "error", err)
 	}
 }
 

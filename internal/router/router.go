@@ -92,6 +92,9 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	productRouter.Get("/categories", productHandler.ListCategories)
 	productRouter.Get("/categories/{id}", productHandler.GetCategory)
 
+	guestRouter := chi.NewRouter()
+	orderHandler.RegisterGuestRoutes(guestRouter)
+
 	adminRouter := chi.NewRouter()
 	adminRouter.Use(middleware.JWTMiddleware(cfg))
 	adminRouter.Use(middleware.RequireAdmin)
@@ -147,6 +150,7 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	r.Mount("/api/v1/orders", orderRouter)
 	r.Mount("/api/v1/delivery-options", deliveryOptionsRouter)
 	r.Mount("/api/v1/reviews", reviewRouter)
+	r.Mount("/api/v1/checkout", guestRouter)
 
 	slog.Info("Router initialized")
 	return r
