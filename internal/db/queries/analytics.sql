@@ -3,7 +3,7 @@
 -- name: GetTotalRevenue :one
 -- Calculates the total revenue from all delivered orders within a given time range.
 SELECT
-    SUM(oi.quantity * oi.price_cents) AS total_revenue_cents
+    COALESCE(SUM(oi.quantity * oi.price_cents),0)::BIGINT AS total_revenue_cents
 FROM
     orders o
 JOIN

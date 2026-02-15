@@ -470,7 +470,7 @@ func (q *Queries) GetTopSellingProducts(ctx context.Context, arg GetTopSellingPr
 const getTotalRevenue = `-- name: GetTotalRevenue :one
 
 SELECT
-    SUM(oi.quantity * oi.price_cents) AS total_revenue_cents
+    COALESCE(SUM(oi.quantity * oi.price_cents),0)::BIGINT AS total_revenue_cents
 FROM
     orders o
 JOIN
