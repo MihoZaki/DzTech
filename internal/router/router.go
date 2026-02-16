@@ -142,10 +142,10 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	reviewHandler.RegisterRoutes(reviewRouter)
 
 	// Mount sub-routers
-	r.Mount("/api/v1/auth", authRouter) // Contains /register, /login, /forgot-password, /reset-password
+	r.Mount("/api/v1/auth", authRouter)
 	r.Mount("/api/v1/products", productRouter)
 	r.Mount("/api/v1/admin", adminRouter)
-	r.Mount("/api/v1/user", userRouter) // Contains /profile, /password/change
+	r.Mount("/api/v1/user", userRouter)
 	r.Mount("/api/v1/cart", cartRouter)
 	r.Mount("/api/v1/orders", orderRouter)
 	r.Mount("/api/v1/delivery-options", deliveryOptionsRouter)

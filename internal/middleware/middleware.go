@@ -118,8 +118,8 @@ func ApplyMiddleware(r *chi.Mux) {
 		})
 	})
 	r.Use(httprate.Limit(
-		10,             // requests
-		10*time.Second, // per duration
+		100,            // requests
+		60*time.Second, // per duration
 		httprate.WithKeyFuncs(httprate.KeyByIP, httprate.KeyByEndpoint),
 	))
 	// Logging middleware with structured logging
