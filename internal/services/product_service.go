@@ -245,7 +245,6 @@ func (s *ProductService) GetProductWithDiscountInfoBySlug(ctx context.Context, s
 	}
 
 	// Map the database product (with discount info) to the application model
-	// FIX: Corrected the mapping call
 	product := s.toProductModelWithDiscount(db.GetProductWithDiscountInfoRow(dbProduct)) // Pass the row struct directly, not a call to GetProductWithDiscountInfoRow
 
 	// --- Store the result in cache ---

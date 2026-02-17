@@ -24,7 +24,6 @@ func NewDeliveryOptionsHandler(service *services.DeliveryServiceService, logger 
 }
 
 // GetActiveDeliveryOptions handles retrieving the list of active delivery services.
-// Requires user authentication (JWT middleware should be applied upstream).
 func (h *DeliveryOptionsHandler) GetActiveDeliveryOptions(w http.ResponseWriter, r *http.Request) {
 	deliveryServices, err := h.service.GetActiveDeliveryServices(r.Context())
 	if err != nil {

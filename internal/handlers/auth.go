@@ -25,6 +25,22 @@ func NewAuthHandler(authService *services.AuthService) *AuthHandler { // Take Au
 	}
 }
 
+// deleteGuestSessionCookie sets the 'session_id' cookie to be deleted by the browser.
+func deleteGuestSessionCookie(w http.ResponseWriter) {
+	cookie := &http.Cookie{
+		Name:  "session_id", // Name of the cookie to delete
+		Value: "",           // Empty value
+		Path:  "/",          // Same path it was set with (usually '/')
+		// Domain:  "",                      // Same domain it was set with (or inferred)
+		MaxAge:   -1,              // Delete cookie immediately
+		Expires:  time.Unix(0, 0), // Expire immediately (Unix epoch)
+		HttpOnly: true,            // Same flags it was set with (likely true for session IDs)
+		// Secure:  true,                    // Same flags it was set with (depends on your setup)
+		// SameSite: http.SameSiteStrictMode, // Same flags it was set with (depends on your setup)
+	}
+	http.SetCookie(w, cookie) // Add the deletion instruction to the response headers
+}
+
 // Helper function to set the refresh token cookie
 func setRefreshTokenCookie(w http.ResponseWriter, token string) {
 	cookie := &http.Cookie{
@@ -73,8 +89,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var guestSessionID string
-	sessionCookie, err := r.Cookie("session_id")
-	if err == nil { // Cookie found
+	sessionCookie, err := r.Cookie("session_id") // Read the session_id cookie
+	if err == nil {                              // Cookie found
 		guestSessionID = sessionCookie.Value
 		slog.Debug("Found guest session ID in cookie for registration", "session_id", guestSessionID)
 	} else {
@@ -95,6 +111,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	// Set the refresh token as a secure HTTP-only cookie
 	setRefreshTokenCookie(w, refreshTokenStr)
+
+	// --- DELETE THE GUEST SESSION COOKIE AFTER SUCCESSFUL REGISTRATION ---
+	if guestSessionID != "" {
+		deleteGuestSessionCookie(w)
+		slog.Debug("Guest session ID cookie marked for deletion after registration", "session_id", guestSessionID)
+	}
 
 	// Send the response containing only the access token and user details (refresh token is in cookie)
 	w.Header().Set("Content-Type", "application/json")
@@ -120,12 +142,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var guestSessionID string
-	sessionCookie, err := r.Cookie("session_id")
-	if err == nil { // Cookie found
+	sessionCookie, err := r.Cookie("session_id") // Read the session_id cookie
+	if err == nil {                              // Cookie found
 		guestSessionID = sessionCookie.Value
-		slog.Debug("Found guest session ID in cookie for registration", "session_id", guestSessionID)
+		slog.Debug("Found guest session ID in cookie for login", "session_id", guestSessionID)
 	} else {
-		slog.Debug("No guest session ID cookie found during registration", "error", err) // Usually means no guest cart
+		slog.Debug("No guest session ID cookie found during login", "error", err) // Usually means no guest cart
 	}
 
 	// Use AuthService to handle login - now expects (LoginResponse, refreshTokenString, error)
@@ -145,6 +167,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Set the refresh token as a secure HTTP-only cookie
 	setRefreshTokenCookie(w, refreshTokenStr)
+
+	// --- DELETE THE GUEST SESSION COOKIE AFTER SUCCESSFUL LOGIN ---
+	if guestSessionID != "" {
+		deleteGuestSessionCookie(w)
+		slog.Debug("Guest session ID cookie marked for deletion after login", "session_id", guestSessionID)
+	}
 
 	// Send the response containing only the access token and user details (refresh token is in cookie)
 	w.Header().Set("Content-Type", "application/json")
