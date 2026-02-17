@@ -1,8 +1,9 @@
-### Comprehensive API Endpoints
+
+### **Comprehensive API Endpoints**
 
 ---
 
-## Authentication (`/api/v1/auth`)
+## **Authentication (`/api/v1/auth`)**
 
 ### `POST /api/v1/auth/register`
 
@@ -22,8 +23,8 @@
     *   **Body:** `application/json`
         ```json
         {
-          "access_token": "<jwt_access_token>",
-          "user": {
+          "success": true,
+          "data": {
             "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
             "email": "user@example.com",
             "full_name": "Jane Smith",
@@ -42,7 +43,7 @@
 
 ### `POST /api/v1/auth/login`
 
-*   **Description:** Authenticate a user and obtain access and refresh tokens.
+*   **Description:** Authenticate a user and obtain access token.
 *   **Method:** `POST`
 *   **Headers:** None required.
 *   **Request Body:** `application/json`
@@ -54,18 +55,18 @@
     ```
 *   **Response:**
     *   **Code:** `200 OK`
-    *   **Headers:** `Set-Cookie: refresh_token=<refresh_token_value>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=604800`
     *   **Body:** `application/json`
         ```json
         {
-          "access_token": "<jwt_access_token>",
-          "user": {
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
-            "email": "user@example.com",
-            "full_name": "Jane Smith",
-            "is_admin": false,
-            "created_at": "2024-01-01T12:00:00Z",
-            "updated_at": "2024-01-01T12:00:00Z"
+          "success": true,
+          "data": {
+            "access_token": "<jwt_access_token>",
+            "user": {
+              "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
+              "email": "user@example.com",
+              "full_name": "Jane Smith",
+              "is_admin": false
+            }
           }
         }
         ```
@@ -78,7 +79,7 @@
 
 ### `POST /api/v1/auth/refresh`
 
-*   **Description:** Obtain a new access token using a valid refresh token.
+*   **Description:** Obtain a new access token using a valid refresh token. *(Note: Refresh token implementation details might vary based on code specifics not fully visible)*
 *   **Method:** `POST`
 *   **Headers:** `Cookie: refresh_token=<refresh_token_value>`
 *   **Request Body:** None.
@@ -88,7 +89,10 @@
     *   **Body:** `application/json`
         ```json
         {
-          "access_token": "<new_jwt_access_token>"
+          "success": true,
+          "data": {
+            "access_token": "<new_jwt_access_token>"
+          }
         }
         ```
 *   **Errors:**
@@ -100,7 +104,7 @@
 
 ### `POST /api/v1/auth/logout`
 
-*   **Description:** Revoke the current user's refresh token.
+*   **Description:** Revoke the current user's refresh token. *(Note: Implementation details might vary)*
 *   **Method:** `POST`
 *   **Headers:** `Cookie: refresh_token=<refresh_token_value>`
 *   **Request Body:** None.
@@ -113,11 +117,11 @@
 
 ---
 
-## Public Products (`/api/v1/products`)
+## **Public Products (`/api/v1/products`)**
 
 ### `GET /api/v1/products`
 
-*   **Description:** List all products with pagination.
+*   **Description:** List all products with pagination. Includes discount information.
 *   **Method:** `GET`
 *   **Headers:** None required.
 *   **Query Parameters:**
@@ -127,20 +131,39 @@
     *   **Code:** `200 OK`
     *   **Body:** `application/json`
         ```json
-        [
-          {
-            "id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
-            "name": "Laptop",
-            "description": "High-performance laptop",
-            "price_cents": 150000,
-            "stock_quantity": 10,
-            "image_url": "https://example.com/images/laptop.jpg",
-            "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
-            "created_at": "2024-01-01T12:00:00Z",
-            "updated_at": "2024-01-01T12:00:00Z"
-          },
-          // ... more products ...
-        ]
+        {
+          "data": [
+            {
+              "id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
+              "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
+              "name": "Laptop",
+              "slug": "laptop-model-xyz",
+              "description": "High-performance laptop",
+              "short_description": "Powerful laptop",
+              "price_cents": 150000,
+              "stock_quantity": 10,
+              "status": "active",
+              "brand": "TechBrand",
+              "image_urls": ["https://example.com/images/laptop1.jpg", "https://example.com/images/laptop2.jpg"],
+              "spec_highlights": {"processor": "Intel i7", "ram": "16GB"},
+              "created_at": "2024-01-01T12:00:00Z",
+              "updated_at": "2024-01-01T12:00:00Z",
+              "avg_rating": 4.5,
+              "num_ratings": 120,
+              "discounted_price_cents": 140000,
+              "has_active_discount": true,
+              "effective_discount_percentage": 6.7,
+              "total_calculated_fixed_discount_cents": 0,
+              "calculated_combined_percentage_factor": 0.933,
+              "category_name": "Electronics" // Added from joined query
+            }
+            // ... more products ...
+          ],
+          "page": 1,
+          "limit": 20,
+          "total": 150,
+          "total_pages": 8
+        }
         ```
 *   **Errors:**
     *   `500 Internal Server Error`: If there's a server-side failure fetching the product list.
@@ -149,7 +172,7 @@
 
 ### `GET /api/v1/products/{id}`
 
-*   **Description:** Get details of a specific product.
+*   **Description:** Get details of a specific product by ID. Includes discount information.
 *   **Method:** `GET`
 *   **Headers:** None required.
 *   **Path Parameters:**
@@ -160,14 +183,27 @@
         ```json
         {
           "id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
+          "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
           "name": "Laptop",
+          "slug": "laptop-model-xyz",
           "description": "High-performance laptop",
+          "short_description": "Powerful laptop",
           "price_cents": 150000,
           "stock_quantity": 10,
-          "image_url": "https://example.com/images/laptop.jpg",
-          "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
+          "status": "active",
+          "brand": "TechBrand",
+          "image_urls": ["https://example.com/images/laptop1.jpg", "https://example.com/images/laptop2.jpg"],
+          "spec_highlights": {"processor": "Intel i7", "ram": "16GB"},
           "created_at": "2024-01-01T12:00:00Z",
-          "updated_at": "2024-01-01T12:00:00Z"
+          "updated_at": "2024-01-01T12:00:00Z",
+          "avg_rating": 4.5,
+          "num_ratings": 120,
+          "discounted_price_cents": 140000,
+          "has_active_discount": true,
+          "effective_discount_percentage": 6.7,
+          "total_calculated_fixed_discount_cents": 0,
+          "calculated_combined_percentage_factor": 0.933,
+          "category_name": "Electronics" 
         }
         ```
 *   **Errors:**
@@ -179,34 +215,24 @@
 
 ### `GET /api/v1/products/search`
 
-*   **Description:** Search for products by name or description.
+*   **Description:** Search for products by name, category, price range, stock status, discounts, etc. Includes discount information.
 *   **Method:** `GET`
 *   **Headers:** None required.
 *   **Query Parameters:**
-    *   `q` (Required, `string`): The search query term.
+    *   `query` (Optional, `string`): Search term for name/description.
+    *   `category_id` (Optional, `string`): Filter by category UUID.
+    *   `brand` (Optional, `string`): Filter by brand name.
+    *   `min_price` (Optional, `integer`): Minimum price in cents.
+    *   `max_price` (Optional, `integer`): Maximum price in cents.
+    *   `in_stock_only` (Optional, `boolean`): Filter for in-stock items only (e.g., `true`/`false`).
+    *   `include_discounted_only` (Optional, `boolean`): Filter for items with active discounts only (e.g., `true`/`false`).
     *   `page` (Optional, `integer`): Page number for pagination (1-indexed). Defaults to `1`.
     *   `limit` (Optional, `integer`): Number of products per page. Defaults to `20`.
+    *   `spec_filter` (Optional, `string`): Key-value pair for specific spec filter (format might vary, check handler).
 *   **Response:**
     *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        [
-          {
-            "id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
-            "name": "Laptop",
-            "description": "High-performance laptop",
-            "price_cents": 150000,
-            "stock_quantity": 10,
-            "image_url": "https://example.com/images/laptop.jpg",
-            "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
-            "created_at": "2024-01-01T12:00:00Z",
-            "updated_at": "2024-01-01T12:00:00Z"
-          },
-          // ... more matching products ...
-        ]
-        ```
+    *   **Body:** `application/json` (Same structure as `GET /api/v1/products` list response)
 *   **Errors:**
-    *   `400 Bad Request`: If the `q` query parameter is missing.
     *   `500 Internal Server Error`: If there's a server-side failure during the search.
 
 ---
@@ -224,9 +250,10 @@
           {
             "id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
             "name": "Electronics",
-            "description": "Electronic devices and accessories",
-            "created_at": "2024-01-01T12:00:00Z",
-            "updated_at": "2024-01-01T12:00:00Z"
+            "slug": "electronics",
+            "type": "category-type",
+            "parent_id": null, // or "uuid" if it has a parent
+            "created_at": "2024-01-01T12:00:00Z"
           },
           // ... more categories ...
         ]
@@ -238,7 +265,7 @@
 
 ### `GET /api/v1/products/categories/{id}`
 
-*   **Description:** Get details of a specific category.
+*   **Description:** Get details of a specific category by ID.
 *   **Method:** `GET`
 *   **Headers:** None required.
 *   **Path Parameters:**
@@ -250,9 +277,10 @@
         {
           "id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
           "name": "Electronics",
-          "description": "Electronic devices and accessories",
-          "created_at": "2024-01-01T12:00:00Z",
-          "updated_at": "2024-01-01T12:00:00Z"
+          "slug": "electronics",
+          "type": "category-type",
+          "parent_id": null, // or "uuid" if it has a parent
+          "created_at": "2024-01-01T12:00:00Z"
         }
         ```
 *   **Errors:**
@@ -262,13 +290,13 @@
 
 ---
 
-## User Cart (`/api/v1/cart`)
+## **User Cart (`/api/v1/cart`)**
 
 *   **Access:** Requires a valid JWT token in the `Authorization: Bearer <token>` header.
 
 ### `GET /api/v1/cart`
 
-*   **Description:** Get the current user's cart contents.
+*   **Description:** Get the current user's cart contents. Includes discount information for items.
 *   **Method:** `GET`
 *   **Headers:**
     *   `Authorization: Bearer <user_access_token>`
@@ -277,17 +305,28 @@
     *   **Body:** `application/json`
         ```json
         {
+          "id": "uuid", // Cart ID
+          "user_id": "uuid", // Present if authenticated, null for guest
           "items": [
             {
-              "product_id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
-              "name": "Laptop",
-              "price_cents": 150000,
+              "id": "uuid", // Cart Item ID
+              "product_id": "uuid",
+              "product_name": "Laptop",
+              "product_slug": "laptop-model-xyz",
               "quantity": 2,
-              "subtotal_cents": 300000
+              "unit_price_original_cents": 150000,
+              "unit_price_discounted_cents": 140000,
+              "total_price_original_cents": 300000,
+              "total_price_discounted_cents": 280000,
+              "has_active_discount": true,
+              "image_urls": ["https://example.com/images/laptop1.jpg"]
             }
-            // ... more items ...
           ],
-          "total_price_cents": 300000
+          "total_original_value_cents": 300000,
+          "total_discounted_value_cents": 280000,
+          "total_savings_cents": 20000,
+          "created_at": "2024-02-10T15:30:00Z",
+          "updated_at": "2024-02-10T16:00:00Z"
         }
         ```
 *   **Errors:**
@@ -296,7 +335,7 @@
 
 ---
 
-### `POST /api/v1/cart/add`
+### `POST /api/v1/cart/items`
 
 *   **Description:** Add an item to the current user's cart.
 *   **Method:** `POST`
@@ -310,16 +349,8 @@
     }
     ```
 *   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "items": [
-            // ... updated cart items ...
-          ],
-          "total_price_cents": 150000
-        }
-        ```
+    *   **Code:** `201 Created` (or `200 OK` if item already existed and quantity was updated)
+    *   **Body:** `application/json` (Same structure as an item in `GET /api/v1/cart` response)
 *   **Errors:**
     *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors (e.g., invalid product ID, quantity <= 0).
     *   `401 Unauthorized`: If the access token is missing or invalid.
@@ -329,93 +360,66 @@
 
 ---
 
-### `POST /api/v1/cart/remove`
-
-*   **Description:** Remove an item from the current user's cart.
-*   **Method:** `POST`
-*   **Headers:**
-    *   `Authorization: Bearer <user_access_token>`
-*   **Request Body:** `application/json`
-    ```json
-    {
-      "product_id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1"
-    }
-    ```
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "items": [
-            // ... updated cart items (item removed) ...
-          ],
-          "total_price_cents": 0
-        }
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors (e.g., invalid product ID).
-    *   `401 Unauthorized`: If the access token is missing or invalid.
-    *   `404 Not Found`: If the specified `product_id` is not in the current user's cart.
-    *   `500 Internal Server Error`: If there's a server-side failure removing the item.
-
----
-
-### `POST /api/v1/cart/update`
+### `PUT /api/v1/cart/items/{item_id}`
 
 *   **Description:** Update the quantity of an item in the current user's cart.
-*   **Method:** `POST`
+*   **Method:** `PUT`
 *   **Headers:**
     *   `Authorization: Bearer <user_access_token>`
+*   **Path Parameters:**
+    *   `item_id` (Required, `string`): The UUID of the cart item.
 *   **Request Body:** `application/json`
     ```json
     {
-      "product_id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
       "quantity": 3
     }
     ```
 *   **Response:**
     *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "items": [
-            // ... updated cart items (quantity changed) ...
-          ],
-          "total_price_cents": 450000
-        }
-        ```
+    *   **Body:** `application/json` (Same structure as an item in `GET /api/v1/cart` response)
 *   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors (e.g., invalid product ID, quantity <= 0).
+    *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors (e.g., invalid quantity <= 0).
     *   `401 Unauthorized`: If the access token is missing or invalid.
-    *   `404 Not Found`: If the specified `product_id` is not in the current user's cart.
+    *   `404 Not Found`: If the specified `item_id` does not exist in the current user's cart.
     *   `409 Conflict`: If the requested quantity exceeds the available stock.
     *   `500 Internal Server Error`: If there's a server-side failure updating the item.
 
 ---
 
-### `POST /api/v1/cart/clear`
+### `DELETE /api/v1/cart/items/{item_id}`
+
+*   **Description:** Remove an item from the current user's cart.
+*   **Method:** `DELETE`
+*   **Headers:**
+    *   `Authorization: Bearer <user_access_token>`
+*   **Path Parameters:**
+    *   `item_id` (Required, `string`): The UUID of the cart item.
+*   **Response:**
+    *   **Code:** `204 No Content`
+*   **Errors:**
+    *   `400 Bad Request`: If the `item_id` path parameter is not a valid UUID.
+    *   `401 Unauthorized`: If the access token is missing or invalid.
+    *   `404 Not Found`: If the specified `item_id` does not exist in the current user's cart.
+    *   `500 Internal Server Error`: If there's a server-side failure removing the item.
+
+---
+
+### `DELETE /api/v1/cart`
 
 *   **Description:** Remove all items from the current user's cart.
-*   **Method:** `POST`
+*   **Method:** `DELETE`
 *   **Headers:**
     *   `Authorization: Bearer <user_access_token>`
 *   **Request Body:** None.
 *   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "items": [],
-          "total_price_cents": 0
-        }
-        ```
+    *   **Code:** `204 No Content`
 *   **Errors:**
     *   `401 Unauthorized`: If the access token is missing or invalid.
     *   `500 Internal Server Error`: If there's a server-side failure clearing the cart.
 
 ---
 
-## User Orders (`/api/v1/orders`)
+## **User Orders (`/api/v1/orders`)**
 
 *   **Access:** Requires a valid JWT token in the `Authorization: Bearer <token>` header.
 
@@ -428,18 +432,15 @@
 *   **Request Body:** `application/json`
     ```json
     {
+      "delivery_service_id": "d1e2f3g4-h5i6-7890-jklm-nopqrstuvwx",
       "shipping_address": {
-        "street": "123 Main St",
-        "city": "Anytown",
-        "zip": "12345"
+        "full_name": "John Doe",
+        "province": "Lagos",
+        "city": "Victoria Island",
+        "phone_number_1": "+2348087654321",
+        "phone_number_2": "+2348098765432" // Optional
       },
-      "billing_address": {
-        "street": "123 Main St",
-        "city": "Anytown",
-        "zip": "12345"
-      },
-      "notes": "Leave at door",
-      "delivery_service_id": "d1e2f3g4-h5i6-7890-jklm-nopqrstuvwx"
+      "notes": "Call before delivery" // Optional
     }
     ```
 *   **Response:**
@@ -449,30 +450,26 @@
         {
           "id": "e1f2g3h4-i5j6-7890-klmn-opqrstuvwxy1",
           "user_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
+          "user_full_name": "John Doe",
           "status": "pending",
           "total_amount_cents": 150000,
           "payment_method": "Cash on Delivery",
-          "shipping_address": {
-            "street": "123 Main St",
-            "city": "Anytown",
-            "zip": "12345"
-          },
-          "billing_address": {
-            "street": "123 Main St",
-            "city": "Anytown",
-            "zip": "12345"
-          },
-          "notes": "Leave at door",
+          "province": "Lagos",
+          "city": "Victoria Island",
+          "phone_number_1": "+2348087654321",
+          "phone_number_2": "+2348098765432", // Optional
+          "notes": "Call before delivery",
           "delivery_service_id": "d1e2f3g4-h5i6-7890-jklm-nopqrstuvwx",
           "created_at": "2024-02-01T10:00:00Z",
           "updated_at": "2024-02-01T10:00:00Z",
-          "items": [
+          "order_items": [
             {
+              "id": "f1g2h3i4-j5k6-7890-lmno-pqrstuvwxyza",
               "product_id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
-              "name": "Laptop",
-              "price_per_unit_cents": 150000,
+              "product_name": "Laptop",
               "quantity": 1,
-              "subtotal_cents": 150000
+              "unit_price_cents": 150000,
+              "total_price_cents": 150000
             }
           ]
         }
@@ -495,39 +492,7 @@
     *   `id` (Required, `string`): The UUID of the order.
 *   **Response:**
     *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "id": "e1f2g3h4-i5j6-7890-klmn-opqrstuvwxy1",
-          "user_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
-          "status": "pending",
-          "total_amount_cents": 150000,
-          "payment_method": "Cash on Delivery",
-          "shipping_address": {
-            "street": "123 Main St",
-            "city": "Anytown",
-            "zip": "12345"
-          },
-          "billing_address": {
-            "street": "123 Main St",
-            "city": "Anytown",
-            "zip": "12345"
-          },
-          "notes": "Leave at door",
-          "delivery_service_id": "d1e2f3g4-h5i6-7890-jklm-nopqrstuvwx",
-          "created_at": "2024-02-01T10:00:00Z",
-          "updated_at": "2024-02-01T10:00:00Z",
-          "items": [
-            {
-              "product_id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
-              "name": "Laptop",
-              "price_per_unit_cents": 150000,
-              "quantity": 1,
-              "subtotal_cents": 150000
-            }
-          ]
-        }
-        ```
+    *   **Body:** `application/json` (Same structure as an item in `POST /api/v1/orders` response)
 *   **Errors:**
     *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
     *   `401 Unauthorized`: If the access token is missing or invalid, or if the order does not belong to the current user.
@@ -549,33 +514,15 @@
     *   **Code:** `200 OK`
     *   **Body:** `application/json`
         ```json
-        [
-          {
-            "id": "e1f2g3h4-i5j6-7890-klmn-opqrstuvwxy1",
-            "user_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
-            "status": "pending",
-            "total_amount_cents": 150000,
-            "payment_method": "Cash on Delivery",
-            "shipping_address": {
-              "street": "123 Main St",
-              "city": "Anytown",
-              "zip": "12345"
-            },
-            "billing_address": {
-              "street": "123 Main St",
-              "city": "Anytown",
-              "zip": "12345"
-            },
-            "notes": "Leave at door",
-            "delivery_service_id": "d1e2f3g4-h5i6-7890-jklm-nopqrstuvwx",
-            "created_at": "2024-02-01T10:00:00Z",
-            "updated_at": "2024-02-01T10:00:00Z",
-            "items": [
-              // ... items array ...
-            ]
-          },
-          // ... more orders ...
-        ]
+        {
+          "data": [
+            // ... order objects ...
+          ],
+          "page": 1,
+          "limit": 20,
+          "total": 5,
+          "total_pages": 1
+        }
         ```
 *   **Errors:**
     *   `401 Unauthorized`: If the access token is missing or invalid.
@@ -583,7 +530,7 @@
 
 ---
 
-## Delivery Options (`/api/v1/delivery-options`)
+## **Delivery Options (`/api/v1/delivery-options`)**
 
 *   **Access:** Requires a valid JWT token in the `Authorization: Bearer <token>` header.
 
@@ -617,25 +564,21 @@
 
 ---
 
-## Admin Products (`/api/v1/admin/products`)
+## **Reviews (`/api/v1/reviews`)**
 
-*   **Access:** Requires a valid admin JWT token in the `Authorization: Bearer <token>` header.
+*   **Access:** Requires a valid JWT token in the `Authorization: Bearer <token>` header.
 
-### `POST /api/v1/admin/products`
+### `POST /api/v1/reviews`
 
-*   **Description:** Create a new product.
+*   **Description:** Submit a review for a product.
 *   **Method:** `POST`
 *   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
+    *   `Authorization: Bearer <user_access_token>`
 *   **Request Body:** `application/json`
     ```json
     {
-      "name": "Smartphone",
-      "description": "Latest model smartphone",
-      "price_cents": 80000,
-      "stock_quantity": 50,
-      "image_url": "https://example.com/images/smartphone.jpg",
-      "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx"
+      "product_id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
+      "rating": 5 // Integer between 1 and 5
     }
     ```
 *   **Response:**
@@ -644,493 +587,184 @@
         ```json
         {
           "id": "f1g2h3i4-j5k6-7890-lmno-pqrstuvwxyza",
-          "name": "Smartphone",
-          "description": "Latest model smartphone",
-          "price_cents": 80000,
-          "stock_quantity": 50,
-          "image_url": "https://example.com/images/smartphone.jpg",
-          "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
-          "created_at": "2024-02-01T11:00:00Z",
-          "updated_at": "2024-02-01T11:00:00Z"
+          "user_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
+          "product_id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
+          "rating": 5,
+          "created_at": "2024-02-11T10:00:00Z",
+          "updated_at": "2024-02-11T10:00:00Z"
         }
         ```
 *   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure creating the product.
+    *   `400 Bad Request`: If the request body is invalid JSON, rating is out of range, or missing required fields.
+    *   `401 Unauthorized`: If the access token is missing or invalid.
+    *   `409 Conflict`: If the user has already reviewed the product.
+    *   `500 Internal Server Error`: If there's a server-side failure creating the review.
 
 ---
 
-### `GET /api/v1/admin/products/{id}`
-
-*   **Description:** Get details of a specific product.
-*   **Method:** `GET`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the product.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
-          "name": "Laptop",
-          "description": "High-performance laptop",
-          "price_cents": 150000,
-          "stock_quantity": 10,
-          "image_url": "https://example.com/images/laptop.jpg",
-          "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
-          "created_at": "2024-01-01T12:00:00Z",
-          "updated_at": "2024-01-01T12:00:00Z"
-        }
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no product exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the product details.
 
 ---
 
-### `PATCH /api/v1/admin/products/{id}`
+## **Guest Checkout**
 
-*   **Description:** Update an existing product.
-*   **Method:** `PATCH`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the product.
-*   **Request Body:** `application/json` (partial update allowed)
-    ```json
-    {
-      "price_cents": 145000,
-      "stock_quantity": 8
-    }
-    ```
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "id": "b1c2d3e4-f5g6-7890-hijk-lmnopqrstuv1",
-          "name": "Laptop",
-          "description": "High-performance laptop",
-          "price_cents": 145000,
-          "stock_quantity": 8,
-          "image_url": "https://example.com/images/laptop.jpg",
-          "category_id": "c1d2e3f4-g5h6-7890-ijkl-mnopqrstuvwx",
-          "created_at": "2024-01-01T12:00:00Z",
-          "updated_at": "2024-02-01T11:30:00Z"
-        }
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no product exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure updating the product.
+### `POST /api/v1/checkout/guest`
 
----
-
-### `DELETE /api/v1/admin/products/{id}`
-
-*   **Description:** Delete a specific product.
-*   **Method:** `DELETE`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the product.
-*   **Response:**
-    *   **Code:** `204 No Content`
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no product exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure deleting the product.
-
----
-
-### `GET /api/v1/admin/products`
-
-*   **Description:** List all products (admin view).
-*   **Method:** `GET`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Query Parameters:**
-    *   `page` (Optional, `integer`): Page number for pagination (1-indexed). Defaults to `1`.
-    *   `limit` (Optional, `integer`): Number of products per page. Defaults to `20`.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        [
-          // ... same product objects as GET /api/v1/products ...
-        ]
-        ```
-*   **Errors:**
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the product list.
-
----
-
-## Admin Orders (`/api/v1/admin/orders`)
-
-*   **Access:** Requires a valid admin JWT token in the `Authorization: Bearer <token>` header.
-
-### `GET /api/v1/admin/orders/all`
-
-*   **Description:** List all orders across all users with optional pagination.
-*   **Method:** `GET`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Query Parameters:**
-    *   `page` (Optional, `integer`): Page number for pagination (1-indexed). Defaults to `1`.
-    *   `limit` (Optional, `integer`): Number of orders per page. Defaults to `20`.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        [
-          // ... order objects ...
-        ]
-        ```
-*   **Errors:**
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the order list.
-
----
-
-### `GET /api/v1/admin/orders/{id}`
-
-*   **Description:** Get details of *any* specific order.
-*   **Method:** `GET`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the order.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        // ... full order object ...
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no order exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the order details.
-
----
-
-### `PUT /api/v1/admin/orders/{id}/status`
-
-*   **Description:** Update the status of *any* specific order.
-*   **Method:** `PUT`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the order.
-*   **Request Body:** `application/json`
-    ```json
-    {
-      "status": "shipped" // Valid values: pending, confirmed, shipped, delivered, cancelled
-    }
-    ```
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        // ... updated order object ...
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON, contains validation errors, or specifies an invalid status.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no order exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure updating the order status.
-
----
-
-### `PUT /api/v1/admin/orders/{id}/cancel`
-
-*   **Description:** Cancel *any* specific order.
-*   **Method:** `PUT`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the order.
-*   **Request Body:** None.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        // ... updated order object with status "cancelled" ...
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no order exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure cancelling the order.
-
----
-
-## Admin Delivery Services (`/api/v1/admin/delivery-services`)
-
-*   **Access:** Requires a valid admin JWT token in the `Authorization: Bearer <token>` header.
-
-### `POST /api/v1/admin/delivery-services`
-
-*   **Description:** Create a new delivery service.
+*   **Description:** Allows an unauthenticated user (guest) to place an order using items from their frontend-managed cart session.
 *   **Method:** `POST`
 *   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Request Body:** `application/json`
+    *   `Content-Type: application/json`
+    *   `X-Session-ID: <session_identifier>` (A unique identifier for the guest's cart session, managed by the frontend, e.g., using `localStorage` or `sessionStorage`).
+*   **Request Body:**
     ```json
     {
-      "name": "Express Delivery",
-      "description": "Delivered within 2-3 business days",
-      "base_cost_cents": 1500,
-      "estimated_days": 3,
-      "is_active": true
+      "shipping_address": {
+        "full_name": "John Doe",
+        "phone_number_1": "+1234567890",
+        "phone_number_2": "+0987654321",
+        "province": "Lagos",
+        "city": "Ikeja",
+        "address": "123 Main Street"
+      },
+      "delivery_service_id": "delivery-service-uuid-string",
+      "payment_method": "Cash on Delivery", // Or other supported methods
+      "notes": "Leave at front desk if not home."
     }
     ```
+    *   `shipping_address`: An object containing the guest's delivery information.
+        *   `full_name` (string, required): The name of the person receiving the order.
+        *   `phone_number_1` (string, required): Primary contact number.
+        *   `phone_number_2` (string, optional): Secondary contact number.
+        *   `province` (string, required): The province/state for delivery.
+        *   `city` (string, required): The city/town for delivery.
+        *   `address` (string, required): The full delivery address.
+    *   `delivery_service_id` (string, required): The UUID of the selected delivery service option.
+    *   `payment_method` (string, required): The chosen payment method (e.g., "Cash on Delivery").
+    *   `notes` (string, optional): Any additional notes for the delivery.
 *   **Response:**
     *   **Code:** `201 Created`
     *   **Body:** `application/json`
         ```json
         {
-          "id": "g1h2i3j4-k5l6-7890-mnop-qrstuvwxyzab",
-          "name": "Express Delivery",
-          "description": "Delivered within 2-3 business days",
-          "base_cost_cents": 1500,
-          "estimated_days": 3,
-          "is_active": true,
-          "created_at": "2024-02-01T11:15:00Z",
-          "updated_at": "2024-02-01T11:15:00Z"
+          "order": {
+            "id": "order-uuid-string",
+            "user_id": null, // Will be null for guest orders
+            "user_full_name": "John Doe",
+            "status": "pending",
+            "total_amount_cents": 150000,
+            "payment_method": "Cash on Delivery",
+            "province": "Lagos",
+            "city": "Ikeja",
+            "phone_number_1": "+1234567890",
+            "phone_number_2": "+0987654321",
+            "delivery_service_id": "delivery-service-uuid-string",
+            "notes": "Leave at front desk if not home.",
+            "created_at": "2026-02-15T18:30:00Z",
+            "updated_at": "2026-02-15T18:30:00Z"
+          },
+          "items": [
+            {
+              "id": "order-item-uuid-string",
+              "order_id": "order-uuid-string",
+              "product_id": "product-uuid-string",
+              "product_name": "RTX 4080 Super",
+              "price_cents": 100000,
+              "quantity": 1,
+              "subtotal_cents": 100000,
+              "created_at": "2026-02-15T18:30:00Z",
+              "updated_at": "2026-02-15T18:30:00Z"
+            },
+            // ... more items
+          ]
         }
         ```
 *   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure creating the delivery service.
+    *   `400 Bad Request`: If the `X-Session-ID` header is missing, the request body contains invalid JSON, or required fields in the request body are missing or invalid.
+    *   `409 Conflict`: If stock availability changes between the time the cart was viewed and the order creation attempt, leading to insufficient stock for one or more items.
+    *   `500 Internal Server Error`: If there's a general server-side failure during the order creation process (e.g., database transaction failure).
 
 ---
 
-### `GET /api/v1/admin/delivery-services/{id}`
+## **Cart Bulk Add Items**
 
-*   **Description:** Get details of a specific delivery service.
-*   **Method:** `GET`
+### `POST /api/v1/cart/bulk-add`
+
+*   **Description:** Adds multiple items to the authenticated user's cart in a single request. If an item already exists in the cart, its quantity will be increased by the specified amount.
+*   **Method:** `POST`
 *   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the delivery service.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "id": "d1e2f3g4-h5i6-7890-jklm-nopqrstuvwx",
-          "name": "Standard Delivery",
-          "description": "Delivered within 5-7 business days",
-          "base_cost_cents": 500,
-          "estimated_days": 7,
-          "is_active": true,
-          "created_at": "2024-01-01T12:00:00Z",
-          "updated_at": "2024-01-01T12:00:00Z"
-        }
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no delivery service exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the delivery service details.
-
----
-
-### `GET /api/v1/admin/delivery-services`
-
-*   **Description:** List delivery services with optional filtering by active status.
-*   **Method:** `GET`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Query Parameters:**
-    *   `active_only` (Optional, `string`): If `"true"`, only returns active services. Defaults to `"false"` (returns all).
-    *   `page` (Optional, `integer`): Page number for pagination (1-indexed). Defaults to `1`.
-    *   `limit` (Optional, `integer`): Number of services per page. Defaults to `20`.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        [
-          // ... delivery service objects ...
-        ]
-        ```
-*   **Errors:**
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the delivery service list.
-
----
-
-### `PATCH /api/v1/admin/delivery-services/{id}`
-
-*   **Description:** Update an existing delivery service.
-*   **Method:** `PATCH`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the delivery service.
-*   **Request Body:** `application/json` (partial update allowed)
+    *   `Content-Type: application/json`
+    *   `Authorization: Bearer <access_token>` (A valid JWT access token obtained after login/register).
+*   **Request Body:**
     ```json
     {
-      "is_active": false
+      "items": [
+        {
+          "product_id": "product-uuid-string",
+          "quantity": 2
+        },
+        {
+          "product_id": "another-product-uuid-string",
+          "quantity": 1
+        }
+        // ... more items
+      ]
     }
     ```
+    *   `items`: An array of objects, each representing an item to add.
+        *   `product_id` (string, required): The UUID of the product to add.
+        *   `quantity` (integer, required): The number of units of the product to add. Must be greater than 0.
 *   **Response:**
     *   **Code:** `200 OK`
     *   **Body:** `application/json`
         ```json
         {
-          "id": "d1e2f3g4-h5i6-7890-jklm-nopqrstuvwx",
-          "name": "Standard Delivery",
-          "description": "Delivered within 5-7 business days",
-          "base_cost_cents": 500,
-          "estimated_days": 7,
-          "is_active": false,
-          "created_at": "2024-01-01T12:00:00Z",
-          "updated_at": "2024-02-01T11:45:00Z"
+          "message": "Cart updated successfully",
+          "cart_summary": {
+            "id": "cart-uuid-string",
+            "user_id": "user-uuid-string",
+            "items": [
+              {
+                "id": "cart-item-uuid-string",
+                "cart_id": "cart-uuid-string",
+                "product_id": "product-uuid-string",
+                "quantity": 5, // Quantity after adding 2 to existing 3
+                "product_name": "RTX 4080 Super",
+                "product_price_cents": 100000,
+                "final_price_cents": 95000, // Price after discount if applicable
+                "discount_percentage": 5,
+                "subtotal_cents": 475000,
+                "created_at": "2026-02-15T18:00:00Z",
+                "updated_at": "2026-02-15T18:30:00Z"
+              },
+              {
+                "id": "another-cart-item-uuid-string",
+                "cart_id": "cart-uuid-string",
+                "product_id": "another-product-uuid-string",
+                "quantity": 1, // Quantity added
+                "product_name": "Intel Core i9-14900K",
+                "product_price_cents": 50000,
+                "final_price_cents": 50000, // No discount
+                "discount_percentage": 0,
+                "subtotal_cents": 50000,
+                "created_at": "2026-02-15T18:30:00Z",
+                "updated_at": "2026-02-15T18:30:00Z"
+              }
+              // ... other items in the cart
+            ],
+            "total_items": 2,
+            "total_value_cents": 525000,
+            "total_discounted_value_cents": 525000
+          }
         }
         ```
 *   **Errors:**
-    *   `400 Bad Request`: If the request body is invalid JSON or contains validation errors.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no delivery service exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure updating the delivery service.
+    *   `400 Bad Request`: If the request body contains invalid JSON, required fields are missing, or the specified `quantity` is less than or equal to 0.
+    *   `401 Unauthorized`: If the `Authorization` header is missing or the provided JWT token is invalid or expired.
+    *   `404 Not Found`: If one or more of the specified `product_id`s do not exist in the database.
+    *   `409 Conflict`: If adding the items would exceed the available stock for one or more of the products.
+    *   `500 Internal Server Error`: If there's a general server-side failure during the cart update process.
 
----
 
-### `DELETE /api/v1/admin/delivery-services/{id}`
-
-*   **Description:** Delete a specific delivery service.
-*   **Method:** `DELETE`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the delivery service.
-*   **Response:**
-    *   **Code:** `204 No Content`
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no delivery service exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure deleting the delivery service.
-
----
-
-## Admin User Management (`/api/v1/admin/users`)
-
-*   **Access:** Requires a valid admin JWT token in the `Authorization: Bearer <token>` header.
-
-### `GET /api/v1/admin/users`
-
-*   **Description:** List users with optional filtering and pagination.
-*   **Method:** `GET`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Query Parameters:**
-    *   `active_only` (Optional, `string`): If `"true"`, only returns users who are not soft-deleted. Defaults to `"false"` (returns all users).
-    *   `page` (Optional, `integer`): Page number for pagination (1-indexed). Defaults to `1`.
-    *   `limit` (Optional, `integer`): Number of users per page. Defaults to `20`.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        [
-          {
-            "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
-            "name": "John Doe", // Full name if available, otherwise email
-            "email": "john.doe@example.com",
-            "registration_date": "2024-01-01T12:00:00Z",
-            "last_order_date": "2024-02-15T10:30:00Z", // Omitted if no orders
-            "order_count": 5,
-            "activity_status": "Active" // "Active" or "Inactive"
-          },
-          // ... more users ...
-        ]
-        ```
-*   **Errors:**
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the user list.
-
----
-
-### `GET /api/v1/admin/users/{id}`
-
-*   **Description:** Retrieve detailed information for a specific user.
-*   **Method:** `GET`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the user.
-*   **Response:**
-    *   **Code:** `200 OK`
-    *   **Body:** `application/json`
-        ```json
-        {
-          "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
-          "name": "John Doe", // Full name if available, otherwise email
-          "email": "john.doe@example.com",
-          "registration_date": "2024-01-01T12:00:00Z",
-          "last_order_date": "2024-02-15T10:30:00Z", // Omitted if no orders
-          "order_count": 5,
-          "activity_status": "Active" // "Active" or "Inactive"
-        }
-        ```
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `404 Not Found`: If no user exists with the given `id`.
-    *   `500 Internal Server Error`: If there's a server-side failure fetching the user details.
-
----
-
-### `POST /api/v1/admin/users/{id}/activate`
-
-*   **Description:** Reactivate a previously deactivated (soft-deleted) user account.
-*   **Method:** `POST`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the user to activate.
-*   **Request Body:** None (Empty body).
-*   **Response:**
-    *   **Code:** `204 No Content`
-    *   **Body:** None
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure activating the user.
-
----
-
-### `POST /api/v1/admin/users/{id}/deactivate`
-
-*   **Description:** Deactivate a user account by soft-deleting it.
-*   **Method:** `POST`
-*   **Headers:**
-    *   `Authorization: Bearer <admin_access_token>`
-*   **Path Parameters:**
-    *   `id` (Required, `string`): The UUID of the user to deactivate.
-*   **Request Body:** None (Empty body).
-*   **Response:**
-    *   **Code:** `204 No Content`
-    *   **Body:** None
-*   **Errors:**
-    *   `400 Bad Request`: If the `id` path parameter is not a valid UUID.
-    *   `401 Unauthorized`: If the access token is missing or invalid, or if the user is not an admin.
-    *   `500 Internal Server Error`: If there's a server-side failure deactivating the user.
-
----
-
-## Health Check
+## **Health Check**
 
 ### `GET /health`
 
@@ -1150,3 +784,4 @@
     *   `500 Internal Server Error`: If the service is unhealthy (e.g., database connection down).
 
 ---
+

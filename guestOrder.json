@@ -1,12 +1,12 @@
 {
   "shipping_address": {
-    "full_name": "John Snow",
+    "full_name": "sessionID Buyer 2",
     "phone_number_1": "1234567890",
     "province": "Luzon",
     "city": "Manila"
   },
   "billing_address": {
-    "full_name": "John Snow",
+    "full_name": "sessionID Buyer 2",
     "phone_number_1": "0987654321",
     "province": "Luzon",
     "city": "Quezon City"
