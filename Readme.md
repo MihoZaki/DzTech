@@ -12,21 +12,19 @@
       4090," "Ryzen 9 7950X") so I can find what I need quickly.
 - [x] As a customer, I want to **view detailed product specs** (e.g., clock
       speed, compatibility, benchmarks) so I can make an informed decision.
-- [ ] As a customer, I want to **add products to my cart** so I can purchase
+- [x] As a customer, I want to **add products to my cart** so I can purchase
       them later.
 - [x] As a customer, I want to **add items to my cart while offline** and have
       them sync once I log in.
-- [ ] As a customer, I want to **save products to a wishlist** so I can consider
-      them for future purchases.
-- [ ] As a customer, I want to **read and leave product reviews** to gauge
+- [x] As a customer, I want to **read and leave product reviews** to gauge
       quality and share my experience.
-- [ ] As a customer, I want to **create custom PC builds** by selecting
+- [x] As a customer, I want to **create custom PC builds** by selecting
       compatible components (CPU, GPU, motherboard, etc.).
-- [ ] As a customer, I want to **select a delivery service** so I can choose how
+- [x] As a customer, I want to **select a delivery service** so I can choose how
       my products are delivered.
 - [x] As a customer, I want to **create an account (optional)** to finalize my
       order and access additional features.
-- [ ] As a customer, I want to **view my order history** so I can track
+- [x] As a customer, I want to **view my order history** so I can track
       purchases and reorder if needed.
 - [x] As a customer, I want to **confirm my order** so I can complete my
       purchase.
@@ -40,11 +38,11 @@
 - [x] As an admin, I want to **edit product details** (e.g., specs, pricing,
       stock) so I can keep the information up to date.
 - [x] As an admin, I want to **remove products** so I can manage inventory.
-- [ ] As an admin, I want to **add and update delivery services** and their
+- [x] As an admin, I want to **add and update delivery services** and their
       details.
-- [ ] As an admin, I want to **moderate product reviews** to maintain quality
+- [x] As an admin, I want to **moderate product reviews** to maintain quality
       and relevance.
-- [ ] As an admin, I want to **manage custom build compatibility rules** (e.g.,
+- [x] As an admin, I want to **manage custom build compatibility rules** (e.g.,
       CPU socket must match motherboard).
 
 ---
@@ -64,29 +62,23 @@
 
 ### **Shopping Cart**
 
-- [ ] Add/remove products.
-- [ ] View total cost.
-- [ ] Offline mode support with sync on login.
-
-### **Wishlist**
-
-- [ ] Save products for later.
-- [ ] Share wishlists (e.g., for gift ideas).
+- [x] Add/remove products.
+- [x] View total cost.
+- [x] Offline mode support with sync on login.
 
 ### **Product Reviews**
 
-- [ ] Star ratings and written reviews.
-- [ ] Admin moderation to prevent spam/abuse.
+- [x] Star ratings.
 
 ### **Custom PC Builds**
 
-- [ ] **Component Selector**: Choose CPU, GPU, motherboard, RAM, storage, PSU,
+- [x] **Component Selector**: Choose CPU, GPU, motherboard, RAM, storage, PSU,
       and case.
-- [ ] **Compatibility Check**: Real-time validation (e.g., "This CPU is not
+- [x] **Compatibility Check**: Real-time validation (e.g., "This CPU is not
       compatible with the selected motherboard").
-- [ ] **Build Summary**: Preview the build, estimated performance, and total
+- [x] **Build Summary**: Preview the build, estimated performance, and total
       price.
-- [ ] **Save/Share Builds**: Save for later or share with friends for feedback.
+- [x] **Save/Share Builds**: Save for later or share with friends for feedback.
 
 ### **User Accounts**
 
@@ -95,19 +87,18 @@
 
 ### **Delivery Service Selection**
 
-- [ ] Choose from available delivery options during checkout.
-- [ ] Admins can configure services (e.g., standard, express, pickup).
+- [x] Choose from available delivery options during checkout.
+- [x] Admins can configure services (e.g., standard, express, pickup).
 
 ### **Order History**
 
-- [ ] View past orders, reorder, or track deliveries.
+- [x] View past orders, reorder, or track deliveries.
 
 ### **Admin Panel**
 
 - [x] Add/edit/remove products.
-- [ ] Manage delivery services.
-- [ ] Moderate reviews.
-- [ ] Set compatibility rules for custom builds.
+- [x] Manage delivery services.
+
 
 ---
 
