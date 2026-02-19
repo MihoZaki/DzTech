@@ -47,8 +47,7 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	querier := db_queries.New(pool)
 
 	// Initialize services
-	emailService := services.NewEmailService(cfg, slog.Default())
-	userService := services.NewUserService(querier, emailService) // Initialize services (add redisClient if needed in constructor)
+	userService := services.NewUserService(querier) // Initialize services (add redisClient if needed in constructor)
 	productService := services.NewProductService(querier, storer, redisClient, slog.Default())
 	cartService := services.NewCartService(querier, productService, slog.Default())
 	orderService := services.NewOrderService(querier, pool, cartService, redisClient, productService, slog.Default())
@@ -74,13 +73,13 @@ func New(cfg *config.Config, redisClient *redis.Client) http.Handler {
 	discountHandler := handlers.NewDiscountHandler(discountService, slog.Default())
 	categoryHandler := handlers.NewCategoryHandler(categoryService, slog.Default())
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService, slog.Default())
-	profileHandler := handlers.NewProfileHandler(userService, emailService, slog.Default())
+	profileHandler := handlers.NewProfileHandler(userService, slog.Default())
 
 	// Create sub-routers
 	authRouter := chi.NewRouter()
 	authHandler.RegisterRoutes(authRouter)
 	// Register password recovery routes on the auth router (public)
-	profileHandler.RegisterAuthRoutes(authRouter) // Adds /forgot-password, /reset-password under /api/v1/auth
+	// profileHandler.RegisterAuthRoutes(authRouter) // Adds /forgot-password, /reset-password under /api/v1/auth
 
 	analyticsRouter := chi.NewRouter()
 	analyticsHandler.RegisterRoutes(analyticsRouter)

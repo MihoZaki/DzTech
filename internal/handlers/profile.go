@@ -15,17 +15,16 @@ import (
 
 // ProfileHandler handles HTTP requests for user profile updates and password recovery.
 type ProfileHandler struct {
-	service      *services.UserService
-	emailService *services.ConcreteEmailService // Pass the concrete type or interface if defined
-	logger       *slog.Logger
+	service *services.UserService
+	// emailService *services.ConcreteEmailService // Pass the concrete type or interface if defined
+	logger *slog.Logger
 }
 
 // NewProfileHandler creates a new instance of ProfileHandler.
-func NewProfileHandler(service *services.UserService, emailService *services.ConcreteEmailService, logger *slog.Logger) *ProfileHandler {
+func NewProfileHandler(service *services.UserService, logger *slog.Logger) *ProfileHandler {
 	return &ProfileHandler{
-		service:      service,
-		emailService: emailService,
-		logger:       logger,
+		service: service,
+		logger:  logger,
 	}
 }
 
@@ -39,10 +38,10 @@ func (h *ProfileHandler) RegisterRoutes(r chi.Router) {
 
 // RegisterAuthRoutes registers the public password recovery routes under the given router.
 // This should be mounted under the public auth routes (e.g., /api/v1/auth).
-func (h *ProfileHandler) RegisterAuthRoutes(r chi.Router) {
-	r.Post("/forgot-password", h.ForgotPassword) // POST /api/v1/auth/forgot-password
-	r.Post("/reset-password", h.ResetPassword)   // POST /api/v1/auth/reset-password
-}
+// func (h *ProfileHandler) RegisterAuthRoutes(r chi.Router) {
+// 	r.Post("/forgot-password", h.ForgotPassword) // POST /api/v1/auth/forgot-password
+// 	r.Post("/reset-password", h.ResetPassword)   // POST /api/v1/auth/reset-password
+// }
 
 // UpdateProfile handles the request to update user profile information.
 func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
@@ -157,71 +156,71 @@ func (h *ProfileHandler) ChangePassword(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(models.PasswordChangeResponse{Message: "Password updated successfully"})
 }
 
-// ForgotPassword handles the request to initiate password recovery.
-func (h *ProfileHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
-	// 1. Decode Request Body into ForgotPasswordRequest
-	var req models.ForgotPasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("Invalid JSON in ForgotPassword request", "error", err)
-		http.Error(w, `{"error": "Invalid JSON", "message": "Request body contains invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
+// // ForgotPassword handles the request to initiate password recovery.
+// func (h *ProfileHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+// 	// 1. Decode Request Body into ForgotPasswordRequest
+// 	var req models.ForgotPasswordRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		h.logger.Error("Invalid JSON in ForgotPassword request", "error", err)
+// 		http.Error(w, `{"error": "Invalid JSON", "message": "Request body contains invalid JSON"}`, http.StatusBadRequest)
+// 		return
+// 	}
 
-	// 2. Validate the request struct
-	if err := req.Validate(); err != nil {
-		http.Error(w, "Validation error: "+err.Error(), http.StatusBadRequest)
-		return
-	}
+// 	// 2. Validate the request struct
+// 	if err := req.Validate(); err != nil {
+// 		http.Error(w, "Validation error: "+err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
 
-	// 3. Call the Service Method
-	err := h.service.ForgotPassword(r.Context(), req)
-	if err != nil {
-		h.logger.Error("Failed to initiate password recovery", "error", err, "email", req.Email)
-	}
+// 	// 3. Call the Service Method
+// 	err := h.service.ForgotPassword(r.Context(), req)
+// 	if err != nil {
+// 		h.logger.Error("Failed to initiate password recovery", "error", err, "email", req.Email)
+// 	}
 
-	// 4. Send Generic Success Response (200 OK)
-	// Regardless of whether the email exists or the email sending succeeded/failed,
-	// return a generic message to the client to prevent enumeration attacks.
-	h.logger.Info("Forgot password request processed", "email", req.Email)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) // 200 OK
-	json.NewEncoder(w).Encode(models.ForgotPasswordResponse{Message: "If your email exists in our system, a password reset link has been sent."})
-}
+// 	// 4. Send Generic Success Response (200 OK)
+// 	// Regardless of whether the email exists or the email sending succeeded/failed,
+// 	// return a generic message to the client to prevent enumeration attacks.
+// 	h.logger.Info("Forgot password request processed", "email", req.Email)
+// 	w.Header().Set("Content-Type", "application/json")
+// 	w.WriteHeader(http.StatusOK) // 200 OK
+// 	json.NewEncoder(w).Encode(models.ForgotPasswordResponse{Message: "If your email exists in our system, a password reset link has been sent."})
+// }
 
-// ResetPassword handles the request to complete password recovery using a token.
-func (h *ProfileHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	// 1. Decode Request Body into ResetPasswordRequest
-	var req models.ResetPasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Error("Invalid JSON in ResetPassword request", "error", err)
-		http.Error(w, `{"error": "Invalid JSON", "message": "Request body contains invalid JSON"}`, http.StatusBadRequest)
-		return
-	}
+// // ResetPassword handles the request to complete password recovery using a token.
+// func (h *ProfileHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+// 	// 1. Decode Request Body into ResetPasswordRequest
+// 	var req models.ResetPasswordRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		h.logger.Error("Invalid JSON in ResetPassword request", "error", err)
+// 		http.Error(w, `{"error": "Invalid JSON", "message": "Request body contains invalid JSON"}`, http.StatusBadRequest)
+// 		return
+// 	}
 
-	// 2. Validate the request struct
-	if err := req.Validate(); err != nil {
-		http.Error(w, "Validation error: "+err.Error(), http.StatusBadRequest)
-		return
-	}
+// 	// 2. Validate the request struct
+// 	if err := req.Validate(); err != nil {
+// 		http.Error(w, "Validation error: "+err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
 
-	// 3. Call the Service Method
-	err := h.service.ResetPassword(r.Context(), req)
-	if err != nil {
-		h.logger.Error("Failed to reset password", "error", err, "token", req.Token)
-		// Provide a specific error message for known errors returned by the service
-		errStr := err.Error()
-		if strings.Contains(errStr, "invalid or expired password reset token") {
-			http.Error(w, `{"error": "Invalid or Expired Token", "message": "The password reset token is invalid or has expired."}`, http.StatusBadRequest)
-			return
-		}
-		// For other errors (e.g., DB issues, hashing issues), return a generic error
-		http.Error(w, `{"error": "Internal Server Error", "message": "Failed to reset password"}`, http.StatusInternalServerError)
-		return
-	}
+// 	// 3. Call the Service Method
+// 	err := h.service.ResetPassword(r.Context(), req)
+// 	if err != nil {
+// 		h.logger.Error("Failed to reset password", "error", err, "token", req.Token)
+// 		// Provide a specific error message for known errors returned by the service
+// 		errStr := err.Error()
+// 		if strings.Contains(errStr, "invalid or expired password reset token") {
+// 			http.Error(w, `{"error": "Invalid or Expired Token", "message": "The password reset token is invalid or has expired."}`, http.StatusBadRequest)
+// 			return
+// 		}
+// 		// For other errors (e.g., DB issues, hashing issues), return a generic error
+// 		http.Error(w, `{"error": "Internal Server Error", "message": "Failed to reset password"}`, http.StatusInternalServerError)
+// 		return
+// 	}
 
-	// 4. Send Success Response (200 OK)
-	h.logger.Info("Password reset successfully", "token_used", req.Token)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK) // 200 OK
-	json.NewEncoder(w).Encode(models.ResetPasswordResponse{Message: "Password reset successfully. Please log in."})
-}
+// 	// 4. Send Success Response (200 OK)
+// 	h.logger.Info("Password reset successfully", "token_used", req.Token)
+// 	w.Header().Set("Content-Type", "application/json")
+// 	w.WriteHeader(http.StatusOK) // 200 OK
+// 	json.NewEncoder(w).Encode(models.ResetPasswordResponse{Message: "Password reset successfully. Please log in."})
+// }
