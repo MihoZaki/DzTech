@@ -1,7 +1,0 @@
-{
-  "name": "Express Delivery",
-  "description": "Fast delivery within 2-3 business days.",
-  "base_cost_cents": 500,
-  "estimated_days": 3,
-  "is_active": true
-}
