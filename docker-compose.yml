@@ -1,0 +1,63 @@
+
+services:
+  # --- PostgreSQL Database Service ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: tech_store_postgres
+    restart: unless-stopped
+    environment:
+      # These variables are used by the PostgreSQL image to set up the initial database/user.
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      # Mount the named volume 'postgres_data' to the default PostgreSQL data directory inside the container.
+      # The path '/var/lib/postgresql/data' is the standard location inside the postgres container.
+      - postgres_data:/var/lib/postgresql/data
+    # Port mapping: Expose container's port 5432 to host's port 5433 (matches DB_PORT in .env)
+    ports:
+      - "5433:5432" # Host port 5433 -> Container port 5432
+
+  # --- Redis Cache Service ---
+  redis:
+    image: redis:7-alpine
+    container_name: tech_store_redis
+    restart: unless-stopped
+    # If you need a password for Redis, uncomment the command line below
+    # command: redis-server --requirepass ${REDIS_PASSWORD} # Assumes REDIS_PASSWORD is in .env
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379" # Host port 6379 -> Container port 6379
+
+  # --- Go Backend Application Service ---
+  backend:
+    build: . # Tells Compose to build the image using the Dockerfile in the current directory
+    container_name: tech_store_backend
+    restart: unless-stopped
+    depends_on:
+      - postgres # Ensures postgres starts before the backend
+      - redis    # Ensures redis starts before the backend
+    environment:
+      # Use the same variables from your .env file for the backend application
+      # Note: Inside the Docker network, 'postgres' and 'redis' are the hostnames
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable
+      REDIS_HOST: redis # Use the service name 'redis' as the hostname
+      REDIS_PORT: 6379  # Default Redis port inside the network
+      REDIS_PASSWORD: ${REDIS_PASSWORD} # If Redis has a password, pass it here
+      REDIS_DB: 0       # Default Redis database
+      PORT: 8080        # Port the backend application listens on inside the container
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8080:8080" # Map host port 8080 to container port 8080
+    # Optional: Explicitly load the .env file containing the variables used above
+    env_file:
+      - .env # Assumes the .env file is in the same directory as docker-compose.yml
+
+# Named volumes for data persistence
+# These volumes are managed by Docker and exist independently of containers.
+volumes:
+  # Defines a volume named 'postgres_data'.
+  postgres_data:
+  # Defines a volume named 'redis_data'.
+  redis_data:

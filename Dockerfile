@@ -1,15 +1,51 @@
-FROM jetpackio/devbox:latest
+# Use the official Golang image as the base image
+FROM golang:1.25.5-alpine AS builder
 
-# Installing your devbox project
-WORKDIR /code
-USER root:root
-RUN mkdir -p /code && chown ${DEVBOX_USER}:${DEVBOX_USER} /code
-USER ${DEVBOX_USER}:${DEVBOX_USER}
-COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} devbox.json devbox.json
-COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} devbox.lock devbox.lock
+# Install git (required for go mod download in alpine)
+RUN apk add --no-cache git
 
+# Set the working directory inside the container
+WORKDIR /app
 
+# Copy go.mod and go.sum files
+COPY go.mod go.sum ./
 
-RUN devbox run -- echo "Installed Packages." && nix-store --gc && nix-store --optimise
+# Download dependencies
+RUN go mod download
 
-CMD ["devbox", "shell"]
+# Copy the rest of the application source code
+COPY . .
+
+# Build the Go binary statically (CGO_ENABLED=0) for smaller image size and portability
+# Adjust the path to your main.go file if it's located elsewhere (e.g., cmd/server/main.go)
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o yc-informatique-backend cmd/server/main.go
+
+# Use a minimal base image for the final stage
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS requests if your app makes them
+RUN apk --no-cache add ca-certificates
+
+# Create a non-root user for running the application
+RUN adduser -D -s /bin/sh appuser
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /app/yc-informatique-backend .
+
+# COPY the migrations directory from the builder stage
+COPY --from=builder /app/migrations ./migrations
+
+# Change ownership of the binary and migrations directory to the non-root user
+RUN chown -R appuser:appuser /app
+
+# Switch to the non-root user
+USER appuser
+
+# Expose the port your application listens on (adjust if different)
+EXPOSE 8080
+
+# Command to run the application
+CMD ["./yc-informatique-backend"]
