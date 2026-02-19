@@ -54,6 +54,7 @@ INSERT INTO categories (name, slug, type) VALUES
 ('Storage', 'storage', 'component'),
 ('Power Supply', 'psu', 'component'),
 ('Case', 'case', 'component'),
+('Cooler', 'cpu-cooler', 'component'),
 ('Laptop', 'laptop', 'laptop'),
 ('Accessories', 'accessories', 'accessory');
 
