@@ -27,7 +27,6 @@ func (i *BulkAddItemRequest_Item) Validate() error {
 // CreateOrderFromCartRequest represents the request body for creating an order from the current cart state.
 type CreateOrderFromCartRequest struct {
 	ShippingAddress   Address   `json:"shipping_address"`
-	BillingAddress    Address   `json:"billing_address"`
 	Notes             *string   `json:"notes,omitempty"`     // Optional notes for the order
 	DeliveryServiceID uuid.UUID `json:"delivery_service_id"` // Required delivery service ID
 }
