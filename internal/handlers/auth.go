@@ -34,9 +34,9 @@ func deleteGuestSessionCookie(w http.ResponseWriter) {
 		// Domain:  "",                      // Same domain it was set with (or inferred)
 		MaxAge:   -1,              // Delete cookie immediately
 		Expires:  time.Unix(0, 0), // Expire immediately (Unix epoch)
-		HttpOnly: true,            // Same flags it was set with (likely true for session IDs)
-		// Secure:  true,                    // Same flags it was set with (depends on your setup)
-		// SameSite: http.SameSiteStrictMode, // Same flags it was set with (depends on your setup)
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
 	}
 	http.SetCookie(w, cookie) // Add the deletion instruction to the response headers
 }
