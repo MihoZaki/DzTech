@@ -1,3 +1,4 @@
+// ... (other imports remain the same) ...
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,12 +35,10 @@ const ProductsList = () => {
     spec_filter: "",
   });
 
-  // --- State for Input Fields (controls the UI) ---
+  // --- State for Input Fields (controls the UI *except* checkboxes) ---
   const [inputSearchTerm, setInputSearchTerm] = useState("");
-  const [inputInStockOnly, setInputInStockOnly] = useState(false);
-  const [inputIncludeDiscountedOnly, setInputIncludeDiscountedOnly] = useState(
-    false,
-  );
+  // REMOVED: const [inputInStockOnly, setInputInStockOnly] = useState(false);
+  // REMOVED: const [inputIncludeDiscountedOnly, setInputIncludeDiscountedOnly] = useState(false);
   const [inputCategoryId, setInputCategoryId] = useState("");
   const [inputBrand, setInputBrand] = useState("");
   const [inputMinPrice, setInputMinPrice] = useState("");
@@ -57,13 +56,28 @@ const ProductsList = () => {
     setInputSearchTerm(e.target.value);
   };
 
+  // --- NEW HANDLERS FOR CHECKBOXES: Update EFFECTIVE state directly ---
   const handleInputInStockOnlyChange = (e) => {
-    setInputInStockOnly(e.target.checked);
+    const isChecked = e.target.checked;
+    setEffectiveSearchCriteria((prev) => ({
+      ...prev,
+      in_stock_only: isChecked,
+    })); // Update effective state directly
+    setCurrentPage(1); // Reset page when criteria change
+    // Optionally, also update a corresponding input state if needed for the input field itself, but for checkboxes, effective state is sufficient for UI feedback
+    // setInputInStockOnly(isChecked); // If you still have the input state variable
   };
 
   const handleInputIncludeDiscountedOnlyChange = (e) => {
-    setInputIncludeDiscountedOnly(e.target.checked);
+    const isChecked = e.target.checked;
+    setEffectiveSearchCriteria((prev) => ({
+      ...prev,
+      include_discounted_only: isChecked,
+    })); // Update effective state directly
+    setCurrentPage(1); // Reset page when criteria change
+    // setInputIncludeDiscountedOnly(isChecked); // If you still have the input state variable
   };
+  // --- END NEW HANDLERS ---
 
   const handleInputCategoryIdChange = (e) => {
     setInputCategoryId(e.target.value);
@@ -87,11 +101,12 @@ const ProductsList = () => {
 
   // --- Handler for Search Button Click ---
   const handleSearchClick = () => {
-    // Construct the new effective criteria object from input states
+    // Construct the new effective criteria object from input states for NON-checkbox fields
+    // Checkbox fields are already handled by their direct state updates
     const newCriteria = {
       query: inputSearchTerm,
-      in_stock_only: inputInStockOnly,
-      include_discounted_only: inputIncludeDiscountedOnly,
+      in_stock_only: effectiveSearchCriteria.in_stock_only, // Use value from effective state (updated by checkbox handler)
+      include_discounted_only: effectiveSearchCriteria.include_discounted_only, // Use value from effective state (updated by checkbox handler)
       category_id: inputCategoryId,
       brand: inputBrand,
       min_price: inputMinPrice !== "" ? parseInt(inputMinPrice, 10) : "",
@@ -125,9 +140,9 @@ const ProductsList = () => {
     if (effectiveSearchCriteria.query) {
       params.query = effectiveSearchCriteria.query;
     }
-    if (effectiveSearchCriteria.in_stock_only) params.in_stock_only = true;
+    if (effectiveSearchCriteria.in_stock_only) params.in_stock_only = true; // Read from effective state
     if (effectiveSearchCriteria.include_discounted_only) {
-      params.include_discounted_only = true;
+      params.include_discounted_only = true; // Read from effective state
     }
     if (effectiveSearchCriteria.category_id) {
       params.category_id = effectiveSearchCriteria.category_id;
@@ -279,7 +294,7 @@ const ProductsList = () => {
               className="input input-bordered w-full flex-grow"
               value={inputSearchTerm}
               onChange={handleInputSearchTermChange}
-              onClick={handleInputSearchTermChange}
+              onClick={handleInputSearchTermChange} // This seems redundant, onChange handles it
             />
             <button type="submit" className="btn btn-primary">
               <MagnifyingGlassIcon className="w-5 h-5" />
@@ -300,22 +315,24 @@ const ProductsList = () => {
         <div className="form-control">
           <label className="cursor-pointer label flex items-center justify-between">
             <span className="label-text">In Stock Only</span>
+            {/* FIXED: Now reads from effectiveSearchCriteria which is updated directly by the handler */}
             <input
               type="checkbox"
               className="toggle toggle-primary"
               checked={effectiveSearchCriteria.in_stock_only}
-              onChange={handleInputInStockOnlyChange}
+              onChange={handleInputInStockOnlyChange} // This now updates effectiveSearchCriteria directly
             />
           </label>
         </div>
         <div className="form-control">
           <label className="cursor-pointer label flex items-center justify-between">
             <span className="label-text">Discounted Only</span>
+            {/* FIXED: Now reads from effectiveSearchCriteria which is updated directly by the handler */}
             <input
               type="checkbox"
               className="toggle toggle-primary"
               checked={effectiveSearchCriteria.include_discounted_only}
-              onChange={handleInputIncludeDiscountedOnlyChange}
+              onChange={handleInputIncludeDiscountedOnlyChange} // This now updates effectiveSearchCriteria directly
             />
           </label>
         </div>
@@ -370,6 +387,8 @@ const ProductsList = () => {
           />
         </div>
       </div>
+
+      {/* ... (Pagination and Table remain the same) ... */}
 
       {pagination && (
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
@@ -448,7 +467,7 @@ const ProductsList = () => {
                   ) stockClass = "badge-success";
 
                   let firstImageUrl =
-                    "https://placehold.co/60x60?text=No+Image  ";
+                    "https://placehold.co/60x60?text=No+Image    ";
                   if (
                     product.image_urls && Array.isArray(product.image_urls) &&
                     product.image_urls.length > 0
@@ -467,7 +486,7 @@ const ProductsList = () => {
                               alt={`${product.name} thumbnail`}
                               onError={(e) => {
                                 e.target.src =
-                                  "https://placehold.co/60x60?text=Err  ";
+                                  "https://placehold.co/60x60?text=Err    ";
                               }}
                             />
                           </div>
