@@ -500,10 +500,7 @@ const BuildPC = () => {
                             <img
                               src={component.image_urls &&
                                   component.image_urls.length > 0
-                                ? `${
-                                  import.meta.env.VITE_BACKEND_BASE_URL ||
-                                  "http://localhost:8080"
-                                }${component.image_urls[0]}`
+                                ? `${component.image_urls[0]}`
                                 : "https://placehold.co/100x100?text=No+Image  "} // Fallback placeholder
                               alt={component.name}
                               className="w-16 h-16 object-contain rounded-none"
