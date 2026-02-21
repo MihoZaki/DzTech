@@ -321,6 +321,7 @@ const Home = () => {
             >
               <div className="relative flex-grow overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[0].image}
                   alt={hardcodedCategories[0].name}
                   className="w-full h-full object-cover"
@@ -346,6 +347,7 @@ const Home = () => {
             >
               <div className="relative h-full w-full overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[1].image}
                   alt={hardcodedCategories[1].name}
                   className="w-full h-full object-cover"
@@ -370,6 +372,7 @@ const Home = () => {
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[2].image}
                   alt={hardcodedCategories[2].name}
                   className="w-full h-full object-cover"
@@ -394,6 +397,7 @@ const Home = () => {
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[3].image}
                   alt={hardcodedCategories[3].name}
                   className="w-full h-full object-cover"
@@ -418,6 +422,7 @@ const Home = () => {
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[4].image}
                   alt={hardcodedCategories[4].name}
                   className="w-full h-full object-cover"
@@ -442,6 +447,7 @@ const Home = () => {
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[5].image}
                   alt={hardcodedCategories[5].name}
                   className="w-full h-full object-cover"
@@ -466,6 +472,7 @@ const Home = () => {
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[6].image}
                   alt={hardcodedCategories[6].name}
                   className="w-full h-full object-cover"
@@ -490,6 +497,7 @@ const Home = () => {
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
                 <img
+                  loading="lazy"
                   src={hardcodedCategories[7].image}
                   alt={hardcodedCategories[7].name}
                   className="w-full h-full object-cover"
@@ -524,6 +532,7 @@ const Home = () => {
                 >
                   {/* Adjust width/height and styling as needed */}
                   <img
+                    loading="lazy"
                     src={brand.image}
                     alt={brand.name}
                     className="object-contain h-24 w-auto max-w-full" // Adjust height (h-24) as needed
