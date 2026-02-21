@@ -42,7 +42,7 @@ func (q *Queries) GetAverageFulfillmentTime(ctx context.Context, arg GetAverageF
 const getAverageOrderValue = `-- name: GetAverageOrderValue :one
 
 SELECT
-    AVG(o.total_amount_cents) AS aov_cents
+    COALESCE(AVG(o.total_amount_cents),0)::BIGINT AS aov_cents
 FROM
     orders o
 WHERE
@@ -57,9 +57,9 @@ type GetAverageOrderValueParams struct {
 
 // @start_date = start_date, @start_date = end_date
 // Calculates the average order value (AOV) for delivered orders within a given time range.
-func (q *Queries) GetAverageOrderValue(ctx context.Context, arg GetAverageOrderValueParams) (float64, error) {
+func (q *Queries) GetAverageOrderValue(ctx context.Context, arg GetAverageOrderValueParams) (int64, error) {
 	row := q.db.QueryRow(ctx, getAverageOrderValue, arg.StartDate, arg.EndDate)
-	var aov_cents float64
+	var aov_cents int64
 	err := row.Scan(&aov_cents)
 	return aov_cents, err
 }

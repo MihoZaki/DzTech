@@ -25,7 +25,7 @@ WHERE
 -- name: GetAverageOrderValue :one
 -- Calculates the average order value (AOV) for delivered orders within a given time range.
 SELECT
-    AVG(o.total_amount_cents) AS aov_cents
+    COALESCE(AVG(o.total_amount_cents),0)::BIGINT AS aov_cents
 FROM
     orders o
 WHERE

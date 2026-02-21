@@ -8,7 +8,6 @@ import {
   StarIcon,
 } from "@heroicons/react/24/solid";
 import { useCart } from "../contexts/CartContext"; // Still need this to sync local cart
-// REMOVED: import { addItemToCart } from "../services/api"; // No longer needed
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
   "";

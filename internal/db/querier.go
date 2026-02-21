@@ -113,7 +113,7 @@ type Querier interface {
 	GetAverageFulfillmentTime(ctx context.Context, arg GetAverageFulfillmentTimeParams) (float64, error)
 	// @start_date = start_date, @start_date = end_date
 	// Calculates the average order value (AOV) for delivered orders within a given time range.
-	GetAverageOrderValue(ctx context.Context, arg GetAverageOrderValueParams) (float64, error)
+	GetAverageOrderValue(ctx context.Context, arg GetAverageOrderValueParams) (int64, error)
 	GetCartByID(ctx context.Context, cartID uuid.UUID) (GetCartByIDRow, error)
 	GetCartBySessionID(ctx context.Context, sessionID *string) (GetCartBySessionIDRow, error)
 	GetCartByUserID(ctx context.Context, userID uuid.UUID) (GetCartByUserIDRow, error)
