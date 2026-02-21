@@ -1,15 +1,20 @@
+// ... (other imports remain the same) ...
 import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"; // Import useMutation and useQueryClient
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { toast } from "sonner"; // Import toast for notifications
 import {
   fetchActiveDiscounts, // Import the new function
   fetchProductById,
   fetchProductDiscounts,
+  linkProductDiscount, // Import the new API function
+  unlinkProductDiscount, // Import the new API function
 } from "../../services/api";
 
 const ProductView = () => {
   const { id: productId } = useParams();
+  const queryClient = useQueryClient(); // Get the query client instance
 
   // Fetch product details
   const {
@@ -48,6 +53,54 @@ const ProductView = () => {
     queryFn: fetchActiveDiscounts, // Use the new function
     select: (response) => response.data.data, // Adjust based on your API response structure for discounts
     // You might want to cache this globally if used elsewhere
+  });
+
+  // --- NEW: Mutation for Linking Discount ---
+  const linkDiscountMutation = useMutation({
+    mutationFn: ({ discountId, productId }) =>
+      linkProductDiscount(discountId, productId),
+    onSuccess: (data) => {
+      // Invalidate and refetch the product discounts query to update the UI
+      queryClient.invalidateQueries({
+        queryKey: ["productDiscounts", productId],
+      });
+      // Optionally invalidate the main product query if linking affects its discount status
+      queryClient.invalidateQueries({ queryKey: ["product", productId] });
+      toast.success("Discount linked successfully!");
+      // Reset the selected discount in the modal after successful link
+      setSelectedDiscountToLink("");
+      // Close the modal after successful link (optional, you might want user confirmation)
+      // setIsLinkModalOpen(false);
+    },
+    onError: (error) => {
+      console.error("Error linking discount:", error);
+      // Try to get a user-friendly message from the backend response
+      const errorMessage = error?.response?.data?.message || error.message ||
+        "Failed to link discount. Please try again.";
+      toast.error(errorMessage);
+    },
+  });
+
+  // --- NEW: Mutation for Unlinking Discount ---
+  const unlinkDiscountMutation = useMutation({
+    mutationFn: ({ discountId, productId }) =>
+      unlinkProductDiscount(discountId, productId),
+    onSuccess: (data) => {
+      // Invalidate and refetch the product discounts query to update the UI
+      queryClient.invalidateQueries({
+        queryKey: ["productDiscounts", productId],
+      });
+      // Optionally invalidate the main product query if unlinking affects its discount status
+      queryClient.invalidateQueries({ queryKey: ["product", productId] });
+      toast.success("Discount unlinked successfully!");
+    },
+    onError: (error) => {
+      console.error("Error unlinking discount:", error);
+      // Try to get a user-friendly message from the backend response
+      const errorMessage = error?.response?.data?.message || error.message ||
+        "Failed to unlink discount. Please try again.";
+      toast.error(errorMessage);
+    },
   });
 
   const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
@@ -113,7 +166,7 @@ const ProductView = () => {
   const imageGalleryList = product.image_urls || [];
   const currentImageSrc = imageGalleryList[selectedImageIndex]
     ? `${imageGalleryList[selectedImageIndex]}`
-    : "https://placehold.co/600x600?text=No+Image  ";
+    : "https://placehold.co/600x600?text=No+Image      ";
 
   // Determine loading/error state for discounts section
   const discountsSectionLoading = discountsLoading;
@@ -138,7 +191,7 @@ const ProductView = () => {
     setSelectedDiscountToLink(discountId);
   };
 
-  // Function to handle the link action (placeholder for now)
+  // Function to handle the link action
   const handleLinkDiscount = async () => {
     if (!selectedDiscountToLink) return; // Nothing selected
 
@@ -148,11 +201,24 @@ const ProductView = () => {
       "to product:",
       productId,
     );
-    // TODO: Implement the actual API call to link the discount
-    // Example: await linkProductDiscount(selectedDiscountToLink, productId);
-    // TODO: Refetch product discounts after successful link
-    // Example: refetchProductDiscounts(); // Assuming you have a refetch function from the query hook
-    handleCloseLinkModal(); // Close modal after linking (or on success/error)
+    // Call the mutation function
+    linkDiscountMutation.mutate({
+      discountId: selectedDiscountToLink,
+      productId,
+    });
+    handleCloseLinkModal(); // Consider closing after mutation starts, or after success in onSuccess
+  };
+
+  // Function to handle the unlink action
+  const handleUnlinkDiscount = (discountId) => {
+    console.log(
+      "Attempting to unlink discount:",
+      discountId,
+      "from product:",
+      productId,
+    );
+    // Call the mutation function
+    unlinkDiscountMutation.mutate({ discountId, productId });
   };
 
   return (
@@ -174,7 +240,7 @@ const ProductView = () => {
               className="w-full h-full object-contain rounded-lg"
               onError={(e) => {
                 e.target.src =
-                  "https://placehold.co/600x600?text=Image+Error  ";
+                  "https://placehold.co/600x600?text=Image+Error      ";
               }}
             />
           </div>
@@ -197,7 +263,8 @@ const ProductView = () => {
                     alt={`Thumbnail ${index + 1}`}
                     className="w-full h-full object-cover rounded pointer-events-none"
                     onError={(e) => {
-                      e.target.src = "https://placehold.co/100x100?text=Err  ";
+                      e.target.src =
+                        "https://placehold.co/100x100?text=Err      ";
                     }}
                   />
                 </button>
@@ -363,8 +430,17 @@ const ProductView = () => {
           <button
             className="btn btn-primary"
             onClick={handleOpenLinkModal}
+            disabled={linkDiscountMutation.isPending} // Disable while linking
           >
-            Link Discount
+            {linkDiscountMutation.isPending
+              ? (
+                <>
+                  <span className="loading loading-spinner loading-xs mr-2">
+                  </span>
+                  Linking...
+                </>
+              )
+              : "Link Discount"}
           </button>
         </div>
 
@@ -395,7 +471,7 @@ const ProductView = () => {
                         <th>Start Date</th>
                         <th>End Date</th>
                         <th>Status</th>
-                        <th>Actions</th> {/* Future: Unlink button */}
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -431,8 +507,12 @@ const ProductView = () => {
                             </span>
                           </td>
                           <td>
-                            {/* Placeholder for future unlink functionality */}
-                            <button className="btn btn-xs btn-error" disabled>
+                            <button
+                              className="btn btn-xs btn-error"
+                              onClick={() =>
+                                handleUnlinkDiscount(discount.id)}
+                              title={`Unlink discount: ${discount.code}`}
+                            >
                               Unlink
                             </button>
                           </td>
@@ -514,7 +594,7 @@ const ProductView = () => {
                               : isAlreadyLinked
                               ? "border-gray-500 opacity-50" // Visually indicate already linked
                               : "border-base-300"
-                          }`}
+                          } ${!isAlreadyLinked ? "cursor-pointer" : ""}`} // Show pointer cursor only if not linked
                           onClick={() => {
                             if (!isAlreadyLinked) { // Only allow selection if not already linked
                               handleDiscountSelect(discount.id);
@@ -583,15 +663,25 @@ const ProductView = () => {
               <button
                 className="btn btn-error"
                 onClick={handleCloseLinkModal}
+                disabled={linkDiscountMutation.isPending} // Disable while linking operation is in progress
               >
                 Cancel
               </button>
               <button
                 className="btn btn-primary"
                 onClick={handleLinkDiscount}
-                disabled={!selectedDiscountToLink} // Disable if nothing is selected
+                disabled={!selectedDiscountToLink ||
+                  linkDiscountMutation.isPending} // Disable if nothing is selected or linking is in progress
               >
-                Link Discount
+                {linkDiscountMutation.isPending
+                  ? (
+                    <>
+                      <span className="loading loading-spinner loading-xs mr-2">
+                      </span>
+                      Linking...
+                    </>
+                  )
+                  : "Link Discount"}
               </button>
             </div>
           </div>
