@@ -5,7 +5,7 @@ import { fetchUserOrders } from "../services/api"; // Import the API function
 import { toast } from "sonner"; // Import toast for error handling
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-  "http://localhost:8080";
+  "";
 
 const Account = () => {
   const { user, logout } = useAuth(); // Get user and logout function
@@ -28,7 +28,7 @@ const Account = () => {
     }
 
     // Otherwise, prepend the backend base URL
-    return `${BACKEND_BASE_URL}${imageUrl}`;
+    return `${imageUrl}`;
   };
 
   // Fetch recent orders (limit 3)

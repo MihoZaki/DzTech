@@ -235,7 +235,7 @@ const EditProduct = () => {
 
   // Construct the backend base URL for displaying existing images
   const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-    "http://localhost:8080";
+    "";
 
   // Render the form once data is loaded
   return (
@@ -459,7 +459,7 @@ const EditProduct = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {/* Grid for thumbnails */}
                   {product.image_urls.map((url, idx) => {
-                    const fullUrl = `${BACKEND_BASE_URL}${url}`;
+                    const fullUrl = `${url}`;
                     return (
                       <div key={idx} className="avatar">
                         <div className="mask mask-squircle w-16 h-16">

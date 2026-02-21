@@ -6,7 +6,7 @@ import { toast } from "sonner"; // Import toast for error messages
 
 // Base URL for the backend API (adjust this for your deployment environment)
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-  "http://localhost:8080";
+  "";
 
 const OrderDetails = () => {
   const { orderId } = useParams(); // Get the order ID from the URL
@@ -26,7 +26,7 @@ const OrderDetails = () => {
     }
 
     // Otherwise, prepend the backend base URL
-    return `${BACKEND_BASE_URL}${imageUrl}`;
+    return `${imageUrl}`;
   };
 
   // Use TanStack Query to fetch order details

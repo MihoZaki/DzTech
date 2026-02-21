@@ -11,7 +11,7 @@ import { useCart } from "../contexts/CartContext"; // Still need this to sync lo
 // REMOVED: import { addItemToCart } from "../services/api"; // No longer needed
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-  "http://localhost:8080";
+  "";
 
 const ProductCard = ({ product }) => {
   const navigation = useNavigate();
@@ -30,7 +30,7 @@ const ProductCard = ({ product }) => {
     }
 
     // Otherwise, prepend the backend base URL
-    return `${BACKEND_BASE_URL}${imageUrl}`;
+    return `${imageUrl}`;
   };
 
   const handleQuickAdd = async () => {

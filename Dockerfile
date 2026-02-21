@@ -16,18 +16,15 @@ RUN go mod download
 # Copy the rest of the application source code
 COPY . .
 
-# Build the Go binary statically (CGO_ENABLED=0) for smaller image size and portability
-# Adjust the path to your main.go file if it's located elsewhere (e.g., cmd/server/main.go)
+# Build the Go binary statically
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o yc-informatique-backend cmd/server/main.go
 
 # Use a minimal base image for the final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests if your app makes them
+# Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates
 
-# Create a non-root user for running the application
-RUN adduser -D -s /bin/sh appuser
 
 # Set the working directory
 WORKDIR /app
@@ -38,13 +35,8 @@ COPY --from=builder /app/yc-informatique-backend .
 # COPY the migrations directory from the builder stage
 COPY --from=builder /app/migrations ./migrations
 
-# Change ownership of the binary and migrations directory to the non-root user
-RUN chown -R appuser:appuser /app
 
-# Switch to the non-root user
-USER appuser
-
-# Expose the port your application listens on (adjust if different)
+# Expose the port
 EXPOSE 8080
 
 # Command to run the application

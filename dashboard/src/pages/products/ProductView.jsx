@@ -51,7 +51,7 @@ const ProductView = () => {
   });
 
   const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-    "http://localhost:8080";
+    "";
 
   // State for image gallery
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -112,7 +112,7 @@ const ProductView = () => {
 
   const imageGalleryList = product.image_urls || [];
   const currentImageSrc = imageGalleryList[selectedImageIndex]
-    ? `${BACKEND_BASE_URL}${imageGalleryList[selectedImageIndex]}`
+    ? `${imageGalleryList[selectedImageIndex]}`
     : "https://placehold.co/600x600?text=No+Image  ";
 
   // Determine loading/error state for discounts section
@@ -180,7 +180,7 @@ const ProductView = () => {
           </div>
           <div className="flex flex-wrap gap-2 mt-2 max-h-32 overflow-y-auto">
             {imageGalleryList.map((imgPath, index) => {
-              const fullThumbUrl = `${BACKEND_BASE_URL}${imgPath}`;
+              const fullThumbUrl = `${imgPath}`;
               return (
                 <button
                   key={index}

@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner"; // Import toast for notifications
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-  "http://localhost:8080";
+  "";
 const BuildPC = () => {
   const queryClient = useQueryClient(); // <-- Add this line
 

@@ -17,8 +17,6 @@ import { toast } from "sonner";
 const ProductsList = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-    "http://localhost:8080";
 
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -456,7 +454,7 @@ const ProductsList = () => {
                     product.image_urls.length > 0
                   ) {
                     const imagePath = product.image_urls[0];
-                    firstImageUrl = `${BACKEND_BASE_URL}${imagePath}`;
+                    firstImageUrl = `${imagePath}`;
                   }
 
                   return (

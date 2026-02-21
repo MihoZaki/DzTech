@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { useCart } from "../contexts/CartContext";
-import { useAuth } from "../contexts/AuthContext"; 
+import { useAuth } from "../contexts/AuthContext";
 import {
   fetchProductById,
   searchProducts,
@@ -15,7 +15,7 @@ import { useQuery } from "@tanstack/react-query"; // Import useQuery
 
 // Base URL for the backend API (adjust this for your deployment environment)
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-  "http://localhost:8080";
+  "";
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -38,7 +38,7 @@ const ProductDetail = () => {
     }
 
     // Otherwise, prepend the backend base URL
-    return `${BACKEND_BASE_URL}${imageUrl}`;
+    return `${imageUrl}`;
   };
 
   // Fetch main product details using TanStack Query

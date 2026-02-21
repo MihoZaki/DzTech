@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"; /
 import { useAuth } from "../contexts/AuthContext";
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
-  "http://localhost:8080";
+  "";
 
 const CartContext = createContext();
 
@@ -33,7 +33,7 @@ export const CartProvider = ({ children }) => {
     }
 
     // Otherwise, prepend the backend base URL
-    return `${BACKEND_BASE_URL}${imageUrl}`;
+    return `${imageUrl}`;
   };
 
   const cartQueryKey = isAuthenticated ? ["cart", user?.id] : ["cart", "guest"];
