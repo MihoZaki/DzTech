@@ -1,7 +1,7 @@
 // src/pages/BuildPC.jsx
 import React, { useEffect, useState } from "react";
 import { useStore } from "../stores/useStore"; // Assuming useStore manages cart and PC build components
-import BuildGif from "../assets/Pc Build .gif";
+import BuildGif from "../assets/PcBuild.gif";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query"; // Import useQueryClient
 import {
