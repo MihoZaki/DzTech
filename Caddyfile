@@ -38,8 +38,11 @@ ycinformatique.com {
         header_up X-Forwarded-Host {host}
         header_up X-Forwarded-For {remote_host}
     }
+    @images path *.jpg *.jpeg *.png *.gif *.webp
+    header @images Cache-Control "public, max-age=31536000, immutable"
+
 }
 
-www.ycinformatique.com{
+www.ycinformatique.com {
     redir https://ycinformatique.com{uri}
 }

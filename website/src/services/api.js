@@ -3,7 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 
 // Base URL for the API (adjust this for your deployment environment)
-const API_BASE_URL = "http://localhost:8080/api"; // Replace with your backend URL
+const API_BASE_URL = import.meta.env.VITE_API_URL ||
+  "http://localhost:8080/api";
 
 // Create an Axios instance with defaults
 const apiClient = axios.create({
