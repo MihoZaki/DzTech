@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/MihoZaki/DzTech/internal/services"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // DeliveryServiceHandler manages HTTP requests for delivery service-related operations.
@@ -54,6 +56,15 @@ func (h *DeliveryServiceHandler) CreateDeliveryService(w http.ResponseWriter, r 
 	if err != nil {
 		// Log the error server-side
 		h.logger.Error("Failed to create delivery service", "error", err, "name", req.Name)
+		// Check for specific DB errors like unique_violation
+		var pgErr *pgconn.PgError // Use *pgconn.PgError for the error details
+		if errors.As(err, &pgErr) {
+			// Check for the specific unique constraint violation on the 'name' field
+			if pgErr.Code == "23505" && pgErr.ConstraintName == "delivery_services_name_key" {
+				http.Error(w, fmt.Sprintf("A delivery service with the name '%s' already exists.", req.Name), http.StatusConflict) // 409 Conflict
+				return
+			}
+		}
 		// Check for specific DB errors like unique_violation if needed
 		http.Error(w, "Failed to create delivery service", http.StatusInternalServerError)
 		return
@@ -185,16 +196,17 @@ func (h *DeliveryServiceHandler) DeleteDeliveryService(w http.ResponseWriter, r 
 
 	err = h.service.DeleteDeliveryService(r.Context(), id)
 	if err != nil {
+		h.logger.Error("Failed to delete delivery service", "error", err, "id", id)
 		if errors.Is(err, services.ErrDeliveryServiceNotFound) {
-			// Technically, if it's already gone, is it an error? Maybe return 204 No Content?
-			// For consistency with Update, let's return 404 if not found *before* the delete attempt.
-			// If the delete query itself fails (e.g., foreign key constraint), it returns 500.
-			// If the delete query succeeds but affected 0 rows (despite finding it earlier), might need specific handling.
-			// Let's stick to the pattern used in Update.
 			http.Error(w, "Delivery service not found", http.StatusNotFound)
 			return
 		}
-		h.logger.Error("Failed to delete delivery service", "error", err, "id", id)
+		// Check for foreign key constraint violation (service in use)
+		if errors.Is(err, services.ErrDeliveryServiceInUse) {
+			http.Error(w, "Cannot delete delivery service: it is currently in use by one or more orders.", http.StatusConflict) // 409 Conflict or 422 Unprocessable Entity are options
+			return
+		}
+		// Handle other unexpected errors
 		http.Error(w, "Failed to delete delivery service", http.StatusInternalServerError)
 		return
 	}

@@ -1,4 +1,3 @@
-// src/pages/delivery/DeliveryServicesList.jsx
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +15,21 @@ import { toast } from "sonner";
 const DeliveryServicesList = () => {
   const queryClient = useQueryClient();
 
+  const [filter, setFilter] = useState("active"); // Can be "active", "inactive", or "all"
+
+  // Determine the API parameters based on the filter
+  const getQueryParams = () => {
+    if (filter === "active") {
+      return { active_only: true };
+    } else if (filter === "active") {
+      return { inactive_only: false }; // Assuming your API supports this
+    } else { // filter === "all"
+      return {}; // Fetch all services
+    }
+  };
+
+  const queryParams = getQueryParams();
+
   const {
     data: deliveryServices,
     isLoading,
@@ -23,16 +37,16 @@ const DeliveryServicesList = () => {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["deliveryServices"], // Keep the key the same for caching consistency
-    queryFn: () => fetchDeliveryServices({ active_only: true }), // Pass the required parameter
-    select: (response) => response.data, // Adjust based on your API response structure
+    queryKey: ["deliveryServices", queryParams], // Include filter params in the key
+    queryFn: () => fetchDeliveryServices(queryParams),
+    select: (response) => response.data,
   });
-  console.log(deliveryServices);
+  console.log("DEBUG: Fetched delivery services:", deliveryServices);
 
   const deleteMutation = useMutation({
     mutationFn: deleteDeliveryService,
     onSuccess: (data, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ["deliveryServices"] });
+      queryClient.invalidateQueries({ queryKey: ["deliveryServices"] }); // Invalidate the list query
       toast.success(`Delivery Service ID ${deletedId} deleted successfully.`);
     },
     onError: (error, deletedId) => {
@@ -53,6 +67,11 @@ const DeliveryServicesList = () => {
     ) {
       deleteMutation.mutate(deliveryServiceId);
     }
+  };
+
+  // Handler for changing the filter
+  const handleFilterChange = (newFilter) => {
+    setFilter(newFilter);
   };
 
   if (isLoading) {
@@ -93,15 +112,38 @@ const DeliveryServicesList = () => {
 
   return (
     <div className="bg-neutral p-6 rounded-lg shadow-md">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h2 className="text-xl font-bold">Delivery Services</h2>
-        <Link
-          to="/admin/delivery/add"
-          className="btn btn-accent flex items-center gap-2"
-        >
-          <PlusCircleIcon className="w-5 h-5" />
-          Add Service
-        </Link>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap gap-2">
+            <button
+              className={`btn btn-sm ${
+                filter === "active" ? "btn-active" : "btn-primary"
+              }`}
+              onClick={() => handleFilterChange("active")}
+              disabled={isLoading}
+            >
+              Active
+            </button>
+            <button
+              className={`btn btn-sm ${
+                filter === "inactive" ? "btn-active" : "btn-secondary"
+              }`}
+              onClick={() => handleFilterChange("inactive")}
+              disabled={isLoading}
+            >
+              Inactive
+            </button>
+          </div>
+          {/* --- END NEW FILTER BUTTONS --- */}
+          <Link
+            to="/admin/delivery/add"
+            className="btn btn-accent btn-sm flex items-center gap-2"
+          >
+            <PlusCircleIcon className="w-4 h-4" />
+            Add Service
+          </Link>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -167,7 +209,7 @@ const DeliveryServicesList = () => {
               : (
                 <tr>
                   <td colSpan="8" className="text-center py-4">
-                    No delivery services found.
+                    No delivery services found matching the current filter.
                   </td>
                 </tr>
               )}

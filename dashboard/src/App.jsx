@@ -1,6 +1,7 @@
 // src/App.jsx
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import ProtectedRoute from "./components/ProtectedRoutes"; // Import the ProtectedRoute component
 import AdminLayout from "./layouts/AdminLayout";
 import AdminDashboard from "./pages/AdminDashboard";
 import AuthPage from "./pages/auth/AuthPage";
@@ -21,7 +22,7 @@ import CustomersList from "./pages/customers/CustomerList";
 import DiscountsList from "./pages/discounts/DiscountsList";
 import AddDiscount from "./pages/discounts/AddDiscount";
 import EditDiscount from "./pages/discounts/EditDiscount";
-import Settings from "./pages/Settings"; // Import the new Settings component
+import Settings from "./pages/Settings";
 
 function App() {
   return (
@@ -33,7 +34,15 @@ function App() {
           path="/admin"
           element={<Navigate to="/admin/dashboard" replace />}
         />
-        <Route path="/admin/*" element={<AdminLayout />}>
+        {/* Wrap the AdminLayout route with ProtectedRoute */}
+        <Route
+          path="/admin/*"
+          element={
+            <ProtectedRoute adminOnly={true}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<AdminDashboard />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="products" element={<ProductsList />} />

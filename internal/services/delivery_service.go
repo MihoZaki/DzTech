@@ -10,7 +10,10 @@ import (
 	"github.com/MihoZaki/DzTech/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+var ErrDeliveryServiceInUse = errors.New("delivery service cannot be deleted: it is currently in use by one or more orders")
 
 // DeliveryServiceService handles business logic for delivery services.
 type DeliveryServiceService struct {
@@ -164,7 +167,15 @@ func (s *DeliveryServiceService) DeleteDeliveryService(ctx context.Context, id u
 
 	err = s.querier.DeleteDeliveryService(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to delete delivery service: %w", err)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			// Check for foreign key constraint violation
+			if pgErr.Code == "23503" && pgErr.ConstraintName == "orders_delivery_service_id_fkey" {
+				// The delivery service is referenced by the 'orders' table
+				return ErrDeliveryServiceInUse
+			}
+		}
+		return fmt.Errorf("failed to delete delivery service from DB: %w", err)
 	}
 	return nil
 }
