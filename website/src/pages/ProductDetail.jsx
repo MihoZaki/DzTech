@@ -144,29 +144,53 @@ const ProductDetail = () => {
 
     setIsSubmittingReview(true);
     try {
-      // Call the actual API to submit the review
       await submitReview(product.id, newReviewRating);
+
       toast.success("Rating submitted successfully!");
 
       // Refetch the product to get updated ratings
-      const updatedProduct = await refetchProduct();
-      const newProductData = updatedProduct.data;
+      await refetchProduct();
 
-      // Update local state if refetch was successful
-      if (newProductData) {
-        setReviews([]); // Reset reviews if needed, or handle as per your logic
-      }
-
-      // Reset the form
+      // Reset the form ONLY on success
       setNewReviewRating(0);
     } catch (error) {
       console.error("Error submitting rating:", error);
-      toast.error("Failed to submit rating. Please try again.");
+
+      // --- Extract Error Message Logic ---
+      let errorMessage = "Failed to submit rating. Please try again.";
+
+      // 1. Check if it's an Axios error with a response
+      if (error.response) {
+        // The backend sent a response with a status code outside 2xx
+        const backendData = error.response.data;
+
+        // Common patterns for error messages in JSON responses
+        if (typeof backendData === "string") {
+          errorMessage = backendData;
+        } else if (backendData?.message) {
+          errorMessage = backendData.message;
+        } else if (backendData?.error) {
+          errorMessage = backendData.error;
+        } else if (backendData?.msg) {
+          errorMessage = backendData.msg;
+        }
+      } // 2. Check if it's a network error or request made but no response
+      else if (error.request) {
+        console.warn("No response received from server:", error.request);
+        errorMessage = "Network error: Could not reach the server.";
+      } // 3. Other errors (setup issues, etc.)
+      else {
+        if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+
+      // Display the specific message
+      toast.error(errorMessage);
     } finally {
       setIsSubmittingReview(false);
     }
   };
-
   // Calculate the current image source based on the selected index and the product's image_urls
   const currentImageSrc = React.useMemo(() => {
     if (
