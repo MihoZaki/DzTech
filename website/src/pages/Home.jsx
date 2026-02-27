@@ -288,12 +288,12 @@ const Home = () => {
             {services.map((service) => (
               <div
                 key={service.id}
-                className="flex flex-col items-center justify-center p-4 bg-base-100 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 border border-accent"
+                className="flex flex-col items-center justify-center p-4 bg-base-100 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 border border-base-200"
               >
                 <div className="mb-4">
                   {service.icon}
                 </div>
-                <h3 className="text-center text-xl font-black text-base-content">
+                <h3 className="text-center text-lg font-semibold text-base-content">
                   {service.title}
                 </h3>
               </div>
@@ -314,9 +314,8 @@ const Home = () => {
             {/* Card 0: Big CPU card — spans col 1-2, row 1-2 */}
             <Link
               key={hardcodedCategories[0].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[0].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[0].categoryId)
+                }`}
               className="lg:col-span-2 lg:row-span-2 flex flex-col"
             >
               <div className="relative flex-grow overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -340,9 +339,8 @@ const Home = () => {
             {/* Row 1, Col 3 */}
             <Link
               key={hardcodedCategories[1].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[1].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[1].categoryId)
+                }`}
               className="lg:col-span-1 lg:row-span-1"
             >
               <div className="relative h-full w-full overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -365,9 +363,8 @@ const Home = () => {
             {/* Row 2, Col 3 */}
             <Link
               key={hardcodedCategories[2].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[2].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[2].categoryId)
+                }`}
               className="lg:col-span-1 lg:row-span-1"
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -390,9 +387,8 @@ const Home = () => {
             {/* Row 3, Col 3 */}
             <Link
               key={hardcodedCategories[3].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[3].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[3].categoryId)
+                }`}
               className="lg:col-span-1 lg:row-span-1"
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -415,9 +411,8 @@ const Home = () => {
             {/* Row 1, Col 4 */}
             <Link
               key={hardcodedCategories[4].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[4].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[4].categoryId)
+                }`}
               className="lg:col-span-1 lg:row-span-1"
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -440,9 +435,8 @@ const Home = () => {
             {/* Row 2, Col 4 */}
             <Link
               key={hardcodedCategories[5].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[5].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[5].categoryId)
+                }`}
               className="lg:col-span-1 lg:row-span-1"
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -465,9 +459,8 @@ const Home = () => {
             {/* Row 3, Col 4 */}
             <Link
               key={hardcodedCategories[6].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[6].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[6].categoryId)
+                }`}
               className="lg:col-span-1 lg:row-span-1"
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -490,9 +483,8 @@ const Home = () => {
             {/* Row 4, Col 4 (bottom-right) */}
             <Link
               key={hardcodedCategories[7].id}
-              to={`/products?category=${
-                encodeURIComponent(hardcodedCategories[7].categoryId)
-              }`}
+              to={`/products?category=${encodeURIComponent(hardcodedCategories[7].categoryId)
+                }`}
               className="lg:col-span-2 lg:row-span-1"
             >
               <div className="relative h-64 overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300">
@@ -523,7 +515,7 @@ const Home = () => {
           </h2>
           {/* Wrap carousel in a flex container for centering */}
           <div className="flex justify-center">
-            <div className="carousel rounded-box carousel-center bg-base-100 shadow-md p-6 w-full max-w-7xl border border-info">
+            <div className="carousel rounded-box carousel-center bg-base-100 p-6 w-full max-w-7xl">
               {/* Added max-w-6xl or adjust as needed */}
               {brands.map((brand, index) => (
                 <div
@@ -568,27 +560,27 @@ const Home = () => {
               </div>
             )
             : isError
-            ? ( // Show error state if error occurred
-              <div className="text-center py-12">
-                <p className="text-xl mb-4 text-error">
-                  Error loading :{" "}
-                  {error?.message || "An unknown error occurred"}
-                </p>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => refetch()} // Use combined refetch
-                >
-                  Retry
-                </button>
-              </div>
-            )
-            : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {featuredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
-            )}
+              ? ( // Show error state if error occurred
+                <div className="text-center py-12">
+                  <p className="text-xl mb-4 text-error">
+                    Error loading :{" "}
+                    {error?.message || "An unknown error occurred"}
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => refetch()} // Use combined refetch
+                  >
+                    Retry
+                  </button>
+                </div>
+              )
+              : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {featuredProducts.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+              )}
 
           <div className="text-center mt-8">
             <Link to="/products" className="btn btn-outline">

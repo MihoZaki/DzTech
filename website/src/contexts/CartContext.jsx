@@ -115,9 +115,10 @@ export const CartProvider = ({ children }) => {
       toast.success("Item added to cart!"); // Show success toast
     },
     onError: (error) => {
-      console.error("Error adding item to cart:", error);
-      const errorMessage = error?.response?.data?.message || error.message ||
+      // console.error("Error adding item to cart:", error);
+      const errorMessage = error?.response?.data?.message ||
         "Failed to add item to cart. Please try again.";
+      console.error("Error adding item to cart:", errorMessage);
       toast.error(errorMessage); // Show error toast
     },
   });
@@ -173,7 +174,7 @@ export const CartProvider = ({ children }) => {
 
   // Define functions that wrap the mutations for easier use in components
   const addToCart = async (product) => {
-    addCartItemMutation.mutate({
+    return await addCartItemMutation.mutateAsync({
       productId: product.id,
       quantity: product.quantity || 1,
     });

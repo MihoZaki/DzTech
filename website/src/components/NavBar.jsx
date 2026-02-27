@@ -67,6 +67,11 @@ const Navbar = () => {
     setSelectedCategory(newCategory);
     // Optionally, trigger a filter action here if needed globally
     // .setSearchParams({ ...params, category: newCategory === 'All Categories' ? '' : newCategory });
+    if (newCategory) {
+      navigate(`/products?category=${encodeURIComponent(newCategory)}`);
+    } else {
+      navigate("/products");
+    }
   };
 
   let phoneNumber = "+0791781303";
@@ -225,11 +230,10 @@ const Navbar = () => {
             <ThemeSwitcher /> {/* Add the ThemeSwitcher component */}
             <Link
               to="/build-pc"
-              className={`flex flex-col items-center ${
-                isBuildPCPage
-                  ? "text-primary"
-                  : "text-base-content hover:text-primary"
-              } transition`} // Changed text-red-500 to text-primary, text-gray-300 to text-base-content, hover:text-white to hover:text-primary
+              className={`flex flex-col items-center ${isBuildPCPage
+                ? "text-primary"
+                : "text-base-content hover:text-primary"
+                } transition`} // Changed text-red-500 to text-primary, text-gray-300 to text-base-content, hover:text-white to hover:text-primary
             >
               <ComputerDesktopIcon className="h-6 w-6" />
               <span className="text-xs mt-1">Build PC</span>
@@ -381,11 +385,10 @@ const Navbar = () => {
               <ThemeSwitcher /> {/* Add the ThemeSwitcher component */}
               <Link
                 to="/build-pc"
-                className={`flex items-center px-4 py-2 rounded-lg ${
-                  isBuildPCPage
-                    ? "bg-primary text-primary-content"
-                    : "text-base-content hover:bg-base-300"
-                }`} // Changed bg-red-500 to bg-primary, text-white to text-primary-content, text-gray-300 to text-base-content, hover:bg-gray-700 to hover:bg-base-300
+                className={`flex items-center px-4 py-2 rounded-lg ${isBuildPCPage
+                  ? "bg-primary text-primary-content"
+                  : "text-base-content hover:bg-base-300"
+                  }`} // Changed bg-red-500 to bg-primary, text-white to text-primary-content, text-gray-300 to text-base-content, hover:bg-gray-700 to hover:bg-base-300
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <ComputerDesktopIcon className="h-5 w-5 mr-3" />

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -18,6 +18,7 @@ const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL ||
   "";
 
 const ProductDetail = () => {
+  const navigate = useNavigate();
   const { id } = useParams();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0); // Track the index of the selected image from the array
   const [quantity, setQuantity] = useState(1);
@@ -26,6 +27,7 @@ const ProductDetail = () => {
   const [newReviewRating, setNewReviewRating] = useState(0); // State for the new review's star rating
   const [isSubmittingReview, setIsSubmittingReview] = useState(false); // Loading state for review submission
   const [isAddingToCart, setIsAddingToCart] = useState(false); // Loading state for add to cart
+  const [isShoppingNow, setIsShoppingNow] = useState(false); // Loading state for shopping now
   const { addToCart } = useCart(); // Use the context function directly
 
   // Function to construct full image URL
@@ -122,10 +124,40 @@ const ProductDetail = () => {
       } catch (error) {
         // Errors are now handled within the CartContext mutation
         // But we can still catch here if needed for UI-specific logic
-        console.error("Failed to add item to cart:", error);
-        toast.error("Failed to add item to cart. Please try again."); // Show error toast
+        // console.error("Failed to add item to cart:", error);
+        // toast.error("Failed to add item to cart. Please try again."); // Show error toast
       } finally {
         setIsAddingToCart(false);
+      }
+    }
+  };
+  const handleShopNow = async () => { // Make function async
+    if (product) {
+      setIsShoppingNow(true);
+      try {
+        // Prepare the product object to pass to the context function
+        // The context function will handle the API call via TanStack Query
+        const productToAdd = {
+          ...product,
+          quantity: quantity, // Use the selected quantity
+          image: product.image_urls && product.image_urls.length > 0
+            ? constructImageUrl(product.image_urls[0])
+            : "", // Use the constructed image URL
+          // The context will handle price calculation internally based on the product object
+        };
+
+        // Call the context function which uses TanStack Query
+        await addToCart(productToAdd);
+
+        // toast.success(`"${product.name}" added to cart!`); // Show success toast using product.name
+        navigate("/checkout"); // Navigate to cart page after adding
+      } catch (error) {
+        // Errors are now handled within the CartContext mutation
+        // But we can still catch here if needed for UI-specific logic
+        // console.error("Failed to add item to cart:", error);
+        // toast.error("Failed to add item to cart. Please try again."); // Show error toast
+      } finally {
+        setIsShoppingNow(false);
       }
     }
   };
@@ -211,6 +243,8 @@ const ProductDetail = () => {
   const discountPercentage = hasDiscount
     ? product?.effective_discount_percentage
     : 0;
+  const isOutOfStock = product?.stock_quantity === 0;
+  const specsHighlights = Object.keys(product?.spec_highlights || {}).length; // Get spec highlights if available
   // --- End of Determination ---
 
   // --- Determine Rating Information ---
@@ -252,7 +286,7 @@ const ProductDetail = () => {
           >
             Retry
           </button>
-          <Link to="/products" className="btn btn-accent btn-outline">
+          <Link to="/products" className="btn btn-primary btn-outline">
             Back to Products
           </Link>
         </div>
@@ -276,33 +310,37 @@ const ProductDetail = () => {
   return (
     <div className="container mx-auto px-4 py-8 bg-inherit min-h-screen">
       {/* Updated Link with btn-sm */}
-      <Link to="/products" className="btn btn-accent btn-outline mb-6">
+      <Link to="/products" className="btn btn-primary btn-outline mb-6">
         <ArrowLeftIcon className="h-4 w-4 mr-2" />
         Back to Products
       </Link>
 
-      <div className="divider"></div>
+      {/* <div className="divider"></div> */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Image Gallery */}
         <div>
-          <div className="aspect-square mb-4 bg-base-100 rounded-lg p-4">
+          <div className="relative aspect-square mb-4 bg-base-100 rounded-lg p-4 border border-base-200">
             <img
               src={currentImageSrc} // Use the image source determined by state/index
               alt={`${product.name} - Image ${selectedImageIndex + 1}`} // Provide better alt text using product.name
               className="w-full h-full object-contain rounded-lg"
             />
+            {isOutOfStock && (
+              <div className="absolute bottom-5 left-5 bg-error text-white text-xl font-bold px-2 py-1 rounded-lg z-10">
+                out of stock
+              </div>
+            )}
           </div>
           {/* Thumbnail Strip */}
-          <div className="flex flex-wrap gap-2 mt-2 max-h-32 overflow-y-auto">
+          <div className="flex flex-wrap gap-2 mt-2 mx-2 max-h-32 overflow-y-auto">
             {/* Added flex-wrap and scrollable container */}
             {imageGalleryList.map((imgUrl, index) => (
               <button
                 key={index} // Use the array index as the key
-                className={`w-16 h-16 border rounded ${
-                  selectedImageIndex === index
-                    ? "border-primary ring-2 ring-primary"
-                    : "border-transparent"
-                } bg-base-200 flex-shrink-0`} // Highlight selected image
+                className={`w-16 h-16 border rounded ${selectedImageIndex === index
+                  ? "border-primary "
+                  : "border-transparent"
+                  } bg-base-200 flex-shrink-0`} // Highlight selected image
                 onClick={() => setSelectedImageIndex(index)} // Update selected index on click
                 title={`View Image ${index + 1}`} // Tooltip for clarity
               >
@@ -361,13 +399,13 @@ const ProductDetail = () => {
               <tbody>
                 <tr>
                   <td>Category</td>
-                  <td>{product.category}</td>
+                  <td>{product.category_name}</td>
                 </tr>
                 <tr>
                   <td>Brand</td>
                   <td>{product.brand}</td>
                 </tr>
-                <tr>
+                {/* <tr>
                   <td>Stock Quantity</td>
                   <td
                     className={product.stock_quantity > 0
@@ -378,7 +416,7 @@ const ProductDetail = () => {
                       ? `${product.stock_quantity} In Stock`
                       : "Out of Stock"}
                   </td>
-                </tr>
+                </tr> */}
                 <tr>
                   <td>Avg Rating</td>
                   <td>
@@ -427,6 +465,23 @@ const ProductDetail = () => {
                   "Add to Cart"
                 )}
             </button>
+            <button
+              className="btn btn-secondary flex-1"
+              onClick={handleShopNow}
+              disabled={isShoppingNow} // Disable when shopping now
+            >
+              {isShoppingNow
+                ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs mr-2">
+                    </span>
+                    Adding...
+                  </>
+                )
+                : (
+                  "Shop Now"
+                )}
+            </button>
           </div>
 
           {/* Reviews Section (Stars Only, Repositioned) */}
@@ -440,11 +495,10 @@ const ProductDetail = () => {
                       <button
                         key={star}
                         type="button"
-                        className={`text-xl ${
-                          star <= newReviewRating
-                            ? "text-yellow-400 fill-current"
-                            : "text-gray-300"
-                        }`}
+                        className={`text-xl ${star <= newReviewRating
+                          ? "text-yellow-400 fill-current"
+                          : "text-gray-300"
+                          }`}
                         onClick={() => setNewReviewRating(star)}
                       >
                         <StarIcon className="h-6 w-6" />
@@ -481,24 +535,30 @@ const ProductDetail = () => {
           <h2 className="text-2xl content-center font-bold mb-4">
             Specifications
           </h2>
-          <div className="bg-base-100 p-4 rounded-box border border-base-200">
+          {
+            specsHighlights == 0 && (
+              <p className="text-center text-gray-500">
+                No specifications available for this product.
+              </p>
+            )
+          }
+          {specsHighlights > 0 && <div className="bg-base-100 p-4 rounded-box border border-base-200">
             <table className="table table-zebra">
               <tbody>
-                {product.spec_highlights &&
-                  Object.entries(product.spec_highlights).map((
-                    [key, value],
-                  ) => (
-                    <tr key={key}>
-                      <td className="font-semibold capitalize">
-                        {key.replace(/_/g, " ")}
-                      </td>{" "}
-                      {/* Format key */}
-                      <td>{value}</td>
-                    </tr>
-                  ))}
+                {Object.entries(product.spec_highlights).map((
+                  [key, value],
+                ) => (
+                  <tr key={key}>
+                    <td className="font-semibold capitalize">
+                      {key.replace(/_/g, " ")}
+                    </td>{" "}
+                    {/* Format key */}
+                    <td>{value}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -523,30 +583,30 @@ const ProductDetail = () => {
             </div>
           )
           : isRelatedProductsError
-          ? (
-            <div className="text-center py-8">
-              <p className="text-error">Failed to load related products.</p>
-              <button
-                className="btn btn-sm mt-2"
-                onClick={() => relatedProductsData.refetch()} // Retry function for related products
-              >
-                Retry
-              </button>
-            </div>
-          )
-          : relatedProducts.length > 0
-          ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {relatedProducts.map((relatedProduct) => (
-                <ProductCard key={relatedProduct.id} product={relatedProduct} />
-              ))}
-            </div>
-          )
-          : (
-            <p className="text-center text-gray-500">
-              No related products found.
-            </p>
-          )}
+            ? (
+              <div className="text-center py-8">
+                <p className="text-error">Failed to load related products.</p>
+                <button
+                  className="btn btn-sm mt-2"
+                  onClick={() => relatedProductsData.refetch()} // Retry function for related products
+                >
+                  Retry
+                </button>
+              </div>
+            )
+            : relatedProducts.length > 0
+              ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {relatedProducts.map((relatedProduct) => (
+                    <ProductCard key={relatedProduct.id} product={relatedProduct} />
+                  ))}
+                </div>
+              )
+              : (
+                <p className="text-center text-gray-500">
+                  No related products found.
+                </p>
+              )}
       </div>
     </div>
   );

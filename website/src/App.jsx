@@ -43,10 +43,9 @@ function App() {
                 <Route path="/auth" element={<AuthPage />} />
               </Routes>
             </main>
-            <div className="border-t border-base-300 my-8"></div>
             <Footer />
           </div>
-          <Toaster position="top-left" richColors />
+          <Toaster position="bottom-right" richColors />
         </Router>
       </CartProvider>
     </AuthProvider>

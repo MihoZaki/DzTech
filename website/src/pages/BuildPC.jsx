@@ -221,9 +221,8 @@ const BuildPC = () => {
         <button
           key={i}
           onClick={() => goToPage(i)}
-          className={`btn btn-sm mx-1 ${
-            currentPageNumber === i ? "btn-accent" : "btn-secondary btn-outline" // Use accent for current page, secondary outline for others
-          }`}
+          className={`btn btn-sm mx-1 ${currentPageNumber === i ? "btn-accent" : "btn-secondary btn-outline" // Use accent for current page, secondary outline for others
+            }`}
           disabled={productsLoading} // Disable buttons while loading
         >
           {i}
@@ -390,16 +389,15 @@ const BuildPC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Steps Navigation with Information Icon Modals (unchanged) */}
         <div className="lg:col-span-1">
-          <div className="card bg-base-100 shadow-lg border border-secondary-content">
+          <div className="card bg-base-100 shadow-lg border border-base-200">
             <div className="card-body">
               <h3 className="font-bold text-lg mb-4">Build Progress</h3>
               <div className="steps steps-vertical">
                 {steps.map((step, index) => (
                   <div
                     key={step.id}
-                    className={`step ${
-                      index <= currentStep ? "step-primary" : ""
-                    } ${buildPcComponents[step.id] ? "step-success" : ""}`}
+                    className={`step ${index <= currentStep ? "step-primary" : ""
+                      } ${buildPcComponents[step.id] ? "step-success" : ""}`}
                     // onClick={() => setCurrentStep(index)} // <-- REMOVED onClick
                     style={{ cursor: "default" }} // Optional: Change cursor to indicate non-clickability
                   >
@@ -425,7 +423,7 @@ const BuildPC = () => {
 
         {/* Component Selection */}
         <div className="lg:col-span-2">
-          <div className="card bg-base-100 shadow-lg border border-secondary-content">
+          <div className="card bg-base-100 shadow-lg border border-base-200">
             <div className="card-body">
               <h2 className="card-title text-2xl mb-6">
                 {steps[currentStep]?.title}
@@ -484,12 +482,11 @@ const BuildPC = () => {
                   {paginatedProducts.map((component) => (
                     <div
                       key={component.id} // Use the actual product ID
-                      className={`card bg-base-100 shadow-md rounded-lg border border-secondary-content cursor-pointer transition-all duration-200 ${
-                        buildPcComponents[steps[currentStep]?.id]?.id ===
-                            component.id
-                          ? "bg-primary/10 border-2 border-primary shadow-lg"
-                          : "hover:shadow-lg"
-                      }`}
+                      className={`card bg-base-100 shadow-md rounded-lg border border-base-200 cursor-pointer transition-all duration-200 ${buildPcComponents[steps[currentStep]?.id]?.id ===
+                        component.id
+                        ? "bg-primary/10 border-2 border-primary shadow-lg"
+                        : "hover:shadow-lg"
+                        }`}
                       onClick={() =>
                         setPcComponent(steps[currentStep].id, component)} // Pass the full component object
                     >
@@ -499,7 +496,7 @@ const BuildPC = () => {
                           <div className="rounded-md overflow-hidden bg-base-200 p-1">
                             <img
                               src={component.image_urls &&
-                                  component.image_urls.length > 0
+                                component.image_urls.length > 0
                                 ? `${component.image_urls[0]}`
                                 : "https://placehold.co/100x100?text=No+Image  "} // Fallback placeholder
                               alt={component.name}
@@ -537,7 +534,7 @@ const BuildPC = () => {
               )}
 
               {/* Summary Section (always visible, updated) */}
-              <div className="card bg-inherit shadow-inner mt-6 border border-secondary-content">
+              <div className="card bg-inherit shadow-inner mt-6 border border-base-200">
                 <div className="card-body">
                   <h3 className="card-title text-lg">Current Build</h3>
                   <div className="space-y-2">
