@@ -65,7 +65,17 @@ const getActiveDeliveryServices = `-- name: GetActiveDeliveryServices :many
 SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
 FROM delivery_services
 WHERE is_active = TRUE
-ORDER BY name ASC
+ORDER BY
+  CASE
+    WHEN name ~ '^[0-9]+' THEN 0
+    ELSE 1
+  END,
+  CASE
+    WHEN name ~ '^[0-9]+' THEN
+      LPAD(REGEXP_REPLACE(name, '^([0-9]+).*', '\1'), 10, '0') ||
+      REGEXP_REPLACE(name, '^[0-9]+', '')
+    ELSE name
+  END ASC
 `
 
 // Retrieves all delivery services that are currently active.
@@ -183,7 +193,17 @@ const listAllDeliveryServices = `-- name: ListAllDeliveryServices :many
 SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
 FROM delivery_services
 WHERE is_active = $1 -- Filter by active status
-ORDER BY name ASC
+ORDER BY
+  CASE
+    WHEN name ~ '^[0-9]+' THEN 0
+    ELSE 1
+  END,
+  CASE
+    WHEN name ~ '^[0-9]+' THEN
+      LPAD(REGEXP_REPLACE(name, '^([0-9]+).*', '\1'), 10, '0') ||
+      REGEXP_REPLACE(name, '^[0-9]+', '')
+    ELSE name
+  END ASC
 LIMIT $3 OFFSET $2
 `
 

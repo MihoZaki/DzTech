@@ -11,7 +11,17 @@ WHERE id = sqlc.arg(id);
 SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
 FROM delivery_services
 WHERE is_active = TRUE
-ORDER BY name ASC;
+ORDER BY
+  CASE
+    WHEN name ~ '^[0-9]+' THEN 0
+    ELSE 1
+  END,
+  CASE
+    WHEN name ~ '^[0-9]+' THEN
+      LPAD(REGEXP_REPLACE(name, '^([0-9]+).*', '\1'), 10, '0') ||
+      REGEXP_REPLACE(name, '^[0-9]+', '')
+    ELSE name
+  END ASC;
 
 -- name: ListAllDeliveryServices :many
 -- Retrieves delivery services, optionally filtered by active status.
@@ -19,7 +29,17 @@ ORDER BY name ASC;
 SELECT id, name, description, base_cost_cents, estimated_days, is_active, created_at, updated_at
 FROM delivery_services
 WHERE is_active = sqlc.arg(active_filter) -- Filter by active status
-ORDER BY name ASC
+ORDER BY
+  CASE
+    WHEN name ~ '^[0-9]+' THEN 0
+    ELSE 1
+  END,
+  CASE
+    WHEN name ~ '^[0-9]+' THEN
+      LPAD(REGEXP_REPLACE(name, '^([0-9]+).*', '\1'), 10, '0') ||
+      REGEXP_REPLACE(name, '^[0-9]+', '')
+    ELSE name
+  END ASC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: CreateDeliveryService :one
