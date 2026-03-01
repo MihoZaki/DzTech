@@ -93,7 +93,7 @@ const ProductCard = ({ product }) => {
       setTimeout(() => {
         setIsShopped(false);
       }, 1500);
-      navigation("/checkout")
+      navigation("/checkout");
     } catch (error) {
       // Errors are now handled within the CartContext mutation
       // But we can still catch here if needed for UI-specific logic
@@ -188,8 +188,9 @@ const ProductCard = ({ product }) => {
           {/* Add to Cart Button - Positioned absolutely at the bottom right */}
           <div className="flex flex-row justify-end items-center gap-2">
             <button
-              className={`btn btn-sm ${isAdded ? "btn-success " : "btn-primary"
-                } z-50`}
+              className={`btn btn-sm ${
+                isAdded ? "btn-success " : "btn-primary"
+              } z-50`}
               onClick={handleQuickAdd}
               title={isAdded ? "Added to Cart!" : "Add to Cart"}
               disabled={isAdded || isAdding}
@@ -197,22 +198,23 @@ const ProductCard = ({ product }) => {
               {isAdding
                 ? <span className="loading loading-spinner loading-xs"></span>
                 : isAdded
-                  ? (
-                    <>
-                      <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
-                      <span className="text-base-content">Added!</span>
-                    </>
-                  )
-                  : (
-                    <>
-                      <ShoppingCartIcon className="h-4 w-4 text-inherit mr-1" />
-                      <p>Add to cart</p>
-                    </>
-                  )}
+                ? (
+                  <>
+                    <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
+                    <span className="text-base-content">Added!</span>
+                  </>
+                )
+                : (
+                  <>
+                    <ShoppingCartIcon className="h-4 w-4 text-inherit mr-1" />
+                    <p>Add to cart</p>
+                  </>
+                )}
             </button>
             <button
-              className={`btn btn-sm ${isShoped ? "btn-success " : "btn-secondary"
-                } z-50`}
+              className={`btn btn-sm ${
+                isShoped ? "btn-success " : "btn-secondary"
+              } z-50`}
               onClick={handleQuickShop}
               title={isShoped ? "Added to Cart!" : "Shop Now"}
               disabled={isShoped || isShoping}
@@ -220,21 +222,20 @@ const ProductCard = ({ product }) => {
               {isShoping
                 ? <span className="loading loading-spinner loading-xs"></span>
                 : isShoped
-                  ? (
-                    <>
-                      <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
-                      <span className="text-base-content">Shopped!</span>
-                    </>
-                  )
-                  : (
-                    <>
-                      <p>Shop Now</p>
-                    </>
-                  )}
+                ? (
+                  <>
+                    <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
+                    <span className="text-base-content">Shopped!</span>
+                  </>
+                )
+                : (
+                  <>
+                    <p>Shop Now</p>
+                  </>
+                )}
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

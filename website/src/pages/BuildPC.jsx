@@ -381,7 +381,7 @@ const BuildPC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Steps Navigation */}
         <div className="lg:col-span-1">
-          <div className="card bg-base-100 shadow-lg border border-secondary-content">
+          <div className="card bg-base-100 shadow-lg border border-base-200">
             <div className="card-body">
               <h3 className="font-bold text-lg mb-4">Build Progress</h3>
               <div className="steps steps-vertical">
@@ -415,7 +415,7 @@ const BuildPC = () => {
 
         {/* Component Selection */}
         <div className="lg:col-span-2">
-          <div className="card bg-base-100 shadow-lg border border-secondary-content">
+          <div className="card bg-base-100 shadow-lg border border-base-200">
             <div className="card-body">
               <h2 className="card-title text-2xl mb-6">
                 {steps[currentStep]?.title}
@@ -474,7 +474,7 @@ const BuildPC = () => {
                     return (
                       <div
                         key={component.id}
-                        className={`card bg-base-100 shadow-md rounded-lg border border-secondary-content cursor-pointer transition-all duration-200 ${
+                        className={`card bg-base-100 shadow-md rounded-lg border border-base-200 cursor-pointer transition-all duration-200 ${
                           isSelected
                             ? "bg-primary/10 border-2 border-primary shadow-lg"
                             : "hover:shadow-lg"
@@ -524,7 +524,7 @@ const BuildPC = () => {
               )}
 
               {/* Summary Section with Quantity Steppers */}
-              <div className="card bg-inherit shadow-inner mt-6 border border-secondary-content">
+              <div className="card bg-inherit shadow-inner mt-6 border border-base-200">
                 <div className="card-body">
                   <h3 className="card-title text-lg">Current Build</h3>
                   <div className="space-y-2">
