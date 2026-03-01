@@ -272,9 +272,8 @@ const Checkout = () => {
                   name="firstName"
                   value={formData.firstName}
                   onChange={handleInputChange}
-                  className={`input input-bordered w-full ${
-                    errors.firstName ? "input-error" : ""
-                  }`}
+                  className={`input input-bordered w-full ${errors.firstName ? "input-error" : ""
+                    }`}
                   placeholder="John"
                   disabled={loading} // Disable during loading
                 />
@@ -295,9 +294,8 @@ const Checkout = () => {
                   name="lastName"
                   value={formData.lastName}
                   onChange={handleInputChange}
-                  className={`input input-bordered w-full ${
-                    errors.lastName ? "input-error" : ""
-                  }`}
+                  className={`input input-bordered w-full ${errors.lastName ? "input-error" : ""
+                    }`}
                   placeholder="Doe"
                   disabled={loading} // Disable during loading
                 />
@@ -320,9 +318,8 @@ const Checkout = () => {
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
-                className={`input input-bordered w-full ${
-                  errors.phone ? "input-error" : ""
-                }`}
+                className={`input input-bordered w-full ${errors.phone ? "input-error" : ""
+                  }`}
                 placeholder="+2136XXXXXXXX"
                 disabled={loading} // Disable during loading
               />
@@ -345,9 +342,8 @@ const Checkout = () => {
                   name="wilaya"
                   value={formData.wilaya}
                   onChange={handleInputChange}
-                  className={`input input-bordered w-full ${
-                    errors.wilaya ? "input-error" : ""
-                  }`}
+                  className={`input input-bordered w-full ${errors.wilaya ? "input-error" : ""
+                    }`}
                   placeholder="e.g., Algiers"
                   disabled={loading} // Disable during loading
                 />
@@ -368,9 +364,8 @@ const Checkout = () => {
                   name="city"
                   value={formData.city}
                   onChange={handleInputChange}
-                  className={`input input-bordered w-full ${
-                    errors.city ? "input-error" : ""
-                  }`}
+                  className={`input input-bordered w-full ${errors.city ? "input-error" : ""
+                    }`}
                   placeholder="e.g., Bab Ezzouar"
                   disabled={loading} // Disable during loading
                 />
@@ -411,35 +406,34 @@ const Checkout = () => {
                   </div>
                 )
                 : deliveryOptionsError
-                ? (
-                  <div className="alert alert-error">
-                    <p>{deliveryOptionsError}</p>
-                  </div>
-                )
-                : (
-                  <select
-                    name="deliveryServiceId"
-                    value={formData.deliveryServiceId}
-                    onChange={handleInputChange}
-                    className={`select select-bordered w-full ${
-                      errors.deliveryServiceId ? "select-error" : ""
-                    }`}
-                    disabled={loading || deliveryOptions.length === 0} // Disable during loading or if no options
-                  >
-                    <option value="" disabled>
-                      Select a service
-                    </option>
-                    {deliveryOptions
-                      .filter((option) => option.is_active) // Only show active options
-                      .map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name} - DZD{" "}
-                          {(option.base_cost_cents / 100).toFixed(2)} (
-                          {option.estimated_days} days)
-                        </option>
-                      ))}
-                  </select>
-                )}
+                  ? (
+                    <div className="alert alert-error">
+                      <p>{deliveryOptionsError}</p>
+                    </div>
+                  )
+                  : (
+                    <select
+                      name="deliveryServiceId"
+                      value={formData.deliveryServiceId}
+                      onChange={handleInputChange}
+                      className={`select select-bordered w-full ${errors.deliveryServiceId ? "select-error" : ""
+                        }`}
+                      disabled={loading || deliveryOptions.length === 0} // Disable during loading or if no options
+                    >
+                      <option value="" disabled>
+                        Select a service
+                      </option>
+                      {deliveryOptions
+                        .filter((option) => option.is_active) // Only show active options
+                        .map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.name} - DZD{" "}
+                            {(option.base_cost_cents / 100).toFixed(2)} (
+                            {option.estimated_days} days)
+                          </option>
+                        ))}
+                    </select>
+                  )}
               {errors.deliveryServiceId && (
                 <label className="label">
                   <span className="label-text-alt text-error">

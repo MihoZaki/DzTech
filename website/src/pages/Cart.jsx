@@ -265,8 +265,8 @@ const Cart = () => {
                               {hasDiscount && (
                                 <span className="badge badge-success bg-green-600 text-white">
                                   -{originalPrice > 0 &&
-                                      !isNaN(originalPrice) &&
-                                      !isNaN(finalPrice)
+                                    !isNaN(originalPrice) &&
+                                    !isNaN(finalPrice)
                                     ? ((1 - finalPrice / originalPrice) * 100)
                                       .toFixed(0)
                                     : "0"}%
@@ -274,7 +274,7 @@ const Cart = () => {
                               )}
                             </div>
                             {/* Stock availability indicator */}
-                            <div className="text-sm mt-1">
+                            {/* <div className="text-sm mt-1">
                               {isAtMaxStock
                                 ? (
                                   <span className="text-warning">
@@ -286,7 +286,7 @@ const Cart = () => {
                                     In Stock: {maxQuantity} available
                                   </span>
                                 )}
-                            </div>
+                            </div> */}
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
@@ -301,9 +301,8 @@ const Cart = () => {
                               {displayQuantity}
                             </span>
                             <button
-                              className={`btn btn-xs ${
-                                isAtMaxStock ? "btn-disabled" : ""
-                              }`}
+                              className={`btn btn-xs ${isAtMaxStock ? "btn-disabled" : ""
+                                }`}
                               onClick={() => handleIncreaseQuantity(item)}
                               type="button"
                               disabled={isAtMaxStock || isQuantityUpdating} // Disable during mutation or at max stock

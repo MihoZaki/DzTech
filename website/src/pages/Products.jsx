@@ -41,6 +41,23 @@ const Products = () => {
   }); // State to track the current applied filters
   const [appliedFilters, setAppliedFilters] = useState(tempFilters);
 
+  // Sync appliedFilters when URL search params change (e.g., from Navbar)
+  React.useEffect(() => {
+    const newFilters = {
+      category: searchParams.get("category") || "",
+      query: searchParams.get("q") || "",
+      minPrice: searchParams.get("minPrice") || "",
+      maxPrice: searchParams.get("maxPrice") || "",
+      brand: searchParams.get("brand") || "",
+      inStockOnly: searchParams.get("inStockOnly") === "true" || false,
+      includeDiscountedOnly: searchParams.get("includeDiscountedOnly") === "true" || false,
+      specFilter: searchParams.get("specFilter") || "",
+    };
+
+    setTempFilters(newFilters);       // Update tempFilters for UI
+    setAppliedFilters(newFilters);    // Update appliedFilters for API query
+  }, [searchParams]);
+
   // Fetch categories using useQuery
   const {
     data: categories = [], // Default to empty array

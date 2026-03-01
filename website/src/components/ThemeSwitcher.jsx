@@ -34,7 +34,7 @@ const ThemeSwitcher = () => {
   return (
     <button
       onClick={toggleTheme}
-      className={`flex flex-row px-3 items-center gap-2 transition`} // Changed to flex-row, added gap-2 for spacing
+      className={`flex flex-col items-center gap-1 transition`} // Changed to flex-row, added gap-2 for spacing
     >
       <div>
         {currentTheme === "fantasy"

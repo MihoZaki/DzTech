@@ -18,6 +18,8 @@ const ProductCard = ({ product }) => {
   const { addToCart } = useCart(); // Use the context function directly
   const [isAdded, setIsAdded] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [isShoped, setIsShopped] = useState(false);
+  const [isShoping, setIsShoping] = useState(false);
 
   // Function to construct full image URL
   const constructImageUrl = (imageUrl) => {
@@ -53,17 +55,52 @@ const ProductCard = ({ product }) => {
       await addToCart(productToAdd);
 
       setIsAdded(true);
-      toast.success(`"${product.name}" added to cart!`); // Use product.name
+      // toast.success(`"${product.name}" added to cart!`); // Use product.name
       setTimeout(() => {
         setIsAdded(false);
       }, 1500);
     } catch (error) {
       // Errors are now handled within the CartContext mutation
       // But we can still catch here if needed for UI-specific logic
-      console.error("Failed to add item to cart:", error);
-      toast.error("Failed to add item to cart. Please try again.");
+      // console.error("Failed to add item to cart:", error);
+      // toast.error("Failed to add item to cart. Please try again.");
     } finally {
       setIsAdding(false);
+    }
+  };
+  const handleQuickShop = async () => {
+    if (isShoping) return;
+    setIsShoping(true);
+    setIsShopped(false);
+
+    try {
+      // Prepare the product object to pass to the context function
+      // The context function will handle the API call via TanStack Query
+      const productToAdd = {
+        ...product,
+        quantity: 1,
+        image: product.image_urls && product.image_urls.length > 0
+          ? constructImageUrl(product.image_urls[0])
+          : "", // Use the constructed image URL
+        // The context will handle price calculation internally based on the product object
+      };
+
+      // Call the context function which uses TanStack Query
+      await addToCart(productToAdd);
+
+      setIsShopped(true);
+      // toast.success(`"${product.name}" added to cart!`); // Use product.name
+      setTimeout(() => {
+        setIsShopped(false);
+      }, 1500);
+      navigation("/checkout")
+    } catch (error) {
+      // Errors are now handled within the CartContext mutation
+      // But we can still catch here if needed for UI-specific logic
+      // console.error("Failed to add item to cart:", error);
+      // toast.error("Failed to add item to cart. Please try again.");
+    } finally {
+      setIsShoping(false);
     }
   };
 
@@ -86,6 +123,7 @@ const ProductCard = ({ product }) => {
   const discountPercentage = hasDiscount
     ? product.effective_discount_percentage
     : 0;
+  const isOutOfStock = product.stock_quantity == 0;
   // --- End of Determination ---
 
   // --- Determine Rating Information ---
@@ -96,7 +134,7 @@ const ProductCard = ({ product }) => {
 
   return (
     <div
-      className={`card bg-base-100 shadow-sm hover:shadow-2xl transition-shadow duration-300 relative border rounded-lg border-info`}
+      className={`card bg-base-100 shadow-sm hover:shadow-2xl transition-shadow duration-300 relative border rounded-lg border-base-200`}
     >
       <figure
         className="h-48 overflow-hidden cursor-pointer relative" // Added 'relative' for badge positioning
@@ -105,12 +143,17 @@ const ProductCard = ({ product }) => {
         <img
           src={displayImage}
           alt={product.name} // Use product.name
-          className="w-full h-full object-fill rounded-t-lg hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-contain rounded-t-lg hover:scale-105 transition-transform duration-300"
         />
         {/* Discount Badge */}
         {hasDiscount && discountPercentage > 0 && (
           <div className="absolute top-2 left-2 bg-info text-white text-s font-bold px-2 py-1 rounded-lg z-10">
             -{discountPercentage}%
+          </div>
+        )}
+        {isOutOfStock && (
+          <div className="absolute bottom-2 left-2 bg-error text-white text-xs font-bold px-2 py-1 rounded-lg z-10">
+            out of stock
           </div>
         )}
       </figure>
@@ -131,44 +174,67 @@ const ProductCard = ({ product }) => {
         {/* Price Display Container */}
         <div className="mt-2">
           {/* Price Display */}
-          <div className="flex flex-col">
+          <div className="flex flex-col mb-2">
             <p className="text-lg font-bold text-base-content mb-0">
               {/* mb-0 removes default bottom margin */}
-              DA {currentPrice.toFixed(2)}
+              {currentPrice?.toFixed(2)} DA
             </p>
             {hasDiscount && originalPrice && (
               <p className="text-xs font-medium text-gray-400 line-through mt-0">
-                DA {originalPrice.toFixed(2)}
+                {originalPrice?.toFixed(2)} DA
               </p>
             )}
           </div>
+          {/* Add to Cart Button - Positioned absolutely at the bottom right */}
+          <div className="flex flex-row justify-end items-center gap-2">
+            <button
+              className={`btn btn-sm ${isAdded ? "btn-success " : "btn-primary"
+                } z-50`}
+              onClick={handleQuickAdd}
+              title={isAdded ? "Added to Cart!" : "Add to Cart"}
+              disabled={isAdded || isAdding}
+            >
+              {isAdding
+                ? <span className="loading loading-spinner loading-xs"></span>
+                : isAdded
+                  ? (
+                    <>
+                      <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
+                      <span className="text-base-content">Added!</span>
+                    </>
+                  )
+                  : (
+                    <>
+                      <ShoppingCartIcon className="h-4 w-4 text-inherit mr-1" />
+                      <p>Add to cart</p>
+                    </>
+                  )}
+            </button>
+            <button
+              className={`btn btn-sm ${isShoped ? "btn-success " : "btn-secondary"
+                } z-50`}
+              onClick={handleQuickShop}
+              title={isShoped ? "Added to Cart!" : "Shop Now"}
+              disabled={isShoped || isShoping}
+            >
+              {isShoping
+                ? <span className="loading loading-spinner loading-xs"></span>
+                : isShoped
+                  ? (
+                    <>
+                      <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
+                      <span className="text-base-content">Shopped!</span>
+                    </>
+                  )
+                  : (
+                    <>
+                      <p>Shop Now</p>
+                    </>
+                  )}
+            </button>
+          </div>
         </div>
 
-        {/* Add to Cart Button - Positioned absolutely at the bottom right */}
-        <button
-          className={`absolute bottom-4 right-4 btn btn-sm ${
-            isAdded ? "btn-success " : "btn-primary"
-          } z-50`}
-          onClick={handleQuickAdd}
-          title={isAdded ? "Added to Cart!" : "Add to Cart"}
-          disabled={isAdded || isAdding}
-        >
-          {isAdding
-            ? <span className="loading loading-spinner loading-xs"></span>
-            : isAdded
-            ? (
-              <>
-                <CheckCircleIcon className="h-4 w-4 mr-1 text-base-content" />
-                <span className="text-base-content">Added!</span>
-              </>
-            )
-            : (
-              <>
-                <ShoppingCartIcon className="h-4 w-4 text-secondary-content mr-1" />
-                Add to cart
-              </>
-            )}
-        </button>
       </div>
     </div>
   );
